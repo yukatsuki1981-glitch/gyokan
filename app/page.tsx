@@ -1916,8 +1916,8 @@ function MobileCalendarDayCell({
       type="button"
       disabled={!cell.inMonth}
       onClick={() => cellIso && onSelect(cellIso)}
-      style={{ height: CALENDAR_CELL_ROW_H }}
       className={`relative flex flex-col border-b border-r border-black/[0.04] p-0.5 text-left transition-colors ${mobileCalendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
+      style={{ height: CALENDAR_CELL_ROW_H, touchAction: "pan-x" }}
     >
       <span className="shrink-0 px-0.5 text-[11px] font-semibold leading-none">{cell.day}</span>
       {cell.inMonth && preview.length > 0 && (
@@ -2014,14 +2014,15 @@ function MobileCalendarWidget({
   }, [onSelectDate, peekMode, resetPeekLayout, scrollToMonth]);
 
   useLayoutEffect(() => {
-    scrollToMonth(selectedDate);
     if (isPeek) {
       lastScrolledMonthRef.current = null;
-      return;
     }
     const monthKey = selectedDate.slice(0, 7);
-    if (lastScrolledMonthRef.current === monthKey) return;
-    lastScrolledMonthRef.current = monthKey;
+    if (!isPeek && lastScrolledMonthRef.current === monthKey) return;
+    scrollToMonth(selectedDate);
+    if (!isPeek) {
+      lastScrolledMonthRef.current = monthKey;
+    }
   }, [isPeek, selectedDate, scrollToMonth]);
 
   useEffect(() => {
@@ -2043,15 +2044,10 @@ function MobileCalendarWidget({
   };
 
   useEffect(() => {
-    const el = calendarWrapRef.current;
-    if (!el) return;
+    const wrap = calendarWrapRef.current;
+    if (!wrap) return;
 
-    let touchStartX = 0;
-    let touchMoved = false;
-
-    const onTouchStart = (e: TouchEvent) => {
-      touchStartX = e.touches[0]?.clientX ?? 0;
-      touchMoved = false;
+    const onTouchStart = () => {
       peekSuppressClickRef.current = false;
 
       if (peekMode && !expandedRef.current) {
@@ -2059,61 +2055,52 @@ function MobileCalendarWidget({
           expandedRef.current = true;
           setExpanded(true);
         });
-        scrollToMonth(selectedDate);
+        requestAnimationFrame(() => scrollToMonth(selectedDate));
       }
     };
 
-    const onTouchMove = (e: TouchEvent) => {
-      if (peekMode && !expandedRef.current) {
-        flushSync(() => {
-          expandedRef.current = true;
-          setExpanded(true);
-        });
-        scrollToMonth(selectedDate);
-      }
-
-      const x = e.touches[0]?.clientX ?? 0;
-      const dx = touchStartX - x;
-      if (Math.abs(dx) <= 1) return;
-
-      touchMoved = true;
-      peekSuppressClickRef.current = true;
-      e.preventDefault();
-      e.stopPropagation();
-
-      const strip = horizontalRef.current;
-      if (strip) {
-        strip.scrollLeft += dx;
-      }
-      touchStartX = x;
-    };
-
-    const onTouchEnd = () => {
-      if (!touchMoved) return;
-
-      const strip = horizontalRef.current;
-      if (strip && strip.clientWidth > 0) {
-        const idx = Math.round(strip.scrollLeft / strip.clientWidth);
-        strip.scrollLeft = idx * strip.clientWidth;
-      }
-
-      window.setTimeout(() => {
-        peekSuppressClickRef.current = false;
-      }, 350);
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
-    el.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
-    el.addEventListener("touchend", onTouchEnd, { capture: true, passive: true });
-    el.addEventListener("touchcancel", onTouchEnd, { capture: true, passive: true });
+    wrap.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
 
     return () => {
-      el.removeEventListener("touchstart", onTouchStart, { capture: true });
-      el.removeEventListener("touchmove", onTouchMove, { capture: true });
-      el.removeEventListener("touchend", onTouchEnd, { capture: true });
-      el.removeEventListener("touchcancel", onTouchEnd, { capture: true });
+      wrap.removeEventListener("touchstart", onTouchStart, { capture: true });
     };
   }, [peekMode, selectedDate, scrollToMonth]);
+
+  useEffect(() => {
+    const strip = horizontalRef.current;
+    if (!strip) return;
+
+    let snapTimer: ReturnType<typeof setTimeout> | undefined;
+    let suppressTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const snapToNearestMonth = () => {
+      if (strip.clientWidth <= 0) return;
+      const idx = Math.round(strip.scrollLeft / strip.clientWidth);
+      const target = idx * strip.clientWidth;
+      if (Math.abs(strip.scrollLeft - target) > 1) {
+        strip.scrollTo({ left: target, behavior: "smooth" });
+      }
+    };
+
+    const onScroll = () => {
+      peekSuppressClickRef.current = true;
+      if (suppressTimer) clearTimeout(suppressTimer);
+      suppressTimer = setTimeout(() => {
+        peekSuppressClickRef.current = false;
+      }, 350);
+
+      if (snapTimer) clearTimeout(snapTimer);
+      snapTimer = setTimeout(snapToNearestMonth, 80);
+    };
+
+    strip.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => {
+      strip.removeEventListener("scroll", onScroll);
+      if (snapTimer) clearTimeout(snapTimer);
+      if (suppressTimer) clearTimeout(suppressTimer);
+    };
+  }, [expanded]);
 
   const renderDayButton = (
     cell: CalendarCell,
@@ -2171,7 +2158,7 @@ function MobileCalendarWidget({
   );
 
   const renderDayGrid = (year: number, month: number, grid: CalendarCell[]) => (
-    <div className="grid grid-cols-7 border-l border-t border-black/[0.04]">
+    <div className="grid grid-cols-7 border-l border-t border-black/[0.04]" style={{ touchAction: "pan-x" }}>
       {grid.map((cell, i) => renderDayButton(cell, i, year, month))}
     </div>
   );
@@ -2181,11 +2168,16 @@ function MobileCalendarWidget({
       ref={calendarWrapRef}
       data-mobile-calendar
       className="relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04]"
-      style={isPeek ? { maxHeight: `${PEEK_WRAP_H}px` } : undefined}
+      style={{
+        ...(isPeek ? { maxHeight: `${PEEK_WRAP_H}px` } : undefined),
+        touchAction: expanded ? "pan-x" : "manipulation",
+      }}
     >
       <div
         ref={horizontalRef}
-        className="flex overflow-x-auto overscroll-x-contain snap-x snap-mandatory scrollbar-none"
+        className={`flex w-full overscroll-x-contain snap-x snap-mandatory scrollbar-none ${
+          isPeek ? "overflow-x-hidden" : "overflow-x-auto"
+        }`}
         style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pinch-zoom" }}
       >
         {months.map(({ year, month }) => {
@@ -2202,7 +2194,10 @@ function MobileCalendarWidget({
           }).format(new Date(year, month, 1));
 
           return (
-            <div key={`${year}-${month}`} className="w-full shrink-0 snap-center px-0.5 py-2">
+            <div
+              key={`${year}-${month}`}
+              className="box-border min-w-full flex-[0_0_100%] snap-center snap-always px-0.5 py-2"
+            >
               {renderMonthHeader(year, month, monthLabel)}
               {weekdayHeader(year, month)}
               <div
