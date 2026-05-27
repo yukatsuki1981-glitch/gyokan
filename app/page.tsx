@@ -18,8 +18,11 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { flushSync } from "react-dom";
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -27,6 +30,7 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
+  type PointerEvent,
   type ReactNode,
 } from "react";
 
@@ -66,6 +70,8 @@ type MobileTab = "home" | "cases" | "projects" | "more";
 
 const STORAGE_KEY = "gyokan-tasks-v5";
 const CASES_STORAGE_KEY = "gyokan-cases-v6";
+const PROJECT_COLORS_STORAGE_KEY = "gyokan-project-colors-v2";
+const DEFAULT_PROJECT_ACCENT = "#3B82F6";
 const ALL_PROJECTS_LABEL = "すべての案件";
 
 const PROJECT_NAMES = [
@@ -244,15 +250,123 @@ const TONE = {
   violet: { badge: "bg-violet-50 text-violet-600", bar: "bg-violet-500" },
 } as const;
 
-const TAG_COLOR: Record<string, string> = {
-  "AP浦安": "bg-blue-50 text-blue-600",
-  "AP葛西": "bg-sky-50 text-sky-600",
-  "BP篠崎": "bg-amber-50 text-amber-600",
-  "CP篠崎": "bg-emerald-50 text-emerald-600",
-  "門前仲町": "bg-violet-50 text-violet-600",
-  "立川倉庫": "bg-rose-50 text-rose-600",
-  個人: "bg-gray-100 text-gray-600",
+type ProjectColorStyle = {
+  accent: string;
+  bg: string;
+  text: string;
 };
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return null;
+  return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r:
+        h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        break;
+      case g:
+        h = ((b - r) / d + 2) / 6;
+        break;
+      default:
+        h = ((r - g) / d + 4) / 6;
+    }
+  }
+  return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
+}
+
+function hexToHsl(hex: string): [number, number, number] {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return [217, 91, 59];
+  return rgbToHsl(...rgb);
+}
+
+function hslToHex(h: number, s: number, l: number) {
+  const sat = s / 100;
+  const light = l / 100;
+  const c = (1 - Math.abs(2 * light - 1)) * sat;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = light - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (h < 60) {
+    r = c; g = x;
+  } else if (h < 120) {
+    r = x; g = c;
+  } else if (h < 180) {
+    g = c; b = x;
+  } else if (h < 240) {
+    g = x; b = c;
+  } else if (h < 300) {
+    r = x; b = c;
+  } else {
+    r = c; b = x;
+  }
+  const toHex = (v: number) =>
+    Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
+
+function isValidAccentHex(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function projectColorFromAccent(accent: string): ProjectColorStyle {
+  const normalized = isValidAccentHex(accent) ? accent.toUpperCase() : DEFAULT_PROJECT_ACCENT;
+  const [h, s, l] = hexToHsl(normalized);
+  return {
+    accent: normalized,
+    bg: hslToHex(h, Math.min(s, 38), 93),
+    text: hslToHex(h, Math.max(s, 45), Math.max(l - 18, 22)),
+  };
+}
+
+function getProjectColor(accentHex: string | undefined): ProjectColorStyle {
+  if (accentHex && isValidAccentHex(accentHex)) {
+    return projectColorFromAccent(accentHex);
+  }
+  return projectColorFromAccent(DEFAULT_PROJECT_ACCENT);
+}
+
+function parseProjectColors(stored: Record<string, string> | null): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!stored) return result;
+  for (const name of PROJECT_NAMES) {
+    const value = stored[name];
+    if (value && isValidAccentHex(value)) {
+      result[name] = value.toUpperCase();
+    }
+  }
+  return result;
+}
+
+type ProjectColorsContextValue = {
+  colors: Record<string, string>;
+  setProjectColor: (project: string, accent: string) => void;
+};
+
+const ProjectColorsContext = createContext<ProjectColorsContextValue>({
+  colors: {},
+  setProjectColor: () => {},
+});
+
+function useProjectColors() {
+  return useContext(ProjectColorsContext);
+}
 
 /* ─── Helpers ─── */
 
@@ -430,8 +544,8 @@ function mobileCalendarDayCellClass(
   return "text-gray-800";
 }
 
-function tagColor(project: string) {
-  return TAG_COLOR[project] ?? "bg-gray-100 text-gray-600";
+function tagColor(project: string, colors: Record<string, string>) {
+  return getProjectColor(colors[project]);
 }
 
 function truncateTagText(text: string, maxLen = 5) {
@@ -440,15 +554,227 @@ function truncateTagText(text: string, maxLen = 5) {
 }
 
 function ProjectNameTag({ name, muted }: { name: string; muted?: boolean }) {
+  const { colors } = useProjectColors();
+  const color = tagColor(name, colors);
   return (
     <span
-      className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium ${
-        muted ? "bg-gray-400/40 text-gray-200" : tagColor(name)
-      }`}
+      className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium"
+      style={
+        muted
+          ? { backgroundColor: "rgba(156, 163, 175, 0.35)", color: "rgb(229, 231, 235)" }
+          : { backgroundColor: color.bg, color: color.text }
+      }
       title={name}
     >
       {truncateTagText(name)}
     </span>
+  );
+}
+
+function ProjectColorSwatch({
+  accent,
+  size = "md",
+  selected = false,
+  onClick,
+}: {
+  accent?: string;
+  size?: "sm" | "md";
+  selected?: boolean;
+  onClick?: () => void;
+}) {
+  const color = getProjectColor(accent);
+  const dim = size === "sm" ? "h-4 w-4" : "h-7 w-7";
+  const Tag = onClick ? "button" : "span";
+  return (
+    <Tag
+      type={onClick ? "button" : undefined}
+      aria-label={onClick ? "プロジェクトカラー" : undefined}
+      onClick={onClick}
+      className={`${dim} shrink-0 rounded-full ${onClick ? "transition-transform hover:scale-110" : ""} ${
+        selected ? "ring-2 ring-[#007AFF] ring-offset-2" : ""
+      }`}
+      style={{ backgroundColor: color.accent }}
+    />
+  );
+}
+
+const COLOR_MAP_LIGHTNESS_MIN = 20;
+const COLOR_MAP_LIGHTNESS_MAX = 85;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function ProjectColorPickerModal({
+  open,
+  onClose,
+  project,
+  accent,
+  onSave,
+}: {
+  open: boolean;
+  onClose: () => void;
+  project: string;
+  accent?: string;
+  onSave: (accent: string) => void;
+}) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const draggingMap = useRef(false);
+  const [hue, setHue] = useState(217);
+  const [sat, setSat] = useState(91);
+  const [light, setLight] = useState(59);
+
+  useEffect(() => {
+    if (!open) return;
+    const [h, s, l] = hexToHsl(accent ?? DEFAULT_PROJECT_ACCENT);
+    setHue(h);
+    setSat(s);
+    setLight(l);
+  }, [open, accent]);
+
+  const previewAccent = hslToHex(hue, sat, light);
+  const previewStyle = getProjectColor(previewAccent);
+  const mapX = sat;
+  const mapY =
+    ((COLOR_MAP_LIGHTNESS_MAX - light) / (COLOR_MAP_LIGHTNESS_MAX - COLOR_MAP_LIGHTNESS_MIN)) * 100;
+
+  const updateFromMap = useCallback((clientX: number, clientY: number) => {
+    const el = mapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = clamp((clientX - rect.left) / rect.width, 0, 1);
+    const y = clamp((clientY - rect.top) / rect.height, 0, 1);
+    setSat(Math.round(x * 100));
+    setLight(
+      Math.round(COLOR_MAP_LIGHTNESS_MAX - y * (COLOR_MAP_LIGHTNESS_MAX - COLOR_MAP_LIGHTNESS_MIN)),
+    );
+  }, []);
+
+  const onMapPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    draggingMap.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    updateFromMap(e.clientX, e.clientY);
+  };
+
+  const onMapPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (!draggingMap.current) return;
+    updateFromMap(e.clientX, e.clientY);
+  };
+
+  const onMapPointerUp = () => {
+    draggingMap.current = false;
+  };
+
+  return (
+    <DetailOverlay open={open} onClose={onClose} title="プロジェクトカラー">
+      <p className="mb-4 text-[13px] text-gray-500">{project}</p>
+
+      <div
+        ref={mapRef}
+        className="relative mb-4 h-44 w-full cursor-crosshair touch-none overflow-hidden rounded-2xl ring-1 ring-black/[0.08]"
+        style={{
+          background: `linear-gradient(to bottom, transparent, #000), linear-gradient(to right, #fff, ${hslToHex(hue, 100, 50)})`,
+        }}
+        onPointerDown={onMapPointerDown}
+        onPointerMove={onMapPointerMove}
+        onPointerUp={onMapPointerUp}
+        onPointerCancel={onMapPointerUp}
+      >
+        <div
+          className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-md ring-1 ring-black/25"
+          style={{ left: `${mapX}%`, top: `${mapY}%`, backgroundColor: previewAccent }}
+        />
+      </div>
+
+      <div className="mb-5">
+        <label className="mb-1.5 block text-[11px] font-medium text-gray-400">色相</label>
+        <input
+          type="range"
+          min={0}
+          max={360}
+          value={hue}
+          onChange={(e) => setHue(Number(e.target.value))}
+          className="h-2 w-full cursor-pointer appearance-none rounded-full"
+          style={{
+            background:
+              "linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)",
+          }}
+        />
+      </div>
+
+      <div className="mb-6">
+        <label className="mb-1.5 block text-[11px] font-medium text-gray-400">明るさ</label>
+        <input
+          type="range"
+          min={COLOR_MAP_LIGHTNESS_MIN}
+          max={COLOR_MAP_LIGHTNESS_MAX}
+          value={light}
+          onChange={(e) => setLight(Number(e.target.value))}
+          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-gradient-to-r from-black via-current to-white"
+          style={{ color: hslToHex(hue, sat, 50) }}
+        />
+      </div>
+
+      <div className="mb-6 flex items-center gap-3 rounded-xl bg-gray-50/80 px-3 py-2.5">
+        <ProjectColorSwatch accent={previewAccent} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-medium text-gray-700">プレビュー</p>
+          <p className="truncate text-[11px] text-gray-400">{previewAccent}</p>
+        </div>
+        <span
+          className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium"
+          style={{ backgroundColor: previewStyle.bg, color: previewStyle.text }}
+        >
+          {truncateTagText(project, 8)}
+        </span>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[14px] font-medium text-gray-600 hover:bg-gray-50"
+        >
+          キャンセル
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onSave(previewAccent);
+            onClose();
+          }}
+          className="flex-1 rounded-xl bg-[#007AFF] py-2.5 text-[14px] font-medium text-white hover:bg-[#0066DD]"
+        >
+          保存
+        </button>
+      </div>
+    </DetailOverlay>
+  );
+}
+
+function ProjectColorHeaderLink({ project }: { project: string }) {
+  const { colors, setProjectColor } = useProjectColors();
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const projectAccent = colors[project];
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setColorPickerOpen(true)}
+        className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD] sm:text-[13px]"
+      >
+        <ProjectColorSwatch accent={projectAccent} size="sm" />
+        プロジェクトカラーを選択
+      </button>
+      <ProjectColorPickerModal
+        open={colorPickerOpen}
+        onClose={() => setColorPickerOpen(false)}
+        project={project}
+        accent={projectAccent}
+        onSave={(accent) => setProjectColor(project, accent)}
+      />
+    </>
   );
 }
 
@@ -482,11 +808,160 @@ function Icon({ name, className = "h-5 w-5" }: { name: string; className?: strin
     bookmarkFill: <svg {...p} fill="currentColor"><path d="M6 4h12v16l-6-4-6 4z" stroke="none" /></svg>,
     message: <svg {...p}><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 1 1 16 0z" /></svg>,
     bell: <svg {...p}><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2" /><path d="M10 20a2 2 0 0 0 4 0" /></svg>,
+    refresh: (
+      <svg {...p}>
+        <path d="M4 12a8 8 0 0 1 13.7-5.7" />
+        <path d="M20 4v5h-5" />
+        <path d="M20 12a8 8 0 0 1-13.7 5.7" />
+        <path d="M4 20v-5h5" />
+      </svg>
+    ),
     x: <svg {...p}><path d="M6 6l12 12M18 6 6 18" /></svg>,
     trash: <svg {...p}><path d="M4 7h16M9 7V5h6v2M10 11v6M14 11v6M6 7l1 13h10l1-13" /></svg>,
   };
 
   return map[name] ?? null;
+}
+
+function reloadApp() {
+  window.location.reload();
+}
+
+function RefreshButton({
+  className = "",
+  iconClassName = "h-5 w-5",
+  label = "更新",
+}: {
+  className?: string;
+  iconClassName?: string;
+  label?: string;
+}) {
+  const [spinning, setSpinning] = useState(false);
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={() => {
+        setSpinning(true);
+        reloadApp();
+      }}
+      className={`rounded-xl p-2 text-gray-500 transition-colors hover:bg-white hover:text-[#007AFF] ${className}`}
+    >
+      <Icon
+        name="refresh"
+        className={`${iconClassName}${spinning ? " animate-spin" : ""}`}
+      />
+    </button>
+  );
+}
+
+const PULL_REFRESH_THRESHOLD = 64;
+const PULL_REFRESH_MAX = 96;
+
+function PullToRefresh({ enabled }: { enabled: boolean }) {
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const dragging = useRef(false);
+  const pullDistanceRef = useRef(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const getScrollTop = () =>
+      window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
+
+    const reset = () => {
+      dragging.current = false;
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if ((e.target as Element).closest("[data-mobile-calendar]")) {
+        dragging.current = false;
+        return;
+      }
+      if (refreshing || getScrollTop() > 2) return;
+      touchStartY.current = e.touches[0]?.clientY ?? 0;
+      dragging.current = true;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!dragging.current || refreshing) return;
+      if (getScrollTop() > 2) {
+        reset();
+        return;
+      }
+
+      const y = e.touches[0]?.clientY ?? 0;
+      const delta = y - touchStartY.current;
+      if (delta <= 0) {
+        pullDistanceRef.current = 0;
+        setPullDistance(0);
+        return;
+      }
+
+      const next = Math.min(delta * 0.5, PULL_REFRESH_MAX);
+      pullDistanceRef.current = next;
+      setPullDistance(next);
+      if (delta > 10) e.preventDefault();
+    };
+
+    const onTouchEnd = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+
+      if (pullDistanceRef.current >= PULL_REFRESH_THRESHOLD) {
+        setRefreshing(true);
+        pullDistanceRef.current = PULL_REFRESH_THRESHOLD;
+        setPullDistance(PULL_REFRESH_THRESHOLD);
+        reloadApp();
+        return;
+      }
+
+      reset();
+    };
+
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("touchend", onTouchEnd, { passive: true });
+    document.addEventListener("touchcancel", onTouchEnd, { passive: true });
+
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [enabled, refreshing]);
+
+  if (!enabled || pullDistance <= 0) return null;
+
+  const ready = pullDistance >= PULL_REFRESH_THRESHOLD;
+
+  return (
+    <div
+      className="pointer-events-none fixed inset-x-0 z-50 flex justify-center lg:hidden"
+      style={{ top: `calc(${Math.max(8, pullDistance - 28)}px + env(safe-area-inset-top, 0px))` }}
+    >
+      <div
+        className={`flex items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 shadow-md ring-1 ring-black/[0.06] backdrop-blur-sm ${
+          refreshing ? "animate-pulse" : ""
+        }`}
+      >
+        <Icon
+          name="refresh"
+          className={`h-4 w-4 text-[#007AFF] ${refreshing || ready ? "animate-spin" : ""}`}
+        />
+        <span className="text-[12px] font-medium text-gray-600">
+          {refreshing ? "更新中…" : ready ? "離して更新" : "引っ張って更新"}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 /* ─── UI Primitives ─── */
@@ -956,6 +1431,8 @@ function DetailCaseCard({
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
 }) {
+  const { colors } = useProjectColors();
+  const accent = getProjectColor(colors[item.project]).accent;
   return (
     <article
       onClick={() => onOpen(item)}
@@ -964,6 +1441,7 @@ function DetailCaseCard({
           ? "border-gray-200/80 bg-gray-200/70"
           : "border-gray-100 bg-white hover:bg-gray-50/80"
       }`}
+      style={{ borderLeftWidth: 3, borderLeftColor: accent }}
     >
       <button
         type="button"
@@ -1001,16 +1479,55 @@ function DetailCaseCard({
 
 /* ─── Project Detail ─── */
 
+function MobileProjectList({
+  projects,
+  cases,
+  onSelect,
+}: {
+  projects: readonly string[];
+  cases: CaseItem[];
+  onSelect: (name: string) => void;
+}) {
+  const { colors } = useProjectColors();
+  return (
+    <section className="mb-4 lg:hidden">
+      <h3 className="mb-2 text-[17px] font-semibold tracking-tight text-gray-900">プロジェクト</h3>
+      <Card className="overflow-hidden divide-y divide-black/[0.04] p-0">
+        {projects.map((name) => {
+          const activeCount = cases.filter((c) => c.project === name && !c.done).length;
+          return (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onSelect(name)}
+              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-black/[0.02]"
+            >
+              <ProjectColorSwatch accent={colors[name]} size="sm" />
+              <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-gray-900">{name}</span>
+              <span className="shrink-0 text-[13px] text-gray-400">進行中 {activeCount}件</span>
+              <Icon name="chevronRight" className="h-4 w-4 shrink-0 text-gray-300" />
+            </button>
+          );
+        })}
+      </Card>
+    </section>
+  );
+}
+
 function ProjectDetailSection({
   project,
   cases,
   onToggleCase,
   onOpenCase,
+  onBack,
+  className = "",
 }: {
   project: string;
   cases: CaseItem[];
   onToggleCase: (id: string) => void;
   onOpenCase: (item: CaseItem) => void;
+  onBack?: () => void;
+  className?: string;
 }) {
   const projectCases = cases
     .filter((c) => c.project === project)
@@ -1022,14 +1539,26 @@ function ProjectDetailSection({
   const completed = projectCases.filter((c) => c.done);
 
   return (
-    <section className="mb-8 lg:mb-10">
+    <section className={`mb-8 lg:mb-10 ${className}`}>
       <div className="mb-4 flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-baseline gap-3">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label="プロジェクト一覧へ戻る"
+              className="-ml-1 shrink-0 rounded-xl p-1.5 text-gray-500 hover:bg-black/[0.04] lg:hidden"
+            >
+              <Icon name="chevronLeft" className="h-5 w-5" />
+            </button>
+          )}
           <h3 className="text-[17px] font-semibold text-gray-900">{project}</h3>
-          <span className="text-[13px] text-gray-400">
-            進行中 {active.length}件 · 完了 {completed.length}件
-          </span>
         </div>
+      </div>
+      <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-gray-400">
+        <span>進行中 {active.length}件</span>
+        <span aria-hidden>·</span>
+        <span>完了 {completed.length}件</span>
       </div>
       <Card className="overflow-hidden p-2">
         {projectCases.length === 0 ? (
@@ -1344,59 +1873,17 @@ function CalendarWidget({
   );
 }
 
-function estimateMonthBlockHeight(year: number, month: number) {
-  const rows = getCalendarGrid(year, month).length / 7;
-  return (
-    CALENDAR_MONTH_HEADER_H +
-    CALENDAR_WEEKDAY_HEADER_H +
-    rows * CALENDAR_CELL_ROW_H +
-    CALENDAR_MONTH_PADDING_V
-  );
-}
-
-function estimateMonthScrollTop(
-  iso: string,
-  months: { year: number; month: number }[],
-) {
-  const d = new Date(iso + "T12:00:00");
-  const targetYear = d.getFullYear();
-  const targetMonth = d.getMonth();
-
-  let top = 0;
-  for (const { year, month } of months) {
-    if (year === targetYear && month === targetMonth) return top;
-    top += estimateMonthBlockHeight(year, month);
-  }
-  return top;
-}
-
-function getPeekWeekScrollTop(selectedISO: string, year: number, month: number) {
+function getPeekWeekStartIndex(selectedISO: string, year: number, month: number) {
   const anchorISO = shiftISODate(selectedISO, -7);
   const grid = getCalendarGrid(year, month);
   let anchorIndex = grid.findIndex((_, i) => getGridCellIso(year, month, i) === anchorISO);
   if (anchorIndex === -1) anchorIndex = 0;
-  const weekStart = Math.floor(anchorIndex / 7) * 7;
-  return (weekStart / 7) * CALENDAR_CELL_ROW_H;
+  return Math.floor(anchorIndex / 7) * 7;
 }
 
-function getPeekWeekScrollMax(year: number, month: number) {
-  const rows = getCalendarGrid(year, month).length / 7;
-  return Math.max(0, (rows - 3) * CALENDAR_CELL_ROW_H);
-}
-
-function getMonthScrollTop(
-  iso: string,
-  scrollEl: HTMLDivElement,
-  monthRefs: Map<string, HTMLDivElement>,
-) {
+function getMonthIndexInRange(iso: string, months: { year: number; month: number }[]) {
   const d = new Date(iso + "T12:00:00");
-  const monthEl = monthRefs.get(`${d.getFullYear()}-${d.getMonth()}`);
-  if (!monthEl) return 0;
-  return (
-    monthEl.getBoundingClientRect().top -
-    scrollEl.getBoundingClientRect().top +
-    scrollEl.scrollTop
-  );
+  return months.findIndex(({ year, month }) => year === d.getFullYear() && month === d.getMonth());
 }
 
 function MobileCalendarDayCell({
@@ -1416,6 +1903,7 @@ function MobileCalendarDayCell({
   dayTasks: Task[];
   onSelect: (iso: string) => void;
 }) {
+  const { colors } = useProjectColors();
   const cellIso = cell.inMonth ? isoDate(new Date(year, month, cell.day)) : null;
   const isSelected = cellIso === selectedDate;
   const isToday = cellIso === todayISO();
@@ -1434,14 +1922,17 @@ function MobileCalendarDayCell({
       <span className="shrink-0 px-0.5 text-[11px] font-semibold leading-none">{cell.day}</span>
       {cell.inMonth && preview.length > 0 && (
         <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-px overflow-hidden">
-          {preview.map((task, i) => (
+          {preview.map((task, i) => {
+            const taskColor = getProjectColor(colors[task.project]);
+            return (
             <span
               key={task.id}
-              className={`relative truncate rounded-[2px] px-0.5 text-[8px] leading-[10px] ${
+              className="relative truncate rounded-[2px] px-0.5 text-[8px] leading-[10px]"
+              style={
                 task.done
-                  ? "bg-gray-200/90 text-gray-400"
-                  : "bg-gray-500/90 text-white"
-              }`}
+                  ? { backgroundColor: "rgba(229, 231, 235, 0.9)", color: "rgb(156, 163, 175)" }
+                  : { backgroundColor: `${taskColor.accent}E6`, color: "#ffffff" }
+              }
               title={task.title}
             >
               {truncateCalendarTaskTitle(task.title)}
@@ -1451,7 +1942,8 @@ function MobileCalendarDayCell({
                 </span>
               )}
             </span>
-          ))}
+            );
+          })}
         </div>
       )}
     </button>
@@ -1470,187 +1962,144 @@ function MobileCalendarWidget({
   peekMode: boolean;
 }) {
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
-  const [userExpanded, setUserExpanded] = useState(false);
-  const [monthFocus, setMonthFocus] = useState(false);
-  const [monthFocusHeight, setMonthFocusHeight] = useState<number | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const peekGridInnerRef = useRef<HTMLDivElement>(null);
-  const monthRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const peekWeekScrollRef = useRef(0);
-  const touchStartY = useRef(0);
-  const gestureStartY = useRef(0);
+  const [expanded, setExpanded] = useState(!peekMode);
+  const horizontalRef = useRef<HTMLDivElement>(null);
+  const calendarWrapRef = useRef<HTMLDivElement>(null);
+  const expandedRef = useRef(!peekMode);
   const peekSuppressClickRef = useRef(false);
-  const expandingRef = useRef(false);
   const lastScrolledMonthRef = useRef<string | null>(null);
 
-  const showFullCalendar = !peekMode || userExpanded;
-  const isPeek = peekMode && !userExpanded && !monthFocus;
+  const isPeek = peekMode && !expanded;
   const PEEK_GRID_H = CALENDAR_CELL_ROW_H * 3;
-  const FULL_SCROLL_H = "min(640px, 62vh)";
+  const PEEK_HEADER_H = 58;
+  const PEEK_WRAP_H = PEEK_HEADER_H + PEEK_GRID_H;
+  const selectedMonthKey = selectedDate.slice(0, 7);
 
-  const peekDate = useMemo(() => new Date(selectedDate + "T12:00:00"), [selectedDate]);
-  const peekYear = peekDate.getFullYear();
-  const peekMonth = peekDate.getMonth();
+  const months = useMemo(() => buildMonthRange(todayISO(), 12, 12), []);
+  const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
 
-  const applyPeekWeekScroll = useCallback(
-    (top: number) => {
-      const max = getPeekWeekScrollMax(peekYear, peekMonth);
-      const clamped = Math.max(0, Math.min(max, top));
-      peekWeekScrollRef.current = clamped;
-      if (peekGridInnerRef.current) {
-        peekGridInnerRef.current.style.transform = `translateY(-${clamped}px)`;
+  const scrollToMonth = useCallback(
+    (iso: string, behavior: ScrollBehavior = "auto") => {
+      const el = horizontalRef.current;
+      if (!el || el.clientWidth <= 0) return;
+      const idx = getMonthIndexInRange(iso, months);
+      if (idx < 0) return;
+      const left = idx * el.clientWidth;
+      if (behavior === "smooth") {
+        el.scrollTo({ left, behavior: "smooth" });
+      } else {
+        el.scrollLeft = left;
       }
     },
-    [peekYear, peekMonth],
+    [months],
   );
 
   const resetPeekLayout = useCallback(() => {
-    setUserExpanded(false);
-    setMonthFocus(false);
-    setMonthFocusHeight(null);
-    expandingRef.current = false;
+    expandedRef.current = false;
+    setExpanded(false);
     peekSuppressClickRef.current = false;
-    const scrollEl = scrollRef.current;
-    if (scrollEl) {
-      scrollEl.style.maxHeight = "";
-      scrollEl.style.overflowY = "";
-    }
+    lastScrolledMonthRef.current = null;
   }, []);
-
-  const months = useMemo(() => buildMonthRange(todayISO(), 12, 12), []);
-
-  const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
-
-  const applyFullScrollTop = useCallback((top: number) => {
-    const scrollEl = scrollRef.current;
-    if (!scrollEl) return;
-    scrollEl.scrollTop = top;
-  }, []);
-
-  const scrollToSelectedMonth = useCallback(() => {
-    const scrollEl = scrollRef.current;
-    if (!scrollEl) return false;
-
-    let top = estimateMonthScrollTop(selectedDate, months);
-    if (monthRefs.current.size > 0) {
-      const measured = getMonthScrollTop(selectedDate, scrollEl, monthRefs.current);
-      if (measured > 0) top = measured;
-    }
-    applyFullScrollTop(top);
-    return true;
-  }, [selectedDate, months, applyFullScrollTop]);
-
-  const syncPeekWeekScroll = useCallback(() => {
-    if (!peekMode || showFullCalendar) return;
-    applyPeekWeekScroll(getPeekWeekScrollTop(selectedDate, peekYear, peekMonth));
-  }, [peekMode, showFullCalendar, selectedDate, peekYear, peekMonth, applyPeekWeekScroll]);
 
   const goToday = useCallback(() => {
     const today = todayISO();
     onSelectDate(today);
-    resetPeekLayout();
-    lastScrolledMonthRef.current = null;
-    requestAnimationFrame(() => {
-      const d = new Date(today + "T12:00:00");
-      applyPeekWeekScroll(getPeekWeekScrollTop(today, d.getFullYear(), d.getMonth()));
-    });
-  }, [onSelectDate, resetPeekLayout, applyPeekWeekScroll]);
-
-  useLayoutEffect(() => {
-    if (isPeek) {
-      syncPeekWeekScroll();
-      return;
+    if (peekMode) {
+      resetPeekLayout();
+      requestAnimationFrame(() => scrollToMonth(today));
+    } else {
+      lastScrolledMonthRef.current = null;
+      requestAnimationFrame(() => scrollToMonth(today));
     }
-    if (!showFullCalendar || monthFocus) return;
-
-    const monthKey = selectedDate.slice(0, 7);
-    if (lastScrolledMonthRef.current === monthKey) return;
-
-    scrollToSelectedMonth();
-    lastScrolledMonthRef.current = monthKey;
-  }, [isPeek, showFullCalendar, monthFocus, selectedDate, syncPeekWeekScroll, scrollToSelectedMonth]);
+  }, [onSelectDate, peekMode, resetPeekLayout, scrollToMonth]);
 
   useLayoutEffect(() => {
+    scrollToMonth(selectedDate);
     if (isPeek) {
       lastScrolledMonthRef.current = null;
+      return;
     }
-  }, [isPeek]);
+    const monthKey = selectedDate.slice(0, 7);
+    if (lastScrolledMonthRef.current === monthKey) return;
+    lastScrolledMonthRef.current = monthKey;
+  }, [isPeek, selectedDate, scrollToMonth]);
 
-  const handlePeekDaySelect = (cellIso: string) => {
+  useEffect(() => {
+    expandedRef.current = expanded;
+  }, [expanded]);
+
+  useEffect(() => {
+    if (peekMode) {
+      resetPeekLayout();
+    } else {
+      expandedRef.current = true;
+      setExpanded(true);
+    }
+  }, [peekMode, resetPeekLayout]);
+
+  const handleDaySelect = (cellIso: string) => {
     if (peekSuppressClickRef.current) return;
     onSelectDate(cellIso);
   };
 
-  const handleFullDaySelect = useCallback(
-    (cellIso: string) => {
-      onSelectDate(cellIso);
-    },
-    [onSelectDate],
-  );
-
-  const expandToFullCalendar = useCallback(() => {
-    if (userExpanded) return;
-    expandingRef.current = true;
-    peekSuppressClickRef.current = false;
-    setUserExpanded(true);
-    setMonthFocus(false);
-    setMonthFocusHeight(null);
-    requestAnimationFrame(() => {
-      lastScrolledMonthRef.current = null;
-      scrollToSelectedMonth();
-      expandingRef.current = false;
-    });
-  }, [userExpanded, scrollToSelectedMonth]);
-
-  const peekTouchRef = useRef<HTMLDivElement>(null);
-  const peekGestureActiveRef = useRef(false);
-  const expandToFullCalendarRef = useRef(expandToFullCalendar);
-  const applyPeekWeekScrollRef = useRef(applyPeekWeekScroll);
-
   useEffect(() => {
-    expandToFullCalendarRef.current = expandToFullCalendar;
-    applyPeekWeekScrollRef.current = applyPeekWeekScroll;
-  }, [expandToFullCalendar, applyPeekWeekScroll]);
+    const el = calendarWrapRef.current;
+    if (!el) return;
 
-  useEffect(() => {
-    const el = peekTouchRef.current;
-    if (!el || !isPeek) return;
+    let touchStartX = 0;
+    let touchMoved = false;
 
     const onTouchStart = (e: TouchEvent) => {
-      const y = e.touches[0]?.clientY ?? 0;
-      touchStartY.current = y;
-      gestureStartY.current = y;
+      touchStartX = e.touches[0]?.clientX ?? 0;
+      touchMoved = false;
       peekSuppressClickRef.current = false;
-      peekGestureActiveRef.current = true;
+
+      if (peekMode && !expandedRef.current) {
+        flushSync(() => {
+          expandedRef.current = true;
+          setExpanded(true);
+        });
+        scrollToMonth(selectedDate);
+      }
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (!peekGestureActiveRef.current) return;
-      const y = e.touches[0]?.clientY ?? 0;
-      const delta = touchStartY.current - y;
-      if (Math.abs(delta) <= 2) return;
+      if (peekMode && !expandedRef.current) {
+        flushSync(() => {
+          expandedRef.current = true;
+          setExpanded(true);
+        });
+        scrollToMonth(selectedDate);
+      }
 
+      const x = e.touches[0]?.clientX ?? 0;
+      const dx = touchStartX - x;
+      if (Math.abs(dx) <= 1) return;
+
+      touchMoved = true;
       peekSuppressClickRef.current = true;
       e.preventDefault();
-      applyPeekWeekScrollRef.current(peekWeekScrollRef.current + delta);
-      touchStartY.current = y;
+      e.stopPropagation();
+
+      const strip = horizontalRef.current;
+      if (strip) {
+        strip.scrollLeft += dx;
+      }
+      touchStartX = x;
     };
 
-    const onTouchEnd = (e: TouchEvent) => {
-      if (!peekGestureActiveRef.current) return;
-      peekGestureActiveRef.current = false;
+    const onTouchEnd = () => {
+      if (!touchMoved) return;
 
-      const y = e.changedTouches[0]?.clientY ?? touchStartY.current;
-      const totalDelta = gestureStartY.current - y;
-      if (Math.abs(totalDelta) > 80) {
-        expandToFullCalendarRef.current();
-        return;
+      const strip = horizontalRef.current;
+      if (strip && strip.clientWidth > 0) {
+        const idx = Math.round(strip.scrollLeft / strip.clientWidth);
+        strip.scrollLeft = idx * strip.clientWidth;
       }
-      if (peekSuppressClickRef.current) {
-        window.setTimeout(() => {
-          peekSuppressClickRef.current = false;
-        }, 350);
-      }
+
+      window.setTimeout(() => {
+        peekSuppressClickRef.current = false;
+      }, 350);
     };
 
     el.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
@@ -1664,14 +2113,13 @@ function MobileCalendarWidget({
       el.removeEventListener("touchend", onTouchEnd, { capture: true });
       el.removeEventListener("touchcancel", onTouchEnd, { capture: true });
     };
-  }, [isPeek]);
+  }, [peekMode, selectedDate, scrollToMonth]);
 
   const renderDayButton = (
     cell: CalendarCell,
     cellIndex: number,
     year: number,
     month: number,
-    onSelect: (iso: string) => void,
   ) => {
     const cellIso = cell.inMonth ? isoDate(new Date(year, month, cell.day)) : null;
     const dayTasks = cellIso ? tasksByDate.get(cellIso) ?? [] : [];
@@ -1685,7 +2133,7 @@ function MobileCalendarWidget({
         month={month}
         selectedDate={selectedDate}
         dayTasks={dayTasks}
-        onSelect={onSelect}
+        onSelect={handleDaySelect}
       />
     );
   };
@@ -1722,71 +2170,60 @@ function MobileCalendarWidget({
     </div>
   );
 
-  const renderDayGrid = (year: number, month: number, grid: CalendarCell[], onSelect: (iso: string) => void, touchNone = false) => (
-    <div className={`grid grid-cols-7 border-l border-t border-black/[0.04]${touchNone ? " touch-none" : ""}`}>
-      {grid.map((cell, i) => renderDayButton(cell, i, year, month, onSelect))}
+  const renderDayGrid = (year: number, month: number, grid: CalendarCell[]) => (
+    <div className="grid grid-cols-7 border-l border-t border-black/[0.04]">
+      {grid.map((cell, i) => renderDayButton(cell, i, year, month))}
     </div>
   );
 
-  const peekGrid = useMemo(
-    () => getCalendarGrid(peekYear, peekMonth),
-    [peekYear, peekMonth],
-  );
-  const peekMonthLabel = new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "long",
-  }).format(peekDate);
-
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04]">
-      {isPeek ? (
-        <div className="px-0.5 py-2">
-          {renderMonthHeader(peekYear, peekMonth, peekMonthLabel)}
-          {weekdayHeader(peekYear, peekMonth)}
-          <div
-            ref={peekTouchRef}
-            className="overflow-hidden touch-none"
-            style={{ height: `${PEEK_GRID_H}px` }}
-          >
-            <div ref={peekGridInnerRef} className="will-change-transform">
-              {renderDayGrid(peekYear, peekMonth, peekGrid, handlePeekDaySelect, true)}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div
-          ref={scrollRef}
-          className="overflow-x-hidden overflow-y-auto overscroll-contain touch-pan-y"
-          style={{
-            maxHeight:
-              monthFocusHeight !== null ? `${monthFocusHeight}px` : FULL_SCROLL_H,
-          }}
-        >
-          {months.map(({ year, month }, monthIndex) => {
-            const grid = getCalendarGrid(year, month);
-            const monthLabel = new Intl.DateTimeFormat("ja-JP", {
-              year: "numeric",
-              month: "long",
-            }).format(new Date(year, month, 1));
-            const monthBg = monthIndex % 2 === 0 ? "bg-white" : "bg-gray-50/90";
+    <div
+      ref={calendarWrapRef}
+      data-mobile-calendar
+      className="relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04]"
+      style={isPeek ? { maxHeight: `${PEEK_WRAP_H}px` } : undefined}
+    >
+      <div
+        ref={horizontalRef}
+        className="flex overflow-x-auto overscroll-x-contain snap-x snap-mandatory scrollbar-none"
+        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pinch-zoom" }}
+      >
+        {months.map(({ year, month }) => {
+          const grid = getCalendarGrid(year, month);
+          const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+          const isFocusMonth = monthKey === selectedMonthKey;
+          const peekRowOffset =
+            isPeek && isFocusMonth
+              ? Math.floor(getPeekWeekStartIndex(selectedDate, year, month) / 7) * CALENDAR_CELL_ROW_H
+              : 0;
+          const monthLabel = new Intl.DateTimeFormat("ja-JP", {
+            year: "numeric",
+            month: "long",
+          }).format(new Date(year, month, 1));
 
-            return (
+          return (
+            <div key={`${year}-${month}`} className="w-full shrink-0 snap-center px-0.5 py-2">
+              {renderMonthHeader(year, month, monthLabel)}
+              {weekdayHeader(year, month)}
               <div
-                key={`${year}-${month}`}
-                ref={(el) => {
-                  if (el) monthRefs.current.set(`${year}-${month}`, el);
-                  else monthRefs.current.delete(`${year}-${month}`);
-                }}
-                className={`px-0.5 py-2 ${monthBg}`}
+                className="overflow-hidden"
+                style={isPeek && isFocusMonth ? { height: `${PEEK_GRID_H}px` } : undefined}
               >
-                {renderMonthHeader(year, month, monthLabel)}
-                {weekdayHeader(year, month)}
-                {renderDayGrid(year, month, grid, handleFullDaySelect)}
+                <div
+                  className="will-change-transform"
+                  style={
+                    isPeek && isFocusMonth && peekRowOffset > 0
+                      ? { transform: `translateY(-${peekRowOffset}px)` }
+                      : undefined
+                  }
+                >
+                  {renderDayGrid(year, month, grid)}
+                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2024,6 +2461,8 @@ export default function Home() {
   const [activeProject, setActiveProject] = useState<string>(PROJECTS[0]);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
   const [casesListOpen, setCasesListOpen] = useState(false);
+  const [projectColors, setProjectColors] = useState<Record<string, string>>({});
+  const projectColorsLoadedRef = useRef(false);
 
   const viewDateLabel = formatDateJa(viewDateISO);
   const isAllProjects = activeProject === ALL_PROJECTS_LABEL;
@@ -2051,8 +2490,36 @@ export default function Home() {
           setCases(parsed.map((c) => normalizeCase(c as CaseItem)));
         }
       }
+      const rawColors =
+        localStorage.getItem(PROJECT_COLORS_STORAGE_KEY) ??
+        localStorage.getItem("gyokan-project-colors-v1");
+      if (rawColors) {
+        try {
+          setProjectColors(parseProjectColors(JSON.parse(rawColors) as Record<string, string>));
+        } catch {
+          setProjectColors({});
+        }
+      } else {
+        setProjectColors({});
+      }
+      projectColorsLoadedRef.current = true;
     } catch { /* ignore */ }
   }, [isClient]);
+
+  useEffect(() => {
+    if (!isClient || !projectColorsLoadedRef.current) return;
+    localStorage.setItem(PROJECT_COLORS_STORAGE_KEY, JSON.stringify(projectColors));
+  }, [projectColors, isClient]);
+
+  const setProjectColor = useCallback((project: string, accent: string) => {
+    if (!isValidAccentHex(accent)) return;
+    setProjectColors((prev) => ({ ...prev, [project]: accent.toUpperCase() }));
+  }, []);
+
+  const projectColorsValue = useMemo(
+    () => ({ colors: projectColors, setProjectColor }),
+    [projectColors, setProjectColor],
+  );
 
   useEffect(() => {
     if (!isClient) return;
@@ -2331,17 +2798,22 @@ export default function Home() {
     />
   );
 
-  const showCases = mobileTab === "home" || mobileTab === "cases" || mobileTab === "projects";
+  const showHomeCaseGrid = mobileTab === "home";
   const showTasks = mobileTab === "home";
 
   return (
+    <ProjectColorsContext.Provider value={projectColorsValue}>
     <div className="min-h-screen bg-[#fafafa] font-[family-name:var(--font-geist-sans)] text-gray-900 antialiased">
+      <PullToRefresh enabled={isClient} />
       <div className="mx-auto flex min-h-screen max-w-[1480px]">
         {/* Left Sidebar */}
         <aside className="sticky top-0 hidden h-screen w-[168px] shrink-0 flex-col border-r border-black/[0.06] bg-white/70 px-3 py-5 backdrop-blur-xl lg:flex">
-          <div className="mb-6 flex items-center gap-2 px-1">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#007AFF] text-[11px] font-bold text-white shadow-sm">行</div>
-            <span className="text-[13px] font-semibold tracking-tight text-gray-900">行間</span>
+          <div className="mb-6 flex items-center justify-between gap-2 px-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#007AFF] text-[11px] font-bold text-white shadow-sm">行</div>
+              <span className="truncate text-[13px] font-semibold tracking-tight text-gray-900">行間</span>
+            </div>
+            <RefreshButton iconClassName="h-4 w-4" className="shrink-0 p-1.5 hover:bg-black/[0.04]" />
           </div>
 
           <div className="mb-1.5 flex items-center justify-between px-1.5">
@@ -2354,6 +2826,7 @@ export default function Home() {
           <nav className="flex-1 space-y-0.5 overflow-y-auto">
             {PROJECTS.map((p) => {
               const active = activeProject === p;
+              const isAll = p === ALL_PROJECTS_LABEL;
               return (
                 <button
                   key={p}
@@ -2365,8 +2838,12 @@ export default function Home() {
                       : "text-gray-600 hover:bg-black/[0.03]"
                   }`}
                 >
-                  <Icon name={active ? "folderOpen" : "folder"} className={`h-3.5 w-3.5 shrink-0 ${active ? "text-[#007AFF]" : "text-gray-400"}`} />
-                  <span className="truncate">{p === ALL_PROJECTS_LABEL ? "すべて" : p}</span>
+                  {isAll ? (
+                    <Icon name={active ? "folderOpen" : "folder"} className={`h-3.5 w-3.5 shrink-0 ${active ? "text-[#007AFF]" : "text-gray-400"}`} />
+                  ) : (
+                    <ProjectColorSwatch accent={projectColors[p]} size="sm" />
+                  )}
+                  <span className="truncate">{isAll ? "すべて" : p}</span>
                 </button>
               );
             })}
@@ -2383,11 +2860,14 @@ export default function Home() {
         <main className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0">
           <div className="mx-auto max-w-3xl px-2.5 py-2 sm:px-4 lg:max-w-none lg:px-5 lg:pb-2 lg:pt-2">
             {!casesListOpen && (
-            <header className={`mb-2 lg:mb-3 ${showTasks ? "hidden lg:block" : ""}`}>
-              <div className="mb-2 flex items-center justify-between lg:hidden">
-                <button type="button" className="rounded-xl p-2 text-gray-500 hover:bg-white"><Icon name="menu" className="h-5 w-5" /></button>
-                <span className="text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
-                <button type="button" className="rounded-xl p-2 text-gray-500 hover:bg-white"><Icon name="bell" className="h-5 w-5" /></button>
+            <header className="mb-2 lg:mb-3">
+              <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
+                <button type="button" className="shrink-0 rounded-xl p-2 text-gray-500 hover:bg-white"><Icon name="menu" className="h-5 w-5" /></button>
+                <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
+                  <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
+                  {!isAllProjects && <ProjectColorHeaderLink project={activeProject} />}
+                </div>
+                <RefreshButton className="shrink-0" />
               </div>
 
               <div className="hidden flex-wrap items-center gap-3 lg:flex">
@@ -2410,6 +2890,8 @@ export default function Home() {
                   </button>
                 </div>
                 <span className="text-[15px] font-semibold text-gray-900">{viewDateLabel}</span>
+                {!isAllProjects && <ProjectColorHeaderLink project={activeProject} />}
+                <RefreshButton iconClassName="h-4 w-4" className="ml-auto rounded-lg p-1.5" />
               </div>
             </header>
             )}
@@ -2423,6 +2905,22 @@ export default function Home() {
                 sensors={sensors}
                 onDragEnd={handleCaseDragEnd}
               />
+            ) : mobileTab === "projects" ? (
+              isAllProjects ? (
+                <MobileProjectList
+                  projects={PROJECT_NAMES}
+                  cases={cases}
+                  onSelect={setActiveProject}
+                />
+              ) : (
+                <ProjectDetailSection
+                  project={activeProject}
+                  cases={cases}
+                  onToggleCase={toggleCase}
+                  onOpenCase={setSelectedCase}
+                  onBack={() => setActiveProject(ALL_PROJECTS_LABEL)}
+                />
+              )
             ) : (
               <>
             <div className="flex flex-col">
@@ -2501,8 +2999,10 @@ export default function Home() {
               </section>
             )}
 
-            {showCases && isAllProjects && (
-              <section className="order-3 mb-3 lg:order-1 lg:mb-4">
+            {isAllProjects && (
+              <section
+                className={`order-3 mb-3 lg:order-1 lg:mb-4 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
+              >
                 <div className="mb-2 flex items-center justify-between gap-4">
                   <div className="flex min-w-0 items-baseline gap-3">
                     <h3 className="shrink-0 text-[17px] font-semibold text-gray-900">進行中の案件</h3>
@@ -2553,12 +3053,13 @@ export default function Home() {
 
             </div>
 
-            {showCases && !isAllProjects && (
+            {!isAllProjects && (
               <ProjectDetailSection
                 project={activeProject}
                 cases={cases}
                 onToggleCase={toggleCase}
                 onOpenCase={setSelectedCase}
+                className="hidden lg:block"
               />
             )}
 
@@ -2614,8 +3115,8 @@ export default function Home() {
         <div className="mx-auto flex max-w-lg justify-around px-1" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
           {([
             { id: "home" as const, label: "ホーム", icon: "home" },
-            { id: "cases" as const, label: "案件", icon: "cases" },
             { id: "projects" as const, label: "プロジェクト", icon: "folder" },
+            { id: "cases" as const, label: "案件", icon: "cases" },
             { id: "more" as const, label: "その他", icon: "more" },
           ]).map((tab) => (
             <button
@@ -2624,6 +3125,10 @@ export default function Home() {
               onClick={() => {
                 if (tab.id === "cases") {
                   openCasesList();
+                } else if (tab.id === "projects") {
+                  setCasesListOpen(false);
+                  setActiveProject(ALL_PROJECTS_LABEL);
+                  setMobileTab("projects");
                 } else {
                   setCasesListOpen(false);
                   setMobileTab(tab.id);
@@ -2695,5 +3200,6 @@ export default function Home() {
         )}
       </DetailOverlay>
     </div>
+    </ProjectColorsContext.Provider>
   );
 }
