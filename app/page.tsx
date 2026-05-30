@@ -1,6 +1,13 @@
 "use client";
 
 import {
+  ALL_PROJECTS_LABEL,
+  DEFAULT_PROJECT_ACCENT,
+  DEFAULT_PROJECT_NAMES,
+} from "@/lib/gyokan/constants";
+import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
+import { useRouter } from "next/navigation";
+import {
   DndContext,
   closestCorners,
   KeyboardSensor,
@@ -16,6 +23,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -44,6 +52,7 @@ type Task = {
   done: boolean;
   project: string;
   starred?: boolean;
+  sortOrder: number;
 };
 
 type CaseItem = {
@@ -61,54 +70,24 @@ type CaseItem = {
   done: boolean;
   createdAt: string;
   completedAt: string | null;
+  sortOrder: number;
+};
+
+type ProjectMemo = {
+  id: string;
+  project: string;
+  date: string;
+  body: string;
+};
+
+type SidebarProject = {
+  id: string;
+  name: string;
 };
 
 type MobileTab = "home" | "cases" | "projects" | "more";
 
 /* ─── Constants ─── */
-
-const STORAGE_KEY = "gyokan-tasks-v5";
-const CASES_STORAGE_KEY = "gyokan-cases-v6";
-const PROJECT_COLORS_STORAGE_KEY = "gyokan-project-colors-v2";
-const DEFAULT_PROJECT_ACCENT = "#3B82F6";
-const ALL_PROJECTS_LABEL = "すべての案件";
-
-const PROJECT_NAMES = [
-  "AP浦安",
-  "AP葛西",
-  "BP篠崎",
-  "CP篠崎",
-  "門前仲町",
-  "立川倉庫",
-] as const;
-
-const PROJECTS = [ALL_PROJECTS_LABEL, ...PROJECT_NAMES] as const;
-
-const CASE_TAG_ASSIGNMENTS = [
-  "AP葛西",
-  "BP篠崎",
-  "AP浦安",
-  "立川倉庫",
-  "CP篠崎",
-  "門前仲町",
-  "AP浦安",
-  "AP葛西",
-  "BP篠崎",
-  "CP篠崎",
-] as const;
-
-const TASK_TAG_ASSIGNMENTS = [
-  "門前仲町",
-  "AP浦安",
-  "CP篠崎",
-  "AP葛西",
-  "立川倉庫",
-  "BP篠崎",
-  "AP葛西",
-  "門前仲町",
-  "AP浦安",
-  "BP篠崎",
-] as const;
 
 function isoDate(d: Date) {
   const y = d.getFullYear();
@@ -162,79 +141,7 @@ function getCaseGridDisplay(cases: CaseItem[]) {
   return { visible, hiddenCount };
 }
 
-const DEFAULT_CASES: CaseItem[] = [
-  ...CASE_TAG_ASSIGNMENTS.map((project, i) => ({
-    id: `c${i + 1}`,
-    title: "未入力",
-    project,
-    status: "情報収集中",
-    statusTone: (["blue", "amber", "emerald", "violet"] as const)[i % 4],
-    deadline: "2026/12/31",
-    progress: 0,
-    goal: "",
-    subtasksDone: 0,
-    subtasksTotal: 5,
-    comments: 0,
-    done: false,
-    createdAt: isoDate(new Date()).replace(/-/g, "."),
-    completedAt: null,
-  })),
-  {
-    id: "c11",
-    title: "未入力",
-    project: "門前仲町",
-    status: "提案準備中",
-    statusTone: "amber",
-    deadline: "2026/12/31",
-    progress: 0,
-    goal: "",
-    subtasksDone: 0,
-    subtasksTotal: 5,
-    comments: 0,
-    done: false,
-    createdAt: isoDate(new Date()).replace(/-/g, "."),
-    completedAt: null,
-  },
-];
-
-const DEFAULT_TASKS: Task[] = [
-  ...TASK_TAG_ASSIGNMENTS.map((project, i) => ({
-    id: `t${i + 1}`,
-    title: "未入力",
-    time: "今日",
-    date: todayISO(),
-    done: false,
-    project,
-  })),
-  {
-    id: "t-range-1",
-    title: "未入力",
-    time: "～6/5",
-    date: "2026-05-24",
-    dateEnd: "2026-06-05",
-    done: false,
-    project: "AP葛西",
-  },
-  {
-    id: "t-range-2",
-    title: "未入力",
-    time: "～6/5",
-    date: "2026-05-24",
-    dateEnd: "2026-06-05",
-    done: false,
-    project: "BP篠崎",
-  },
-  {
-    id: "t-incomplete-1",
-    title: "未入力",
-    time: "昨日",
-    date: yesterdayISO(),
-    done: false,
-    project: "AP浦安",
-  },
-];
-
-const PROJECT_OPTIONS = PROJECTS.filter((p) => p !== ALL_PROJECTS_LABEL);
+const PROJECT_OPTIONS_FALLBACK = [...DEFAULT_PROJECT_NAMES];
 const STATUS_OPTIONS: { label: string; tone: CaseItem["statusTone"] }[] = [
   { label: "売却活動中", tone: "blue" },
   { label: "提案準備中", tone: "amber" },
@@ -341,26 +248,16 @@ function getProjectColor(accentHex: string | undefined): ProjectColorStyle {
   return projectColorFromAccent(DEFAULT_PROJECT_ACCENT);
 }
 
-function parseProjectColors(stored: Record<string, string> | null): Record<string, string> {
-  const result: Record<string, string> = {};
-  if (!stored) return result;
-  for (const name of PROJECT_NAMES) {
-    const value = stored[name];
-    if (value && isValidAccentHex(value)) {
-      result[name] = value.toUpperCase();
-    }
-  }
-  return result;
-}
-
 type ProjectColorsContextValue = {
   colors: Record<string, string>;
   setProjectColor: (project: string, accent: string) => void;
+  projectOptions: string[];
 };
 
 const ProjectColorsContext = createContext<ProjectColorsContextValue>({
   colors: {},
   setProjectColor: () => {},
+  projectOptions: [...PROJECT_OPTIONS_FALLBACK],
 });
 
 function useProjectColors() {
@@ -369,18 +266,78 @@ function useProjectColors() {
 
 /* ─── Helpers ─── */
 
-function uid() {
-  return `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function uidCase() {
-  return `case-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
 function formatCaseDate(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
+  return `${y}.${m}.${d}`;
+}
+
+function parseCaseCreatedAt(createdAt: string) {
+  const normalized = createdAt.replace(/\./g, "-").replace(/\//g, "-");
+  const [y, m, d] = normalized.split("-").map(Number);
+  if (!y || !m || !d) return 0;
+  return new Date(y, m - 1, d).getTime();
+}
+
+function sortProjectCases(list: CaseItem[]) {
+  return [...list].sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    return parseCaseCreatedAt(b.createdAt) - parseCaseCreatedAt(a.createdAt);
+  });
+}
+
+type ProjectTimelineEntry =
+  | { kind: "case"; caseItem: CaseItem; sortDate: number; done: boolean }
+  | { kind: "memo"; memo: ProjectMemo; sortDate: number };
+
+function buildProjectTimeline(
+  project: string,
+  cases: CaseItem[],
+  memos: ProjectMemo[],
+): ProjectTimelineEntry[] {
+  const entries: ProjectTimelineEntry[] = [
+    ...cases
+      .filter((c) => c.project === project)
+      .map((c) => ({
+        kind: "case" as const,
+        caseItem: c,
+        sortDate: parseCaseCreatedAt(c.createdAt),
+        done: c.done,
+      })),
+    ...memos
+      .filter((m) => m.project === project)
+      .map((m) => ({
+        kind: "memo" as const,
+        memo: m,
+        sortDate: parseCaseCreatedAt(m.date),
+      })),
+  ];
+
+  return entries.sort((a, b) => {
+    const aDone = a.kind === "case" ? a.done : false;
+    const bDone = b.kind === "case" ? b.done : false;
+    if (aDone !== bDone) return aDone ? 1 : -1;
+    return b.sortDate - a.sortDate;
+  });
+}
+
+function normalizeMemo(item: ProjectMemo): ProjectMemo {
+  return {
+    ...item,
+    date: item.date ?? formatCaseDate(new Date()),
+    body: item.body ?? "",
+  };
+}
+
+function formatCaseDateForInput(date: string) {
+  return date.replace(/\./g, "-").replace(/\//g, "-");
+}
+
+function parseMemoDateInput(value: string) {
+  if (!value) return formatCaseDate(new Date());
+  const [y, m, d] = value.split("-");
+  if (!y || !m || !d) return formatCaseDate(new Date());
   return `${y}.${m}.${d}`;
 }
 
@@ -402,6 +359,7 @@ function normalizeCase(item: CaseItem): CaseItem {
     deadline: item.deadline ?? "",
     createdAt: item.createdAt ?? "2026.02.01",
     completedAt: item.completedAt ?? null,
+    sortOrder: item.sortOrder ?? 0,
   };
 }
 
@@ -411,6 +369,7 @@ function normalizeTask(item: Task): Task {
     ...item,
     date,
     dateEnd: item.dateEnd && item.dateEnd !== date ? item.dateEnd : undefined,
+    sortOrder: item.sortOrder ?? 0,
   };
 }
 
@@ -822,7 +781,11 @@ function Icon({ name, className = "h-5 w-5" }: { name: string; className?: strin
   return map[name] ?? null;
 }
 
-function reloadApp() {
+function reloadApp(onRefresh?: () => Promise<void>) {
+  if (onRefresh) {
+    void onRefresh();
+    return;
+  }
   window.location.reload();
 }
 
@@ -830,10 +793,12 @@ function RefreshButton({
   className = "",
   iconClassName = "h-5 w-5",
   label = "更新",
+  onRefresh,
 }: {
   className?: string;
   iconClassName?: string;
   label?: string;
+  onRefresh?: () => Promise<void>;
 }) {
   const [spinning, setSpinning] = useState(false);
 
@@ -844,7 +809,14 @@ function RefreshButton({
       title={label}
       onClick={() => {
         setSpinning(true);
-        reloadApp();
+        void (async () => {
+          try {
+            if (onRefresh) await onRefresh();
+            else reloadApp();
+          } finally {
+            setTimeout(() => setSpinning(false), 600);
+          }
+        })();
       }}
       className={`rounded-xl p-2 text-gray-500 transition-colors hover:bg-white hover:text-[#007AFF] ${className}`}
     >
@@ -859,7 +831,13 @@ function RefreshButton({
 const PULL_REFRESH_THRESHOLD = 64;
 const PULL_REFRESH_MAX = 96;
 
-function PullToRefresh({ enabled }: { enabled: boolean }) {
+function PullToRefresh({
+  enabled,
+  onRefresh,
+}: {
+  enabled: boolean;
+  onRefresh?: () => Promise<void>;
+}) {
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const touchStartY = useRef(0);
@@ -917,7 +895,15 @@ function PullToRefresh({ enabled }: { enabled: boolean }) {
         setRefreshing(true);
         pullDistanceRef.current = PULL_REFRESH_THRESHOLD;
         setPullDistance(PULL_REFRESH_THRESHOLD);
-        reloadApp();
+        void (async () => {
+          try {
+            if (onRefresh) await onRefresh();
+            else reloadApp();
+          } finally {
+            setRefreshing(false);
+            reset();
+          }
+        })();
         return;
       }
 
@@ -935,7 +921,7 @@ function PullToRefresh({ enabled }: { enabled: boolean }) {
       document.removeEventListener("touchend", onTouchEnd);
       document.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [enabled, refreshing]);
+  }, [enabled, refreshing, onRefresh]);
 
   if (!enabled || pullDistance <= 0) return null;
 
@@ -1067,6 +1053,7 @@ function CaseDetailEditor({
   item,
   onSave,
   onClose,
+  layout = "modal",
 }: {
   item: CaseItem;
   onSave: (
@@ -1080,8 +1067,10 @@ function CaseDetailEditor({
       deadline: string;
     },
   ) => void;
-  onClose: () => void;
+  onClose?: () => void;
+  layout?: "modal" | "page";
 }) {
+  const { projectOptions } = useProjectColors();
   const [title, setTitle] = useState(item.title);
   const [project, setProject] = useState(item.project);
   const [goal, setGoal] = useState(item.goal);
@@ -1099,17 +1088,29 @@ function CaseDetailEditor({
       statusTone: tone,
       deadline: parseCaseDeadlineInput(deadline),
     });
-    onClose();
+    onClose?.();
   };
 
   return (
     <div>
+      {layout === "page" && (
+        <>
+          <DetailField label="発生日">
+            <p className="text-[14px] text-gray-900">{item.createdAt}</p>
+          </DetailField>
+          {item.done && item.completedAt && (
+            <DetailField label="完了日">
+              <p className="text-[14px] text-gray-900">{item.completedAt}</p>
+            </DetailField>
+          )}
+        </>
+      )}
       <DetailField label="案件名">
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={fieldInputClass} />
       </DetailField>
       <DetailField label="プロジェクト">
         <select value={project} onChange={(e) => setProject(e.target.value)} className={fieldInputClass}>
-          {PROJECT_OPTIONS.map((p) => (
+          {projectOptions.map((p) => (
             <option key={p} value={p}>{p}</option>
           ))}
         </select>
@@ -1132,8 +1133,10 @@ function CaseDetailEditor({
       <DetailField label="目標">
         <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={3} className={`${fieldInputClass} resize-none`} />
       </DetailField>
-      <div className="mt-5 flex justify-end gap-2">
-        <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
+      <div className={`flex gap-2 ${layout === "page" ? "mt-5 justify-end" : "mt-5 justify-end"}`}>
+        {layout === "modal" && onClose && (
+          <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
+        )}
         <button type="button" onClick={save} className="rounded-xl bg-[#007AFF] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
       </div>
     </div>
@@ -1149,6 +1152,7 @@ function TaskDetailEditor({
   onSave: (id: string, data: { title: string; project: string; date: string; dateEnd?: string }) => void;
   onClose: () => void;
 }) {
+  const { projectOptions } = useProjectColors();
   const [title, setTitle] = useState(item.title);
   const [project, setProject] = useState(item.project);
   const [date, setDate] = useState(item.date);
@@ -1175,7 +1179,7 @@ function TaskDetailEditor({
       </DetailField>
       <DetailField label="プロジェクト">
         <select value={project} onChange={(e) => setProject(e.target.value)} className={fieldInputClass}>
-          {PROJECT_OPTIONS.map((p) => (
+          {projectOptions.map((p) => (
             <option key={p} value={p}>{p}</option>
           ))}
         </select>
@@ -1421,6 +1425,76 @@ function SortableCaseCard({
 
 /* ─── Project Detail Case Row ─── */
 
+function CaseDetailSection({
+  item,
+  onSave,
+  onBack,
+  onToggle,
+  className = "",
+}: {
+  item: CaseItem;
+  onSave: (
+    id: string,
+    data: {
+      title: string;
+      project: string;
+      goal: string;
+      status: string;
+      statusTone: CaseItem["statusTone"];
+      deadline: string;
+    },
+  ) => void;
+  onBack: () => void;
+  onToggle: (id: string) => void;
+  className?: string;
+}) {
+  return (
+    <section className={`mb-8 lg:mb-10 ${className}`}>
+      <div className="mb-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-gray-500 hover:bg-black/[0.04]"
+          aria-label="プロジェクト詳細へ戻る"
+        >
+          <Icon name="chevronLeft" className="h-5 w-5" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[17px] font-semibold text-gray-900">{item.title}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-gray-400">
+            <ProjectNameTag name={item.project} />
+            {item.done ? (
+              <span>完了</span>
+            ) : (
+              <StatusBadge label={item.status} tone={item.statusTone} />
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onToggle(item.id)}
+          aria-label={item.done ? "進行中に戻す" : "完了にする"}
+          className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border transition-all duration-200 ${
+            item.done
+              ? "border-gray-400 bg-gray-500 text-white"
+              : "border-gray-300 bg-white hover:border-blue-400"
+          }`}
+        >
+          {item.done && <Icon name="check" className="h-2.5 w-2.5" />}
+        </button>
+      </div>
+      <Card className="p-4">
+        <CaseDetailEditor
+          key={`${item.id}-${item.done}-${item.completedAt ?? ""}`}
+          item={item}
+          onSave={onSave}
+          layout="page"
+        />
+      </Card>
+    </section>
+  );
+}
+
 function DetailCaseCard({
   item,
   onToggle,
@@ -1435,7 +1509,7 @@ function DetailCaseCard({
   return (
     <article
       onClick={() => onOpen(item)}
-      className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 transition-all duration-200 ${
+      className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-1.5 transition-all duration-200 ${
         item.done
           ? "border-gray-200/80 bg-gray-200/70"
           : "border-gray-100 bg-white hover:bg-gray-50/80"
@@ -1449,30 +1523,121 @@ function DetailCaseCard({
           onToggle(item.id);
         }}
         aria-label={item.done ? "進行中に戻す" : "完了にする"}
-        className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border transition-all duration-200 ${
+        className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border transition-all duration-200 ${
           item.done
             ? "border-gray-400 bg-gray-500 text-white"
             : "border-gray-300 bg-white hover:border-blue-400"
         }`}
       >
-        {item.done && <Icon name="check" className="h-3 w-3" />}
+        {item.done && <Icon name="check" className="h-2 w-2" />}
       </button>
-
       <h4
-        className={`min-w-0 flex-1 truncate text-[13px] font-semibold ${
-          item.done ? "text-gray-400" : "text-gray-900"
+        className={`min-w-0 flex-1 truncate text-[12px] font-medium leading-tight ${
+          item.done ? "text-gray-400 line-through" : "text-gray-900"
         }`}
       >
         {item.title}
       </h4>
-
-      <div className="shrink-0 text-right text-[10px] leading-relaxed text-gray-400">
-        <p>発生日 {item.createdAt}</p>
-        {item.done && item.completedAt && (
-          <p className="text-gray-500">完了日 {item.completedAt}</p>
-        )}
-      </div>
     </article>
+  );
+}
+
+function DetailMemoCard({
+  memo,
+  onOpen,
+}: {
+  memo: ProjectMemo;
+  onOpen: (memo: ProjectMemo) => void;
+}) {
+  const { colors } = useProjectColors();
+  const accent = getProjectColor(colors[memo.project]).accent;
+  return (
+    <article
+      onClick={() => onOpen(memo)}
+      className="flex h-full min-h-[88px] cursor-pointer flex-col rounded-lg border border-amber-100 bg-amber-50/40 px-2.5 py-2 transition-all duration-200 hover:bg-amber-50/70"
+      style={{ borderLeftWidth: 3, borderLeftColor: accent }}
+    >
+      <p className="mb-1 text-[10px] font-semibold text-amber-700/80">メモ</p>
+      <p className="min-h-0 flex-1 text-[12px] leading-snug text-gray-800 line-clamp-4">{memo.body}</p>
+      <p className="mt-auto text-[10px] text-gray-400">{memo.date}</p>
+    </article>
+  );
+}
+
+function ProjectMemoEditor({
+  memo,
+  onSave,
+  onDelete,
+  onClose,
+}: {
+  memo: ProjectMemo | null;
+  onSave: (data: { date: string; body: string }) => void;
+  onDelete?: () => void;
+  onClose: () => void;
+}) {
+  const [date, setDate] = useState(
+    memo ? formatCaseDateForInput(memo.date) : todayISO(),
+  );
+  const [body, setBody] = useState(memo?.body ?? "");
+
+  const save = () => {
+    if (!body.trim()) return;
+    onSave({ date: parseMemoDateInput(date), body: body.trim() });
+    onClose();
+  };
+
+  return (
+    <div>
+      <DetailField label="日付">
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className={fieldInputClass}
+        />
+      </DetailField>
+      <DetailField label="メモ">
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={5}
+          placeholder="メモを入力"
+          className={`${fieldInputClass} resize-none`}
+        />
+      </DetailField>
+      <div className="mt-5 flex items-center justify-between gap-2">
+        {memo && onDelete ? (
+          <button
+            type="button"
+            onClick={() => {
+              onDelete();
+              onClose();
+            }}
+            className="rounded-xl px-4 py-2 text-[13px] font-medium text-rose-500 hover:bg-rose-50"
+          >
+            削除
+          </button>
+        ) : (
+          <span />
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]"
+          >
+            キャンセル
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            className="rounded-xl bg-[#007AFF] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600"
+          >
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1516,26 +1681,47 @@ function MobileProjectList({
 function ProjectDetailSection({
   project,
   cases,
+  memos,
   onToggleCase,
   onOpenCase,
+  onSaveMemo,
+  onDeleteMemo,
   onBack,
   className = "",
 }: {
   project: string;
   cases: CaseItem[];
+  memos: ProjectMemo[];
   onToggleCase: (id: string) => void;
   onOpenCase: (item: CaseItem) => void;
+  onSaveMemo: (data: { id?: string; project: string; date: string; body: string }) => void;
+  onDeleteMemo: (id: string) => void;
   onBack?: () => void;
   className?: string;
 }) {
-  const projectCases = cases
-    .filter((c) => c.project === project)
-    .sort((a, b) => {
-      if (a.done === b.done) return 0;
-      return a.done ? 1 : -1;
-    });
+  const [memoModalOpen, setMemoModalOpen] = useState(false);
+  const [editingMemo, setEditingMemo] = useState<ProjectMemo | null>(null);
+
+  const projectCases = sortProjectCases(cases.filter((c) => c.project === project));
+  const projectMemos = memos.filter((m) => m.project === project);
+  const timeline = buildProjectTimeline(project, cases, memos);
   const active = projectCases.filter((c) => !c.done);
   const completed = projectCases.filter((c) => c.done);
+
+  const openNewMemo = () => {
+    setEditingMemo(null);
+    setMemoModalOpen(true);
+  };
+
+  const openEditMemo = (memo: ProjectMemo) => {
+    setEditingMemo(memo);
+    setMemoModalOpen(true);
+  };
+
+  const closeMemoModal = () => {
+    setMemoModalOpen(false);
+    setEditingMemo(null);
+  };
 
   return (
     <section className={`mb-8 lg:mb-10 ${className}`}>
@@ -1558,18 +1744,138 @@ function ProjectDetailSection({
         <span>進行中 {active.length}件</span>
         <span aria-hidden>·</span>
         <span>完了 {completed.length}件</span>
+        {projectMemos.length > 0 && (
+          <>
+            <span aria-hidden>·</span>
+            <span>メモ {projectMemos.length}件</span>
+          </>
+        )}
       </div>
       <Card className="overflow-hidden p-2">
-        {projectCases.length === 0 ? (
-          <p className="px-4 py-8 text-center text-[13px] text-gray-400">
+        {timeline.length === 0 ? (
+          <p className="px-2 py-6 text-center text-[13px] text-gray-400">
             このプロジェクトに紐づく案件はありません
           </p>
         ) : (
-          <div className="space-y-1">
-            {projectCases.map((c) => (
-              <DetailCaseCard key={c.id} item={c} onToggle={onToggleCase} onOpen={onOpenCase} />
-            ))}
+          <div className="grid grid-cols-2 gap-2">
+            {timeline.map((entry) =>
+              entry.kind === "case" ? (
+                <DetailCaseCard
+                  key={entry.caseItem.id}
+                  item={entry.caseItem}
+                  onToggle={onToggleCase}
+                  onOpen={onOpenCase}
+                />
+              ) : (
+                <DetailMemoCard
+                  key={entry.memo.id}
+                  memo={entry.memo}
+                  onOpen={openEditMemo}
+                />
+              ),
+            )}
           </div>
+        )}
+        <button
+          type="button"
+          onClick={openNewMemo}
+          className={`flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-3 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-[#007AFF]/40 hover:bg-blue-50/40 hover:text-[#007AFF] ${
+            timeline.length > 0 ? "mt-2" : ""
+          }`}
+        >
+          メモ
+        </button>
+      </Card>
+
+      <DetailOverlay
+        open={memoModalOpen}
+        onClose={closeMemoModal}
+        title={editingMemo ? "メモを編集" : "メモを追加"}
+      >
+        <ProjectMemoEditor
+          key={editingMemo?.id ?? "new"}
+          memo={editingMemo}
+          onSave={(data) =>
+            onSaveMemo({
+              id: editingMemo?.id,
+              project,
+              date: data.date,
+              body: data.body,
+            })
+          }
+          onDelete={
+            editingMemo
+              ? () => onDeleteMemo(editingMemo.id)
+              : undefined
+          }
+          onClose={closeMemoModal}
+        />
+      </DetailOverlay>
+    </section>
+  );
+}
+
+function TodayTasksSection({
+  viewDateISO,
+  activeTaskCount,
+  completedTaskCount,
+  displayedTasks,
+  incompleteOtherTasks,
+  renderTaskList,
+  onAddTask,
+  className = "",
+}: {
+  viewDateISO: string;
+  activeTaskCount: number;
+  completedTaskCount: number;
+  displayedTasks: Task[];
+  incompleteOtherTasks: Task[];
+  renderTaskList: (
+    list: Task[],
+    dragScope: "today" | "upcoming" | "range",
+    options?: { showOriginalDeadline?: boolean },
+  ) => ReactNode;
+  onAddTask: () => void;
+  className?: string;
+}) {
+  return (
+    <section className={`mb-4 ${className}`}>
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <h3 className="shrink-0 text-[17px] font-semibold tracking-tight text-gray-900">
+            {taskSectionLabel(viewDateISO)}
+          </h3>
+          <span className="text-[13px] text-gray-400">
+            未完了 {activeTaskCount}件 · 完了 {completedTaskCount}件
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onAddTask}
+          className="shrink-0 text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
+        >
+          ＋ タスクを追加
+        </button>
+      </div>
+
+      <Card className="overflow-hidden p-1.5">
+        {displayedTasks.length === 0 && incompleteOtherTasks.length === 0 ? (
+          <div className="px-4 py-8 text-center">
+            <p className="text-[12px] text-gray-400">タスクがありません</p>
+          </div>
+        ) : (
+          <>
+            {displayedTasks.length > 0 && renderTaskList(displayedTasks, "today")}
+            {incompleteOtherTasks.length > 0 && (
+              <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
+                <div className="mb-1.5 flex items-center justify-between px-1">
+                  <span className="text-[11px] font-medium text-gray-400">未完了のタスク</span>
+                  <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
+                </div>
+                {renderTaskList(incompleteOtherTasks, "range", { showOriginalDeadline: true })}
+              </div>
+            )}
+          </>
         )}
       </Card>
     </section>
@@ -2342,6 +2648,217 @@ function MonthlyStats({
   );
 }
 
+/* ─── Add Project Modal ─── */
+
+function AddProjectModalForm({
+  onClose,
+  onSubmit,
+  existingNames,
+}: {
+  onClose: () => void;
+  onSubmit: (name: string) => boolean;
+  existingNames: readonly string[];
+}) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("プロジェクト名を入力してください");
+      return;
+    }
+    if (existingNames.includes(trimmed)) {
+      setError("同じ名前のプロジェクトが既にあります");
+      return;
+    }
+    const ok = onSubmit(trimmed);
+    if (!ok) {
+      setError("プロジェクトを追加できませんでした");
+      return;
+    }
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 p-4 backdrop-blur-[2px] sm:items-center"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-md rounded-xl border border-gray-100 bg-white p-7 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">プロジェクトを追加</h3>
+          <button type="button" onClick={onClose} className="rounded-xl p-2 text-gray-400 hover:bg-gray-50">
+            <Icon name="x" className="h-5 w-5" />
+          </button>
+        </div>
+        <label className="mb-4 block">
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">プロジェクト名</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="例：DP新宿"
+            className="w-full rounded-lg border border-gray-100 bg-gray-50/60 px-4 py-3 text-[15px] outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+            autoFocus
+          />
+        </label>
+        {error && <p className="mb-4 text-[13px] text-red-500">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-2xl px-5 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50">
+            キャンセル
+          </button>
+          <button type="button" onClick={submit} className="rounded-2xl bg-blue-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-blue-500/25 hover:bg-blue-600">
+            追加する
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddProjectModal({
+  open,
+  onClose,
+  onSubmit,
+  existingNames,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (name: string) => boolean;
+  existingNames: readonly string[];
+}) {
+  if (!open) return null;
+  return (
+    <AddProjectModalForm onClose={onClose} onSubmit={onSubmit} existingNames={existingNames} />
+  );
+}
+
+function SortableSidebarProjectItem({
+  project,
+  active,
+  accent,
+  onSelect,
+}: {
+  project: SidebarProject;
+  active: boolean;
+  accent: string;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: project.id,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: isDragging ? undefined : transition,
+        zIndex: isDragging ? 50 : undefined,
+      }}
+      className="flex items-center gap-0.5"
+    >
+      <button
+        type="button"
+        aria-label={`${project.name}の順番を変更`}
+        className="flex h-7 w-5 shrink-0 cursor-grab items-center justify-center rounded text-gray-300 hover:text-gray-500 active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <Icon name="grip" className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] transition-all duration-200 ${
+          active
+            ? "bg-[#007AFF]/10 font-medium text-[#007AFF]"
+            : "text-gray-600 hover:bg-black/[0.03]"
+        }`}
+      >
+        <ProjectColorSwatch accent={accent} size="sm" />
+        <span className="truncate">{project.name}</span>
+      </button>
+    </div>
+  );
+}
+
+function DesktopProjectSidebar({
+  projects,
+  activeProject,
+  projectColors,
+  sensors,
+  onSelect,
+  onAdd,
+  onDragEnd,
+}: {
+  projects: SidebarProject[];
+  activeProject: string;
+  projectColors: Record<string, string>;
+  sensors: ReturnType<typeof useSensors>;
+  onSelect: (name: string) => void;
+  onAdd: () => void;
+  onDragEnd: (event: DragEndEvent) => void;
+}) {
+  return (
+    <>
+      <div className="mb-1.5 flex items-center justify-between px-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Projects</span>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="flex h-5 w-5 items-center justify-center rounded-md text-gray-400 hover:bg-black/[0.04]"
+          aria-label="プロジェクトを追加"
+        >
+          <Icon name="plus" className="h-3 w-3" />
+        </button>
+      </div>
+
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
+        <nav className="flex-1 space-y-0.5 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => onSelect(ALL_PROJECTS_LABEL)}
+            className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] transition-all duration-200 ${
+              activeProject === ALL_PROJECTS_LABEL
+                ? "bg-[#007AFF]/10 font-medium text-[#007AFF]"
+                : "text-gray-600 hover:bg-black/[0.03]"
+            }`}
+          >
+            <Icon
+              name={activeProject === ALL_PROJECTS_LABEL ? "folderOpen" : "folder"}
+              className={`h-3.5 w-3.5 shrink-0 ${activeProject === ALL_PROJECTS_LABEL ? "text-[#007AFF]" : "text-gray-400"}`}
+            />
+            <span className="truncate">すべて</span>
+          </button>
+
+          <SortableContext items={projects.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+            {projects.map((project) => (
+              <SortableSidebarProjectItem
+                key={project.id}
+                project={project}
+                active={activeProject === project.name}
+                accent={projectColors[project.name] ?? DEFAULT_PROJECT_ACCENT}
+                onSelect={() => onSelect(project.name)}
+              />
+            ))}
+          </SortableContext>
+        </nav>
+      </DndContext>
+    </>
+  );
+}
+
 /* ─── Add Case Modal ─── */
 
 function AddCaseModalForm({
@@ -2351,8 +2868,9 @@ function AddCaseModalForm({
   onClose: () => void;
   onSubmit: (data: { title: string; project: string }) => void;
 }) {
+  const { projectOptions } = useProjectColors();
   const [title, setTitle] = useState("");
-  const [project, setProject] = useState<string>(PROJECT_OPTIONS[0]);
+  const [project, setProject] = useState<string>(projectOptions[0] ?? "");
 
   const submit = () => {
     if (!title.trim()) return;
@@ -2396,7 +2914,7 @@ function AddCaseModalForm({
             onChange={(e) => setProject(e.target.value)}
             className="w-full rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
           >
-            {PROJECT_OPTIONS.map((p) => (
+            {projectOptions.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
@@ -2527,21 +3045,77 @@ function useIsClient() {
 
 export default function Home() {
   const isClient = useIsClient();
-  const [tasks, setTasks] = useState<Task[]>(DEFAULT_TASKS);
-  const [cases, setCases] = useState<CaseItem[]>(DEFAULT_CASES);
+  const router = useRouter();
+  const {
+    user,
+    authReady,
+    dataReady,
+    loadError,
+    projectNames,
+    projectColors,
+    projects,
+    lastViewDate,
+    tasks,
+    cases,
+    memos,
+    setProjectColor,
+    addProject,
+    replaceProjects,
+    saveViewDate,
+    signOut,
+    reload,
+    addTask: persistAddTask,
+    replaceTasks,
+    replaceCases,
+    updateCase,
+    toggleCase,
+    deleteTask,
+    addCase,
+    saveProjectMemo,
+    deleteProjectMemo,
+  } = useGyokanData();
+
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [caseModalOpen, setCaseModalOpen] = useState(false);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState<CaseItem | null>(null);
+  const [viewingCaseId, setViewingCaseId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("home");
-  const [activeProject, setActiveProject] = useState<string>(PROJECTS[0]);
+  const [activeProject, setActiveProject] = useState<string>(ALL_PROJECTS_LABEL);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
   const [casesListOpen, setCasesListOpen] = useState(false);
-  const [projectColors, setProjectColors] = useState<Record<string, string>>({});
-  const projectColorsLoadedRef = useRef(false);
+  const viewDateInitialized = useRef(false);
 
   const viewDateLabel = formatDateJa(viewDateISO);
   const isAllProjects = activeProject === ALL_PROJECTS_LABEL;
+  const viewingCase = viewingCaseId
+    ? cases.find((c) => c.id === viewingCaseId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (!authReady) return;
+    if (!user) {
+      router.replace("/login");
+    }
+  }, [authReady, user, router]);
+
+  useEffect(() => {
+    setViewingCaseId(null);
+  }, [activeProject, mobileTab]);
+
+  useEffect(() => {
+    if (!dataReady || viewDateInitialized.current) return;
+    if (lastViewDate) {
+      setViewDateISO(lastViewDate);
+    }
+    viewDateInitialized.current = true;
+  }, [dataReady, lastViewDate]);
+
+  useEffect(() => {
+    if (!user || !dataReady) return;
+    saveViewDate(viewDateISO);
+  }, [viewDateISO, user, dataReady, saveViewDate]);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
@@ -2549,63 +3123,19 @@ export default function Home() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  useEffect(() => {
-    if (!isClient) return;
-    try {
-      const rawTasks = localStorage.getItem(STORAGE_KEY);
-      if (rawTasks) {
-        const parsed = JSON.parse(rawTasks) as Task[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setTasks(sortTasksActiveFirst(parsed.map((t) => normalizeTask(t))));
-        }
-      }
-      const rawCases = localStorage.getItem(CASES_STORAGE_KEY);
-      if (rawCases) {
-        const parsed = JSON.parse(rawCases) as CaseItem[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCases(parsed.map((c) => normalizeCase(c as CaseItem)));
-        }
-      }
-      const rawColors =
-        localStorage.getItem(PROJECT_COLORS_STORAGE_KEY) ??
-        localStorage.getItem("gyokan-project-colors-v1");
-      if (rawColors) {
-        try {
-          setProjectColors(parseProjectColors(JSON.parse(rawColors) as Record<string, string>));
-        } catch {
-          setProjectColors({});
-        }
-      } else {
-        setProjectColors({});
-      }
-      projectColorsLoadedRef.current = true;
-    } catch { /* ignore */ }
-  }, [isClient]);
-
-  useEffect(() => {
-    if (!isClient || !projectColorsLoadedRef.current) return;
-    localStorage.setItem(PROJECT_COLORS_STORAGE_KEY, JSON.stringify(projectColors));
-  }, [projectColors, isClient]);
-
-  const setProjectColor = useCallback((project: string, accent: string) => {
-    if (!isValidAccentHex(accent)) return;
-    setProjectColors((prev) => ({ ...prev, [project]: accent.toUpperCase() }));
-  }, []);
-
   const projectColorsValue = useMemo(
-    () => ({ colors: projectColors, setProjectColor }),
-    [projectColors, setProjectColor],
+    () => ({
+      colors: projectColors,
+      setProjectColor,
+      projectOptions: projectNames,
+    }),
+    [projectColors, setProjectColor, projectNames],
   );
 
-  useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-  }, [tasks, isClient]);
-
-  useEffect(() => {
-    if (!isClient) return;
-    localStorage.setItem(CASES_STORAGE_KEY, JSON.stringify(cases));
-  }, [cases, isClient]);
+  const handleRefresh = useCallback(async () => {
+    const lastView = await reload();
+    if (lastView) setViewDateISO(lastView);
+  }, [reload]);
 
   const viewDateTasks = useMemo(
     () => tasks.filter((t) => !isRangeTask(t) && t.date === viewDateISO),
@@ -2692,7 +3222,7 @@ export default function Home() {
       const { active, over } = event;
       if (!over || active.id === over.id) return;
 
-      setTasks((prev) => {
+      replaceTasks((prev) => {
         let visible = prev.filter((t) => !isRangeTask(t) && t.date === viewDateISO);
         if (!isAllProjects) {
           visible = visible.filter((t) => t.project === activeProject);
@@ -2700,7 +3230,7 @@ export default function Home() {
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
     },
-    [activeProject, isAllProjects, viewDateISO, reorderTasksInList],
+    [activeProject, isAllProjects, viewDateISO, reorderTasksInList, replaceTasks],
   );
 
   const handleUpcomingTaskDragEnd = useCallback(
@@ -2708,7 +3238,7 @@ export default function Home() {
       const { active, over } = event;
       if (!over || active.id === over.id) return;
 
-      setTasks((prev) => {
+      replaceTasks((prev) => {
         let visible = prev.filter((t) => isActiveRangeTask(t, viewDateISO));
         if (!isAllProjects) {
           visible = visible.filter((t) => t.project === activeProject);
@@ -2716,14 +3246,14 @@ export default function Home() {
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
     },
-    [activeProject, isAllProjects, viewDateISO, reorderTasksInList],
+    [activeProject, isAllProjects, viewDateISO, reorderTasksInList, replaceTasks],
   );
 
   const handleCaseDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    setCases((prev) => {
+    replaceCases((prev) => {
       const ongoing = prev.filter((c) => !c.done);
       const completed = prev.filter((c) => c.done);
       const oldIndex = ongoing.findIndex((c) => c.id === active.id);
@@ -2731,22 +3261,38 @@ export default function Home() {
       if (oldIndex === -1 || newIndex === -1) return prev;
       return [...arrayMove(ongoing, oldIndex, newIndex), ...completed];
     });
-  }, []);
+  }, [replaceCases]);
+
+  const handleProjectDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    replaceProjects((prev) => {
+      const oldIndex = prev.findIndex((p) => p.id === active.id);
+      const newIndex = prev.findIndex((p) => p.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }, [replaceProjects]);
+
+  const handleAddProject = useCallback((name: string) => {
+    const ok = addProject(name);
+    if (ok) setActiveProject(name);
+    return ok;
+  }, [addProject]);
 
   const addTask = useCallback((data: { title: string; project: string; time: string }) => {
-    setTasks((prev) => [{
-      id: uid(),
+    persistAddTask({
       title: data.title,
-      time: data.time.includes("今日") ? data.time : `今日 ${data.time}`,
-      date: viewDateISO,
-      done: false,
       project: data.project,
-    }, ...prev]);
-  }, [viewDateISO]);
+      time: data.time,
+      date: viewDateISO,
+    });
+  }, [persistAddTask, viewDateISO]);
 
   const updateTask = useCallback(
     (id: string, data: { title: string; project: string; date: string; dateEnd?: string }) => {
-      setTasks((prev) =>
+      replaceTasks((prev) =>
         prev.map((t) => {
           if (t.id !== id) return t;
           const next: Task = {
@@ -2771,84 +3317,32 @@ export default function Home() {
         }),
       );
     },
-    [],
-  );
-
-  const updateCase = useCallback(
-    (
-      id: string,
-      data: {
-        title: string;
-        project: string;
-        goal: string;
-        status: string;
-        statusTone: CaseItem["statusTone"];
-        deadline: string;
-      },
-    ) => {
-      setCases((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, ...data } : c)),
-      );
-    },
-    [],
+    [replaceTasks],
   );
 
   const toggleTask = useCallback((id: string) => {
-    setTasks((prev) => {
+    replaceTasks((prev) => {
       const updated = prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
       const task = updated.find((t) => t.id === id);
       if (!task || isRangeTask(task)) return updated;
       return sortTasksByDateWithDoneLast(updated, task.date);
     });
+  }, [replaceTasks]);
+
+  const openProjectCase = useCallback((item: CaseItem) => {
+    setViewingCaseId(item.id);
   }, []);
 
-  const addCase = useCallback((data: { title: string; project: string }) => {
-    const status = STATUS_OPTIONS[Math.floor(Math.random() * STATUS_OPTIONS.length)];
-    setCases((prev) => [
-      {
-        id: uidCase(),
-        title: data.title,
-        project: data.project,
-        status: status.label,
-        statusTone: status.tone,
-        deadline: "",
-        progress: 10,
-        goal: "",
-        subtasksDone: 0,
-        subtasksTotal: 5,
-        comments: 0,
-        done: false,
-        createdAt: formatCaseDate(new Date()),
-        completedAt: null,
-      },
-      ...prev,
-    ]);
-  }, []);
-
-  const toggleCase = useCallback((id: string) => {
-    setCases((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        const done = !c.done;
-        return {
-          ...c,
-          done,
-          completedAt: done ? formatCaseDate(new Date()) : null,
-        };
-      }),
-    );
-  }, []);
-
-  const deleteTask = useCallback((id: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-  }, []);
-
-  if (!isClient) {
+  if (!isClient || !authReady || (user && !dataReady)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#fafafa]">
         <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
       </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   const renderTaskList = (
@@ -2880,7 +3374,7 @@ export default function Home() {
   return (
     <ProjectColorsContext.Provider value={projectColorsValue}>
     <div className="min-h-screen bg-[#fafafa] font-[family-name:var(--font-geist-sans)] text-gray-900 antialiased">
-      <PullToRefresh enabled={isClient} />
+      <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
       <div className="mx-auto flex min-h-screen max-w-[1480px]">
         {/* Left Sidebar */}
         <aside className="sticky top-0 hidden h-screen w-[168px] shrink-0 flex-col border-r border-black/[0.06] bg-white/70 px-3 py-5 backdrop-blur-xl lg:flex">
@@ -2889,41 +3383,18 @@ export default function Home() {
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#007AFF] text-[11px] font-bold text-white shadow-sm">行</div>
               <span className="truncate text-[13px] font-semibold tracking-tight text-gray-900">行間</span>
             </div>
-            <RefreshButton iconClassName="h-4 w-4" className="shrink-0 p-1.5 hover:bg-black/[0.04]" />
+            <RefreshButton iconClassName="h-4 w-4" className="shrink-0 p-1.5 hover:bg-black/[0.04]" onRefresh={handleRefresh} />
           </div>
 
-          <div className="mb-1.5 flex items-center justify-between px-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Projects</span>
-            <button type="button" className="flex h-5 w-5 items-center justify-center rounded-md text-gray-400 hover:bg-black/[0.04]" aria-label="追加">
-              <Icon name="plus" className="h-3 w-3" />
-            </button>
-          </div>
-
-          <nav className="flex-1 space-y-0.5 overflow-y-auto">
-            {PROJECTS.map((p) => {
-              const active = activeProject === p;
-              const isAll = p === ALL_PROJECTS_LABEL;
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setActiveProject(p)}
-                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] transition-all duration-200 ${
-                    active
-                      ? "bg-[#007AFF]/10 font-medium text-[#007AFF]"
-                      : "text-gray-600 hover:bg-black/[0.03]"
-                  }`}
-                >
-                  {isAll ? (
-                    <Icon name={active ? "folderOpen" : "folder"} className={`h-3.5 w-3.5 shrink-0 ${active ? "text-[#007AFF]" : "text-gray-400"}`} />
-                  ) : (
-                    <ProjectColorSwatch accent={projectColors[p]} size="sm" />
-                  )}
-                  <span className="truncate">{isAll ? "すべて" : p}</span>
-                </button>
-              );
-            })}
-          </nav>
+          <DesktopProjectSidebar
+            projects={projects}
+            activeProject={activeProject}
+            projectColors={projectColors}
+            sensors={sensors}
+            onSelect={setActiveProject}
+            onAdd={() => setProjectModalOpen(true)}
+            onDragEnd={handleProjectDragEnd}
+          />
 
           <button type="button" className="mt-3 flex w-full items-center gap-2 rounded-lg border border-black/[0.05] px-2 py-2 text-[11px] text-gray-500 transition-all duration-200 hover:bg-black/[0.02]">
             <Icon name="folder" className="h-3.5 w-3.5 text-gray-400" />
@@ -2943,7 +3414,7 @@ export default function Home() {
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
                   {!isAllProjects && <ProjectColorHeaderLink project={activeProject} />}
                 </div>
-                <RefreshButton className="shrink-0" />
+                <RefreshButton className="shrink-0" onRefresh={handleRefresh} />
               </div>
 
               <div className="hidden flex-wrap items-center gap-3 lg:flex">
@@ -2967,7 +3438,7 @@ export default function Home() {
                 </div>
                 <span className="text-[15px] font-semibold text-gray-900">{viewDateLabel}</span>
                 {!isAllProjects && <ProjectColorHeaderLink project={activeProject} />}
-                <RefreshButton iconClassName="h-4 w-4" className="ml-auto rounded-lg p-1.5" />
+                <RefreshButton iconClassName="h-4 w-4" className="ml-auto rounded-lg p-1.5" onRefresh={handleRefresh} />
               </div>
             </header>
             )}
@@ -2984,18 +3455,43 @@ export default function Home() {
             ) : mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
-                  projects={PROJECT_NAMES}
+                  projects={projectNames}
                   cases={cases}
                   onSelect={setActiveProject}
                 />
               ) : (
-                <ProjectDetailSection
-                  project={activeProject}
-                  cases={cases}
-                  onToggleCase={toggleCase}
-                  onOpenCase={setSelectedCase}
-                  onBack={() => setActiveProject(ALL_PROJECTS_LABEL)}
-                />
+                <>
+                  {viewingCase ? (
+                    <CaseDetailSection
+                      item={viewingCase}
+                      onSave={updateCase}
+                      onBack={() => setViewingCaseId(null)}
+                      onToggle={toggleCase}
+                    />
+                  ) : (
+                    <>
+                      <ProjectDetailSection
+                        project={activeProject}
+                        cases={cases}
+                        memos={memos}
+                        onToggleCase={toggleCase}
+                        onOpenCase={openProjectCase}
+                        onSaveMemo={saveProjectMemo}
+                        onDeleteMemo={deleteProjectMemo}
+                        onBack={() => setActiveProject(ALL_PROJECTS_LABEL)}
+                      />
+                      <TodayTasksSection
+                        viewDateISO={viewDateISO}
+                        activeTaskCount={activeTasks.length}
+                        completedTaskCount={completedTasks.length}
+                        displayedTasks={displayedTasks}
+                        incompleteOtherTasks={incompleteOtherTasks}
+                        renderTaskList={renderTaskList}
+                        onAddTask={() => setTaskModalOpen(true)}
+                      />
+                    </>
+                  )}
+                </>
               )
             ) : (
               <>
@@ -3011,45 +3507,40 @@ export default function Home() {
               </section>
             )}
 
-            {showTasks && (
-              <section className="order-2 mb-4 lg:order-3">
-                <div className="mb-2 flex items-center justify-between gap-4">
-                  <div className="flex min-w-0 items-baseline gap-3">
-                    <h3 className="shrink-0 text-[17px] font-semibold tracking-tight text-gray-900">{taskSectionLabel(viewDateISO)}</h3>
-                    <span className="text-[13px] text-gray-400">
-                      未完了 {activeTasks.length}件 · 完了 {completedTasks.length}件
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setTaskModalOpen(true)}
-                    className="shrink-0 text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
-                  >
-                    ＋ タスクを追加
-                  </button>
-                </div>
+            {!isAllProjects && (
+              viewingCase ? (
+                <CaseDetailSection
+                  item={viewingCase}
+                  onSave={updateCase}
+                  onBack={() => setViewingCaseId(null)}
+                  onToggle={toggleCase}
+                  className="order-2 mb-4 lg:order-2 lg:mb-4"
+                />
+              ) : (
+                <ProjectDetailSection
+                  project={activeProject}
+                  cases={cases}
+                  memos={memos}
+                  onToggleCase={toggleCase}
+                  onOpenCase={openProjectCase}
+                  onSaveMemo={saveProjectMemo}
+                  onDeleteMemo={deleteProjectMemo}
+                  className="order-2 mb-4 lg:order-2 lg:mb-4"
+                />
+              )
+            )}
 
-                <Card className="overflow-hidden p-1.5">
-                  {displayedTasks.length === 0 && incompleteOtherTasks.length === 0 ? (
-                    <div className="px-4 py-8 text-center">
-                      <p className="text-[12px] text-gray-400">タスクがありません</p>
-                    </div>
-                  ) : (
-                    <>
-                      {displayedTasks.length > 0 && renderTaskList(displayedTasks, "today")}
-                      {incompleteOtherTasks.length > 0 && (
-                        <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
-                          <div className="mb-1.5 flex items-center justify-between px-1">
-                            <span className="text-[11px] font-medium text-gray-400">未完了のタスク</span>
-                            <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
-                          </div>
-                          {renderTaskList(incompleteOtherTasks, "range", { showOriginalDeadline: true })}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </Card>
-              </section>
+            {showTasks && (
+              <TodayTasksSection
+                viewDateISO={viewDateISO}
+                activeTaskCount={activeTasks.length}
+                completedTaskCount={completedTasks.length}
+                displayedTasks={displayedTasks}
+                incompleteOtherTasks={incompleteOtherTasks}
+                renderTaskList={renderTaskList}
+                onAddTask={() => setTaskModalOpen(true)}
+                className={!isAllProjects ? "order-3 lg:order-3" : "order-2 lg:order-3"}
+              />
             )}
 
             {showTasks && upcomingRangeTasks.length > 0 && (
@@ -3129,31 +3620,38 @@ export default function Home() {
 
             </div>
 
-            {!isAllProjects && (
-              <ProjectDetailSection
-                project={activeProject}
-                cases={cases}
-                onToggleCase={toggleCase}
-                onOpenCase={setSelectedCase}
-                className="hidden lg:block"
-              />
-            )}
-
               </>
             )}
 
             {!casesListOpen && mobileTab === "more" && (
               <section className="space-y-4">
+                {loadError && (
+                  <p className="rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
+                    {loadError}
+                  </p>
+                )}
                 <Card className="p-6">
                   <h3 className="mb-4 text-[15px] font-semibold">設定</h3>
                   <ul className="space-y-2">
-                    {[["通知", "オン"], ["データ保存", "localStorage"], ["テーマ", "ライト"]].map(([k, v]) => (
+                    {[
+                      ["通知", "オン"],
+                      ["データ保存", "Supabase"],
+                      ["テーマ", "ライト"],
+                      ["アカウント", user.email ?? "ログイン中"],
+                    ].map(([k, v]) => (
                       <li key={k} className="flex justify-between rounded-2xl bg-gray-50/80 px-4 py-3 text-[13px]">
                         <span className="text-gray-600">{k}</span>
-                        <span className="font-medium text-gray-400">{v}</span>
+                        <span className="max-w-[55%] truncate font-medium text-gray-400">{v}</span>
                       </li>
                     ))}
                   </ul>
+                  <button
+                    type="button"
+                    onClick={() => void signOut()}
+                    className="mt-4 w-full rounded-xl border border-black/[0.08] px-4 py-2.5 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                  >
+                    ログアウト
+                  </button>
                 </Card>
                 <Card className="p-6">
                   <MonthlyStats activeCases={ongoingCases.length} completedCases={completedCasesCount} activeTasks={activeTasks.length} completedTasks={completedTasks.length} />
@@ -3240,6 +3738,12 @@ export default function Home() {
         onSubmit={addTask}
         caseTitles={caseTitles.length > 0 ? caseTitles : ["未入力"]}
       />
+      <AddProjectModal
+        open={projectModalOpen}
+        onClose={() => setProjectModalOpen(false)}
+        onSubmit={handleAddProject}
+        existingNames={projectNames}
+      />
       <AddCaseModal
         open={caseModalOpen}
         onClose={() => setCaseModalOpen(false)}
@@ -3252,12 +3756,13 @@ export default function Home() {
         title="案件を編集"
       >
         {selectedCase && (
-          <CaseDetailEditor
-            key={selectedCase.id}
-            item={selectedCase}
-            onSave={updateCase}
-            onClose={() => setSelectedCase(null)}
-          />
+        <CaseDetailEditor
+          key={selectedCase.id}
+          item={selectedCase}
+          onSave={updateCase}
+          onClose={() => setSelectedCase(null)}
+          layout="modal"
+        />
         )}
       </DetailOverlay>
 
