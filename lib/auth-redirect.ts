@@ -4,17 +4,15 @@
  */
 export function getAuthRedirectOrigin() {
   if (typeof window === "undefined") {
-    return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+    return process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
   }
-
-  const envOrigin = process.env.NEXT_PUBLIC_SITE_URL;
-  if (envOrigin) return envOrigin.replace(/\/$/, "");
 
   const { hostname, port, protocol } = window.location;
   if (hostname === "0.0.0.0" || hostname === "[::]" || hostname === "::1") {
     return `${protocol}//localhost${port ? `:${port}` : ""}`;
   }
 
+  // PKCE cookies are scoped to the current host — must match the OAuth callback URL.
   return window.location.origin;
 }
 

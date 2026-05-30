@@ -3,13 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 
 function getSafeOrigin(request: NextRequest) {
   const url = new URL(request.url);
-  const configured = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
-  if (configured) return configured;
-
   const { hostname, port, protocol } = url;
+
   if (hostname === "0.0.0.0" || hostname === "[::]") {
+    const configured = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+    if (configured) return configured;
     return `${protocol}//localhost${port ? `:${port}` : ""}`;
   }
+
   return url.origin;
 }
 
@@ -33,8 +34,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=auth&reason=no_code`);
   }
 
-  const redirectUrl = `${origin}${next}`;
-  const response = NextResponse.redirect(redirectUrl);
+  const redirectUrl = `${origin}${next.startsWith("/") ? next : `/${next}`}`;
+  let response = NextResponse.redirect(redirectUrl);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,6 +47,10 @@ export async function GET(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value);
+          });
+          response = NextResponse.redirect(redirectUrl);
+          cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
           });
         },
@@ -56,7 +61,7 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    console.error("[auth/callback]", error.message);
+    console.error("[auth/callback] session exchange failed:", error.message);
     return NextResponse.redirect(`${origin}/login?error=auth&reason=session`);
   }
 
