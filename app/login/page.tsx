@@ -10,6 +10,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const authError = searchParams.get("error") === "auth";
   const authReason = searchParams.get("reason");
+  const authDetail = searchParams.get("detail");
   const [checking, setChecking] = useState(true);
 
   const errorMessage = (() => {
@@ -73,6 +74,11 @@ function LoginForm() {
               <br />
               <code className="text-[11px]">{getAuthCallbackUrl()}</code>
             </p>
+            {authDetail && (
+              <p className="text-center text-[11px] leading-relaxed text-red-400/90">
+                詳細: {decodeURIComponent(authDetail)}
+              </p>
+            )}
           </div>
         )}
         <button

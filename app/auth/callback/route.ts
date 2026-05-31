@@ -1,7 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
 function getSafeOrigin(request: NextRequest) {
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") ?? "https";
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
   const url = new URL(request.url);
   const { hostname, port, protocol } = url;
 
@@ -18,6 +25,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const origin = getSafeOrigin(request);
   const next = searchParams.get("next") ?? "/";
+  const safeNext = next.startsWith("/") ? next : "/";
 
   const oauthError = searchParams.get("error");
   const oauthDescription = searchParams.get("error_description");
@@ -34,24 +42,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=auth&reason=no_code`);
   }
 
-  const redirectUrl = `${origin}${next.startsWith("/") ? next : `/${next}`}`;
-  let response = NextResponse.redirect(redirectUrl);
-
+  const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll();
+          return cookieStore.getAll();
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value);
-          });
-          response = NextResponse.redirect(redirectUrl);
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
+            cookieStore.set(name, value, options);
           });
         },
       },
@@ -62,8 +64,11 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error("[auth/callback] session exchange failed:", error.message);
-    return NextResponse.redirect(`${origin}/login?error=auth&reason=session`);
+    const detail = encodeURIComponent(error.message);
+    return NextResponse.redirect(
+      `${origin}/login?error=auth&reason=session&detail=${detail}`,
+    );
   }
 
-  return response;
+  return NextResponse.redirect(`${origin}${safeNext}`);
 }
