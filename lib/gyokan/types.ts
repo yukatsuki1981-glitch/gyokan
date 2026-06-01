@@ -10,6 +10,7 @@ export type DbTask = {
   id: string;
   user_id: string;
   project_id: string | null;
+  case_id: string | null;
   title: string;
   time_label: string;
   task_date: string;
@@ -46,6 +47,14 @@ export type DbMemo = {
   body: string;
 };
 
+export type DbDailyMemo = {
+  id: string;
+  user_id: string;
+  memo_date: string;
+  body: string;
+  created_at: string;
+};
+
 export type DbUserPreferences = {
   user_id: string;
   last_view_date: string | null;
@@ -59,6 +68,7 @@ export type AppTask = {
   dateEnd?: string;
   done: boolean;
   project: string;
+  caseId?: string;
   starred?: boolean;
   sortOrder: number;
 };
@@ -88,6 +98,13 @@ export type AppMemo = {
   body: string;
 };
 
+export type AppDailyMemo = {
+  id: string;
+  date: string;
+  body: string;
+  createdAt: string;
+};
+
 export type AppProject = {
   id: string;
   name: string;
@@ -100,5 +117,6 @@ export type GyokanData = {
   tasks: AppTask[];
   cases: AppCase[];
   memos: AppMemo[];
+  dailyMemos: AppDailyMemo[];
   lastViewDate: string | null;
 };

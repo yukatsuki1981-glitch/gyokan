@@ -25,6 +25,7 @@ create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   project_id uuid references public.projects (id) on delete set null,
+  case_id uuid references public.cases (id) on delete set null,
   title text not null default '',
   time_label text not null default '',
   task_date date not null,
@@ -38,6 +39,7 @@ create table if not exists public.tasks (
 
 create index if not exists tasks_user_id_idx on public.tasks (user_id);
 create index if not exists tasks_user_date_idx on public.tasks (user_id, task_date);
+create index if not exists tasks_case_id_idx on public.tasks (case_id);
 
 -- ─── Cases (案件) ─────────────────────────────────────────────────────────────
 
@@ -80,6 +82,20 @@ create table if not exists public.project_memos (
 create index if not exists project_memos_user_id_idx on public.project_memos (user_id);
 create index if not exists project_memos_project_id_idx on public.project_memos (project_id);
 
+-- ─── Daily memos (sidebar bulletin board) ────────────────────────────────────
+
+create table if not exists public.daily_memos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  memo_date date not null,
+  body text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists daily_memos_user_id_idx on public.daily_memos (user_id);
+create index if not exists daily_memos_user_date_idx on public.daily_memos (user_id, memo_date);
+
 -- ─── User preferences (calendar last view date, etc.) ────────────────────────
 
 create table if not exists public.user_preferences (
@@ -120,6 +136,11 @@ create trigger project_memos_set_updated_at
   before update on public.project_memos
   for each row execute function public.set_updated_at();
 
+drop trigger if exists daily_memos_set_updated_at on public.daily_memos;
+create trigger daily_memos_set_updated_at
+  before update on public.daily_memos
+  for each row execute function public.set_updated_at();
+
 drop trigger if exists user_preferences_set_updated_at on public.user_preferences;
 create trigger user_preferences_set_updated_at
   before update on public.user_preferences
@@ -131,6 +152,7 @@ alter table public.projects enable row level security;
 alter table public.tasks enable row level security;
 alter table public.cases enable row level security;
 alter table public.project_memos enable row level security;
+alter table public.daily_memos enable row level security;
 alter table public.user_preferences enable row level security;
 
 -- projects
@@ -171,6 +193,16 @@ create policy "project_memos_insert_own" on public.project_memos
 create policy "project_memos_update_own" on public.project_memos
   for update using (auth.uid() = user_id);
 create policy "project_memos_delete_own" on public.project_memos
+  for delete using (auth.uid() = user_id);
+
+-- daily_memos
+create policy "daily_memos_select_own" on public.daily_memos
+  for select using (auth.uid() = user_id);
+create policy "daily_memos_insert_own" on public.daily_memos
+  for insert with check (auth.uid() = user_id);
+create policy "daily_memos_update_own" on public.daily_memos
+  for update using (auth.uid() = user_id);
+create policy "daily_memos_delete_own" on public.daily_memos
   for delete using (auth.uid() = user_id);
 
 -- user_preferences

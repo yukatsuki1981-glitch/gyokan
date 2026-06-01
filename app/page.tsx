@@ -5,6 +5,15 @@ import {
   DEFAULT_PROJECT_ACCENT,
   DEFAULT_PROJECT_NAMES,
 } from "@/lib/gyokan/constants";
+import {
+  memoDraftId,
+  readDraft,
+  clearDraft,
+  type CaseDraftFields,
+  type MemoDraftFields,
+  type TaskDraftFields,
+} from "@/lib/gyokan/drafts";
+import { useAutosaveForm } from "@/lib/gyokan/use-autosave-form";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
 import { useRouter } from "next/navigation";
 import {
@@ -51,6 +60,7 @@ type Task = {
   dateEnd?: string;
   done: boolean;
   project: string;
+  caseId?: string;
   starred?: boolean;
   sortOrder: number;
 };
@@ -80,12 +90,19 @@ type ProjectMemo = {
   body: string;
 };
 
+type DailyMemo = {
+  id: string;
+  date: string;
+  body: string;
+  createdAt: string;
+};
+
 type SidebarProject = {
   id: string;
   name: string;
 };
 
-type MobileTab = "home" | "cases" | "projects" | "more";
+type MobileTab = "home" | "cases" | "projects" | "memo" | "more";
 
 /* ─── Constants ─── */
 
@@ -384,6 +401,12 @@ function isActiveRangeTask(task: Task, today: string) {
 function formatMonthDay(iso: string) {
   const d = new Date(iso + "T12:00:00");
   return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function formatTaskTimeLabel(date: string) {
+  if (date === todayISO()) return "今日";
+  if (date === tomorrowISO()) return "明日";
+  return date.replace(/-/g, "/");
 }
 
 function formatTaskPeriod(task: Task) {
@@ -765,6 +788,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: string; className?: strin
     bookmark: <svg {...p}><path d="M6 4h12v16l-6-4-6 4z" /></svg>,
     bookmarkFill: <svg {...p} fill="currentColor"><path d="M6 4h12v16l-6-4-6 4z" stroke="none" /></svg>,
     message: <svg {...p}><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 1 1 16 0z" /></svg>,
+    memo: <svg {...p}><path d="M8 4h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="M12 11h4M12 15h4M8 11h.01M8 15h.01" /></svg>,
     bell: <svg {...p}><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2" /><path d="M10 20a2 2 0 0 0 4 0" /></svg>,
     refresh: (
       <svg {...p}>
@@ -867,6 +891,7 @@ function PullToRefresh({
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      if ((e.target as Element).closest("[data-mobile-calendar]")) return;
       if (!dragging.current || refreshing) return;
       if (getScrollTop() > 2) {
         reset();
@@ -1054,6 +1079,10 @@ function CaseDetailEditor({
   onSave,
   onClose,
   layout = "modal",
+  caseTasks,
+  onAddTask,
+  onToggleTask,
+  onOpenTask,
 }: {
   item: CaseItem;
   onSave: (
@@ -1066,30 +1095,82 @@ function CaseDetailEditor({
       statusTone: CaseItem["statusTone"];
       deadline: string;
     },
-  ) => void;
+  ) => void | boolean | Promise<void | boolean>;
   onClose?: () => void;
   layout?: "modal" | "page";
+  caseTasks?: Task[];
+  onAddTask?: () => void;
+  onToggleTask?: (id: string) => void;
+  onOpenTask?: (task: Task) => void;
 }) {
   const { projectOptions } = useProjectColors();
-  const [title, setTitle] = useState(item.title);
-  const [project, setProject] = useState(item.project);
-  const [goal, setGoal] = useState(item.goal);
-  const [status, setStatus] = useState(item.status);
-  const [deadline, setDeadline] = useState(formatCaseDeadlineForInput(item.deadline));
+  const itemIdRef = useRef(item.id);
 
-  const save = () => {
-    if (!title.trim()) return;
-    const tone = STATUS_OPTIONS.find((s) => s.label === status)?.tone ?? item.statusTone;
-    onSave(item.id, {
-      title: title.trim(),
-      project,
-      goal: goal.trim(),
-      status,
-      statusTone: tone,
-      deadline: parseCaseDeadlineInput(deadline),
+  const loadCaseFields = useCallback((source: CaseItem): CaseDraftFields => ({
+    title: source.title,
+    project: source.project,
+    goal: source.goal,
+    status: source.status,
+    statusTone: source.statusTone,
+    deadline: formatCaseDeadlineForInput(source.deadline),
+  }), []);
+
+  const [title, setTitle] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.title ?? item.title);
+  const [project, setProject] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.project ?? item.project);
+  const [goal, setGoal] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.goal ?? item.goal);
+  const [status, setStatus] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.status ?? item.status);
+  const [deadline, setDeadline] = useState(
+    () => readDraft<CaseDraftFields>("case", item.id)?.deadline ?? formatCaseDeadlineForInput(item.deadline),
+  );
+
+  useEffect(() => {
+    if (item.id === itemIdRef.current) return;
+    itemIdRef.current = item.id;
+    const draft = readDraft<CaseDraftFields>("case", item.id);
+    const next = draft ?? loadCaseFields(item);
+    setTitle(next.title);
+    setProject(next.project);
+    setGoal(next.goal);
+    setStatus(next.status);
+    setDeadline(next.deadline);
+  }, [item, loadCaseFields]);
+
+  const formValues = useMemo((): CaseDraftFields => ({
+    title,
+    project,
+    goal,
+    status,
+    statusTone: STATUS_OPTIONS.find((s) => s.label === status)?.tone ?? item.statusTone,
+    deadline,
+  }), [title, project, goal, status, deadline, item.statusTone]);
+
+  const formBaseline = useMemo(() => loadCaseFields(item), [item, loadCaseFields]);
+
+  const persistCase = useCallback((values: CaseDraftFields) => {
+    if (!values.title.trim()) return false;
+    return onSave(item.id, {
+      title: values.title.trim(),
+      project: values.project,
+      goal: values.goal.trim(),
+      status: values.status,
+      statusTone: values.statusTone,
+      deadline: parseCaseDeadlineInput(values.deadline),
     });
+  }, [onSave, item.id]);
+
+  useAutosaveForm({
+    kind: "case",
+    entityId: item.id,
+    values: formValues,
+    baseline: formBaseline,
+    onPersist: persistCase,
+  });
+
+  const save = useCallback(() => {
+    if (!title.trim()) return;
+    persistCase(formValues);
     onClose?.();
-  };
+  }, [title, formValues, persistCase, onClose]);
 
   return (
     <div>
@@ -1133,11 +1214,70 @@ function CaseDetailEditor({
       <DetailField label="目標">
         <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={3} className={`${fieldInputClass} resize-none`} />
       </DetailField>
+      {layout === "page" && (
+        <div className="mt-1">
+          {caseTasks && caseTasks.length > 0 && (
+            <div className="mb-3 space-y-1.5">
+              {caseTasks.map((task) => (
+                <div
+                  key={task.id}
+                  onClick={() => onOpenTask?.(task)}
+                  className={`group flex cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 py-1.5 transition-all duration-200 ${
+                    task.done
+                      ? "border-black/[0.05] bg-black/[0.02] opacity-70"
+                      : "border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleTask?.(task.id);
+                    }}
+                    aria-label={task.done ? "未完了に戻す" : "完了にする"}
+                    className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
+                      task.done
+                        ? "border-[#007AFF] bg-[#007AFF] text-white"
+                        : "border-gray-300 bg-white hover:border-[#007AFF]"
+                    }`}
+                  >
+                    {task.done && <Icon name="check" className="h-2.5 w-2.5" />}
+                  </button>
+                  <p
+                    className={`min-w-0 flex-1 truncate text-[12px] font-medium ${
+                      task.done ? "text-gray-400 line-through" : "text-gray-900"
+                    }`}
+                  >
+                    {task.title}
+                  </p>
+                  <span className="shrink-0 text-[10px] text-gray-400">{formatTaskPeriod(task)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {onAddTask && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={onAddTask}
+                className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
+              >
+                ＋ タスクを追加
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       <div className={`flex gap-2 ${layout === "page" ? "mt-5 justify-end" : "mt-5 justify-end"}`}>
         {layout === "modal" && onClose && (
           <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
         )}
-        <button type="button" onClick={save} className="rounded-xl bg-[#007AFF] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
+        {layout === "modal" && (
+          <button type="button" onClick={save} className="rounded-xl bg-[#007AFF] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
+        )}
+        {layout === "page" && (
+          <p className="text-[11px] text-gray-300">入力内容は自動保存されます</p>
+        )}
       </div>
     </div>
   );
@@ -1153,22 +1293,76 @@ function TaskDetailEditor({
   onClose: () => void;
 }) {
   const { projectOptions } = useProjectColors();
-  const [title, setTitle] = useState(item.title);
-  const [project, setProject] = useState(item.project);
-  const [date, setDate] = useState(item.date);
-  const [dateEnd, setDateEnd] = useState(item.dateEnd ?? "");
-  const [useRange, setUseRange] = useState(isRangeTask(item));
+  const itemIdRef = useRef(item.id);
+
+  const loadTaskFields = useCallback((source: Task): TaskDraftFields => ({
+    title: source.title,
+    project: source.project,
+    date: source.date,
+    dateEnd: source.dateEnd ?? "",
+    useRange: isRangeTask(source),
+  }), []);
+
+  const initialDraft = readDraft<TaskDraftFields>("task", item.id);
+  const [title, setTitle] = useState(initialDraft?.title ?? item.title);
+  const [project, setProject] = useState(initialDraft?.project ?? item.project);
+  const [date, setDate] = useState(initialDraft?.date ?? item.date);
+  const [dateEnd, setDateEnd] = useState(initialDraft?.dateEnd ?? item.dateEnd ?? "");
+  const [useRange, setUseRange] = useState(initialDraft?.useRange ?? isRangeTask(item));
+
+  useEffect(() => {
+    if (item.id === itemIdRef.current) return;
+    itemIdRef.current = item.id;
+    const draft = readDraft<TaskDraftFields>("task", item.id);
+    const next = draft ?? loadTaskFields(item);
+    setTitle(next.title);
+    setProject(next.project);
+    setDate(next.date);
+    setDateEnd(next.dateEnd ?? "");
+    setUseRange(next.useRange);
+  }, [item, loadTaskFields]);
+
+  const formValues = useMemo((): TaskDraftFields => ({
+    title,
+    project,
+    date,
+    dateEnd,
+    useRange,
+  }), [title, project, date, dateEnd, useRange]);
+
+  const formBaseline = useMemo((): TaskDraftFields => ({
+    title: item.title,
+    project: item.project,
+    date: item.date,
+    dateEnd: item.dateEnd ?? "",
+    useRange: isRangeTask(item),
+  }), [item]);
+
+  const persistTask = useCallback((values: TaskDraftFields) => {
+    if (!values.title.trim()) return;
+    const end =
+      values.useRange && values.dateEnd && values.dateEnd !== values.date
+        ? values.dateEnd
+        : undefined;
+    onSave(item.id, {
+      title: values.title.trim(),
+      project: values.project,
+      date: values.date,
+      dateEnd: end,
+    });
+  }, [onSave, item.id]);
+
+  useAutosaveForm({
+    kind: "task",
+    entityId: item.id,
+    values: formValues,
+    baseline: formBaseline,
+    onPersist: persistTask,
+  });
 
   const save = () => {
     if (!title.trim()) return;
-    const end =
-      useRange && dateEnd && dateEnd !== date ? dateEnd : undefined;
-    onSave(item.id, {
-      title: title.trim(),
-      project,
-      date,
-      dateEnd: end,
-    });
+    persistTask(formValues);
     onClose();
   };
 
@@ -1430,6 +1624,10 @@ function CaseDetailSection({
   onSave,
   onBack,
   onToggle,
+  caseTasks,
+  onAddTask,
+  onToggleTask,
+  onOpenTask,
   className = "",
 }: {
   item: CaseItem;
@@ -1446,6 +1644,10 @@ function CaseDetailSection({
   ) => void;
   onBack: () => void;
   onToggle: (id: string) => void;
+  caseTasks?: Task[];
+  onAddTask?: () => void;
+  onToggleTask?: (id: string) => void;
+  onOpenTask?: (task: Task) => void;
   className?: string;
 }) {
   return (
@@ -1485,10 +1687,14 @@ function CaseDetailSection({
       </div>
       <Card className="p-4">
         <CaseDetailEditor
-          key={`${item.id}-${item.done}-${item.completedAt ?? ""}`}
+          key={item.id}
           item={item}
           onSave={onSave}
           layout="page"
+          caseTasks={caseTasks}
+          onAddTask={onAddTask}
+          onToggleTask={onToggleTask}
+          onOpenTask={onOpenTask}
         />
       </Card>
     </section>
@@ -1566,23 +1772,60 @@ function DetailMemoCard({
 
 function ProjectMemoEditor({
   memo,
+  project,
   onSave,
   onDelete,
   onClose,
 }: {
   memo: ProjectMemo | null;
+  project: string;
   onSave: (data: { date: string; body: string }) => void;
   onDelete?: () => void;
   onClose: () => void;
 }) {
+  const draftId = memoDraftId(memo, project);
+  const draftIdRef = useRef(draftId);
+
+  const loadMemoFields = useCallback((): MemoDraftFields => ({
+    date: memo ? formatCaseDateForInput(memo.date) : todayISO(),
+    body: memo?.body ?? "",
+  }), [memo]);
+
   const [date, setDate] = useState(
-    memo ? formatCaseDateForInput(memo.date) : todayISO(),
+    () => readDraft<MemoDraftFields>("memo", draftId)?.date ?? loadMemoFields().date,
   );
-  const [body, setBody] = useState(memo?.body ?? "");
+  const [body, setBody] = useState(
+    () => readDraft<MemoDraftFields>("memo", draftId)?.body ?? loadMemoFields().body,
+  );
+
+  useEffect(() => {
+    if (draftId === draftIdRef.current) return;
+    draftIdRef.current = draftId;
+    const draft = readDraft<MemoDraftFields>("memo", draftId);
+    const next = draft ?? loadMemoFields();
+    setDate(next.date);
+    setBody(next.body);
+  }, [draftId, loadMemoFields]);
+
+  const formValues = useMemo((): MemoDraftFields => ({ date, body }), [date, body]);
+  const formBaseline = useMemo(() => loadMemoFields(), [loadMemoFields]);
+
+  const persistMemo = useCallback((values: MemoDraftFields) => {
+    if (!values.body.trim()) return;
+    onSave({ date: parseMemoDateInput(values.date), body: values.body.trim() });
+  }, [onSave]);
+
+  useAutosaveForm({
+    kind: "memo",
+    entityId: draftId,
+    values: formValues,
+    baseline: formBaseline,
+    onPersist: persistMemo,
+  });
 
   const save = () => {
     if (!body.trim()) return;
-    onSave({ date: parseMemoDateInput(date), body: body.trim() });
+    persistMemo(formValues);
     onClose();
   };
 
@@ -1686,6 +1929,7 @@ function ProjectDetailSection({
   onOpenCase,
   onSaveMemo,
   onDeleteMemo,
+  onAddCase,
   onBack,
   className = "",
 }: {
@@ -1696,6 +1940,7 @@ function ProjectDetailSection({
   onOpenCase: (item: CaseItem) => void;
   onSaveMemo: (data: { id?: string; project: string; date: string; body: string }) => void;
   onDeleteMemo: (id: string) => void;
+  onAddCase?: () => void;
   onBack?: () => void;
   className?: string;
 }) {
@@ -1751,6 +1996,18 @@ function ProjectDetailSection({
           </>
         )}
       </div>
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <h4 className="shrink-0 text-[17px] font-semibold tracking-tight text-gray-900">案件一覧</h4>
+        {onAddCase && (
+          <button
+            type="button"
+            onClick={onAddCase}
+            className="shrink-0 text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
+          >
+            ＋ 案件を追加
+          </button>
+        )}
+      </div>
       <Card className="overflow-hidden p-2">
         {timeline.length === 0 ? (
           <p className="px-2 py-6 text-center text-[13px] text-gray-400">
@@ -1793,16 +2050,20 @@ function ProjectDetailSection({
         title={editingMemo ? "メモを編集" : "メモを追加"}
       >
         <ProjectMemoEditor
-          key={editingMemo?.id ?? "new"}
+          key={editingMemo?.id ?? `new-${project}`}
           memo={editingMemo}
-          onSave={(data) =>
+          project={project}
+          onSave={(data) => {
             onSaveMemo({
               id: editingMemo?.id,
               project,
               date: data.date,
               body: data.body,
-            })
-          }
+            });
+            if (!editingMemo) {
+              clearDraft("memo", memoDraftId(null, project));
+            }
+          }}
           onDelete={
             editingMemo
               ? () => onDeleteMemo(editingMemo.id)
@@ -2267,14 +2528,12 @@ function MobileCalendarWidget({
   peekMode: boolean;
 }) {
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
-  const [expanded, setExpanded] = useState(!peekMode);
+  const [peekEngaged, setPeekEngaged] = useState(!peekMode);
   const horizontalRef = useRef<HTMLDivElement>(null);
-  const calendarWrapRef = useRef<HTMLDivElement>(null);
-  const expandedRef = useRef(!peekMode);
   const peekSuppressClickRef = useRef(false);
   const lastScrolledMonthRef = useRef<string | null>(null);
 
-  const isPeek = peekMode && !expanded;
+  const isPeek = peekMode && !peekEngaged;
   const PEEK_GRID_H = CALENDAR_CELL_ROW_H * 3;
   const PEEK_HEADER_H = 58;
   const PEEK_WRAP_H = PEEK_HEADER_H + PEEK_GRID_H;
@@ -2299,44 +2558,6 @@ function MobileCalendarWidget({
     [months],
   );
 
-  const resetPeekLayout = useCallback(() => {
-    expandedRef.current = false;
-    setExpanded(false);
-    peekSuppressClickRef.current = false;
-    lastScrolledMonthRef.current = null;
-    const wrap = calendarWrapRef.current;
-    if (wrap) {
-      wrap.style.maxHeight = "";
-      delete wrap.dataset.peekExpanded;
-    }
-    wrap?.querySelectorAll("[data-calendar-grid-clip]").forEach((node) => {
-      const el = node as HTMLElement;
-      el.style.height = "";
-      el.style.overflow = "";
-    });
-    wrap?.querySelectorAll("[data-calendar-grid-inner]").forEach((node) => {
-      (node as HTMLElement).style.transform = "";
-    });
-  }, []);
-
-  const expandCalendarDOM = useCallback(() => {
-    if (expandedRef.current) return;
-    expandedRef.current = true;
-    const wrap = calendarWrapRef.current;
-    if (wrap) {
-      wrap.style.maxHeight = "none";
-      wrap.dataset.peekExpanded = "true";
-    }
-    wrap?.querySelectorAll("[data-calendar-grid-clip]").forEach((node) => {
-      const el = node as HTMLElement;
-      el.style.height = "auto";
-      el.style.overflow = "visible";
-    });
-    wrap?.querySelectorAll("[data-calendar-grid-inner]").forEach((node) => {
-      (node as HTMLElement).style.transform = "none";
-    });
-  }, []);
-
   const snapToNearestMonth = useCallback(() => {
     const strip = horizontalRef.current;
     if (!strip || strip.clientWidth <= 0) return;
@@ -2348,13 +2569,13 @@ function MobileCalendarWidget({
     const today = todayISO();
     onSelectDate(today);
     if (peekMode) {
-      resetPeekLayout();
+      setPeekEngaged(false);
       requestAnimationFrame(() => scrollToMonth(today));
     } else {
       lastScrolledMonthRef.current = null;
       requestAnimationFrame(() => scrollToMonth(today));
     }
-  }, [onSelectDate, peekMode, resetPeekLayout, scrollToMonth]);
+  }, [onSelectDate, peekMode, scrollToMonth]);
 
   useLayoutEffect(() => {
     if (isPeek) {
@@ -2369,31 +2590,34 @@ function MobileCalendarWidget({
   }, [isPeek, selectedDate, scrollToMonth]);
 
   useEffect(() => {
-    expandedRef.current = expanded;
-  }, [expanded]);
-
-  useEffect(() => {
     if (peekMode) {
-      resetPeekLayout();
+      setPeekEngaged(false);
     } else {
-      expandedRef.current = true;
-      setExpanded(true);
+      setPeekEngaged(true);
     }
-  }, [peekMode, resetPeekLayout]);
+  }, [peekMode]);
 
   const handleDaySelect = (cellIso: string) => {
     if (peekSuppressClickRef.current) return;
     onSelectDate(cellIso);
   };
 
+  const engagePeek = useCallback(() => {
+    if (peekMode && !peekEngaged) {
+      setPeekEngaged(true);
+      requestAnimationFrame(() => scrollToMonth(selectedDate));
+    }
+  }, [peekMode, peekEngaged, scrollToMonth, selectedDate]);
+
   useEffect(() => {
-    const wrap = calendarWrapRef.current;
-    if (!wrap) return;
+    const strip = horizontalRef.current;
+    if (!strip) return;
 
     let touchStartX = 0;
     let touchStartY = 0;
     let tracking = false;
     let didDrag = false;
+    let suppressTimer: ReturnType<typeof setTimeout> | undefined;
 
     const onTouchStart = (e: TouchEvent) => {
       touchStartX = e.touches[0]?.clientX ?? 0;
@@ -2401,40 +2625,23 @@ function MobileCalendarWidget({
       tracking = true;
       didDrag = false;
       peekSuppressClickRef.current = false;
-
-      if (peekMode && !expandedRef.current) {
-        expandCalendarDOM();
-        scrollToMonth(selectedDate);
-      }
+      engagePeek();
     };
 
     const onTouchMove = (e: TouchEvent) => {
       if (!tracking) return;
-
-      if (peekMode && !expandedRef.current) {
-        expandCalendarDOM();
-        scrollToMonth(selectedDate);
-      }
 
       const x = e.touches[0]?.clientX ?? 0;
       const y = e.touches[0]?.clientY ?? 0;
       const dx = touchStartX - x;
       const dy = touchStartY - y;
 
-      if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) return;
+      if (Math.abs(dx) <= 2 && Math.abs(dy) <= 2) return;
 
       if (Math.abs(dx) >= Math.abs(dy)) {
         didDrag = true;
         peekSuppressClickRef.current = true;
-        e.preventDefault();
-        e.stopPropagation();
-
-        const strip = horizontalRef.current;
-        if (strip) {
-          strip.scrollLeft += dx;
-        }
-        touchStartX = x;
-        touchStartY = y;
+        engagePeek();
       }
     };
 
@@ -2448,32 +2655,10 @@ function MobileCalendarWidget({
           peekSuppressClickRef.current = false;
         }, 350);
       }
-
-      if (peekMode && expandedRef.current && !expanded) {
-        setExpanded(true);
-      }
     };
-
-    wrap.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
-    wrap.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
-    wrap.addEventListener("touchend", onTouchEnd, { capture: true, passive: true });
-    wrap.addEventListener("touchcancel", onTouchEnd, { capture: true, passive: true });
-
-    return () => {
-      wrap.removeEventListener("touchstart", onTouchStart, { capture: true });
-      wrap.removeEventListener("touchmove", onTouchMove, { capture: true });
-      wrap.removeEventListener("touchend", onTouchEnd, { capture: true });
-      wrap.removeEventListener("touchcancel", onTouchEnd, { capture: true });
-    };
-  }, [peekMode, expanded, selectedDate, scrollToMonth, expandCalendarDOM, snapToNearestMonth]);
-
-  useEffect(() => {
-    const strip = horizontalRef.current;
-    if (!strip) return;
-
-    let suppressTimer: ReturnType<typeof setTimeout> | undefined;
 
     const onScroll = () => {
+      engagePeek();
       peekSuppressClickRef.current = true;
       if (suppressTimer) clearTimeout(suppressTimer);
       suppressTimer = setTimeout(() => {
@@ -2481,13 +2666,21 @@ function MobileCalendarWidget({
       }, 350);
     };
 
+    strip.addEventListener("touchstart", onTouchStart, { passive: true });
+    strip.addEventListener("touchmove", onTouchMove, { passive: true });
+    strip.addEventListener("touchend", onTouchEnd, { passive: true });
+    strip.addEventListener("touchcancel", onTouchEnd, { passive: true });
     strip.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
+      strip.removeEventListener("touchstart", onTouchStart);
+      strip.removeEventListener("touchmove", onTouchMove);
+      strip.removeEventListener("touchend", onTouchEnd);
+      strip.removeEventListener("touchcancel", onTouchEnd);
       strip.removeEventListener("scroll", onScroll);
       if (suppressTimer) clearTimeout(suppressTimer);
     };
-  }, []);
+  }, [engagePeek, snapToNearestMonth]);
 
   const renderDayButton = (
     cell: CalendarCell,
@@ -2552,13 +2745,13 @@ function MobileCalendarWidget({
 
   return (
     <div
-      ref={calendarWrapRef}
       data-mobile-calendar
-      className="relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04]"
+      className="relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04] transition-[max-height] duration-300 ease-out"
       style={{
-        ...(isPeek ? { maxHeight: `${PEEK_WRAP_H}px` } : undefined),
+        maxHeight: isPeek ? `${PEEK_WRAP_H}px` : undefined,
         touchAction: "pan-x pinch-zoom",
       }}
+      onPointerDown={engagePeek}
     >
       <div
         ref={horizontalRef}
@@ -2573,6 +2766,7 @@ function MobileCalendarWidget({
             isPeek && isFocusMonth
               ? Math.floor(getPeekWeekStartIndex(selectedDate, year, month) / 7) * CALENDAR_CELL_ROW_H
               : 0;
+          const fullGridH = Math.ceil(grid.length / 7) * CALENDAR_CELL_ROW_H;
           const monthLabel = new Intl.DateTimeFormat("ja-JP", {
             year: "numeric",
             month: "long",
@@ -2587,12 +2781,16 @@ function MobileCalendarWidget({
               {weekdayHeader(year, month)}
               <div
                 data-calendar-grid-clip
-                className="overflow-hidden"
-                style={isPeek && isFocusMonth ? { height: `${PEEK_GRID_H}px` } : undefined}
+                className="overflow-hidden transition-[height] duration-300 ease-out"
+                style={
+                  isPeek && isFocusMonth
+                    ? { height: `${PEEK_GRID_H}px` }
+                    : { height: `${fullGridH}px` }
+                }
               >
                 <div
                   data-calendar-grid-inner
-                  className="will-change-transform"
+                  className="will-change-transform transition-transform duration-300 ease-out"
                   style={
                     isPeek && isFocusMonth && peekRowOffset > 0
                       ? { transform: `translateY(-${peekRowOffset}px)` }
@@ -2606,6 +2804,142 @@ function MobileCalendarWidget({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function DailyMemoEditor({
+  date,
+  body: serverBody,
+  onSave,
+}: {
+  date: string;
+  body: string;
+  onSave: (date: string, body: string) => Promise<boolean>;
+}) {
+  const [body, setBody] = useState(serverBody);
+  const dateRef = useRef(date);
+  const baselineRef = useRef(serverBody);
+  const bodyRef = useRef(serverBody);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  bodyRef.current = body;
+
+  const resizeTextarea = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    if (date !== dateRef.current) {
+      dateRef.current = date;
+      setBody(serverBody);
+      baselineRef.current = serverBody;
+      return;
+    }
+    if (bodyRef.current === baselineRef.current && serverBody !== baselineRef.current) {
+      setBody(serverBody);
+      baselineRef.current = serverBody;
+    }
+  }, [date, serverBody]);
+
+  useEffect(() => {
+    resizeTextarea();
+  }, [body, resizeTextarea]);
+
+  const flush = useCallback(async () => {
+    if (bodyRef.current === baselineRef.current) return;
+    const ok = await onSave(date, bodyRef.current);
+    if (ok) {
+      baselineRef.current = bodyRef.current;
+    }
+  }, [date, onSave]);
+
+  useEffect(() => {
+    if (body === baselineRef.current) return;
+    const timer = setTimeout(() => {
+      void flush();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [body, flush]);
+
+  useEffect(() => {
+    return () => {
+      void flush();
+    };
+  }, [date, flush]);
+
+  useEffect(() => {
+    const onPageHide = () => {
+      void flush();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, [flush]);
+
+  return (
+    <article className="rounded-md border border-black/[0.06] bg-[#fafafa]/80 px-3 py-2.5">
+      <textarea
+        ref={textareaRef}
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={1}
+        className="w-full resize-none overflow-hidden bg-transparent text-[12px] leading-relaxed text-gray-800 outline-none placeholder:text-gray-300"
+        placeholder="メモを書き込む…"
+      />
+    </article>
+  );
+}
+
+function DailyMemoBoard({
+  memos,
+  viewDateISO,
+  onSave,
+}: {
+  memos: DailyMemo[];
+  viewDateISO: string;
+  onSave: (date: string, body: string) => Promise<boolean>;
+}) {
+  const [writeDate, setWriteDate] = useState(viewDateISO);
+
+  useEffect(() => {
+    setWriteDate(viewDateISO);
+  }, [viewDateISO]);
+
+  const dayMemo = useMemo(() => {
+    const sameDay = memos
+      .filter((m) => m.date === writeDate)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    if (sameDay.length === 0) return null;
+    return {
+      id: sameDay[0].id,
+      date: writeDate,
+      body: sameDay
+        .map((m) => m.body.trim())
+        .filter(Boolean)
+        .join("\n"),
+      createdAt: sameDay[0].createdAt,
+    };
+  }, [memos, writeDate]);
+
+  return (
+    <div>
+      <h3 className="mb-3 text-sm font-semibold text-gray-900">メモ</h3>
+      <label className="mb-3 block">
+        <input
+          type="date"
+          value={writeDate}
+          onChange={(e) => setWriteDate(e.target.value)}
+          className="w-full rounded-md border border-gray-100 bg-gray-50/60 px-3 py-2 text-[13px] outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+        />
+      </label>
+      <DailyMemoEditor
+        key={writeDate}
+        date={writeDate}
+        body={dayMemo?.body ?? ""}
+        onSave={onSave}
+      />
     </div>
   );
 }
@@ -2864,13 +3198,21 @@ function DesktopProjectSidebar({
 function AddCaseModalForm({
   onClose,
   onSubmit,
+  defaultProject,
 }: {
   onClose: () => void;
   onSubmit: (data: { title: string; project: string }) => void;
+  defaultProject?: string;
 }) {
   const { projectOptions } = useProjectColors();
   const [title, setTitle] = useState("");
-  const [project, setProject] = useState<string>(projectOptions[0] ?? "");
+  const [project, setProject] = useState<string>(defaultProject ?? projectOptions[0] ?? "");
+
+  useEffect(() => {
+    if (defaultProject) {
+      setProject(defaultProject);
+    }
+  }, [defaultProject]);
 
   const submit = () => {
     if (!title.trim()) return;
@@ -2938,13 +3280,22 @@ function AddCaseModal({
   open,
   onClose,
   onSubmit,
+  defaultProject,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: { title: string; project: string }) => void;
+  defaultProject?: string;
 }) {
   if (!open) return null;
-  return <AddCaseModalForm onClose={onClose} onSubmit={onSubmit} />;
+  return (
+    <AddCaseModalForm
+      key={defaultProject ?? "default"}
+      onClose={onClose}
+      onSubmit={onSubmit}
+      defaultProject={defaultProject}
+    />
+  );
 }
 
 /* ─── Add Task Modal ─── */
@@ -2952,19 +3303,37 @@ function AddCaseModal({
 function AddTaskModalForm({
   onClose,
   onSubmit,
-  caseTitles,
+  projectOptions,
+  defaultProject,
+  defaultDate,
+  defaultCaseId,
 }: {
   onClose: () => void;
-  onSubmit: (data: { title: string; project: string; time: string }) => void;
-  caseTitles: string[];
+  onSubmit: (data: { title: string; project: string; date: string; caseId?: string }) => void;
+  projectOptions: readonly string[];
+  defaultProject?: string;
+  defaultDate?: string;
+  defaultCaseId?: string;
 }) {
   const [title, setTitle] = useState("");
-  const [project, setProject] = useState(caseTitles[0] ?? "");
-  const [time, setTime] = useState("今日");
+  const [project, setProject] = useState(defaultProject ?? projectOptions[0] ?? "");
+  const [date, setDate] = useState(defaultDate ?? todayISO());
+
+  useEffect(() => {
+    if (defaultProject) {
+      setProject(defaultProject);
+    }
+  }, [defaultProject]);
+
+  useEffect(() => {
+    if (defaultDate) {
+      setDate(defaultDate);
+    }
+  }, [defaultDate]);
 
   const submit = () => {
-    if (!title.trim()) return;
-    onSubmit({ title: title.trim(), project, time });
+    if (!title.trim() || !project) return;
+    onSubmit({ title: title.trim(), project, date, caseId: defaultCaseId });
     onClose();
   };
 
@@ -2987,22 +3356,29 @@ function AddTaskModalForm({
             autoFocus
           />
         </label>
-        <div className="mb-6 grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="mb-2 block text-[12px] font-medium text-gray-400">関連案件</span>
-            <select value={project} onChange={(e) => setProject(e.target.value)} className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50">
-              {caseTitles.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-2 block text-[12px] font-medium text-gray-400">時間</span>
-            <input type="text" value={time} onChange={(e) => setTime(e.target.value)} placeholder="10:00" className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50" />
-          </label>
-        </div>
+        <label className="mb-4 block">
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">プロジェクト</span>
+          <select
+            value={project}
+            onChange={(e) => setProject(e.target.value)}
+            className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+          >
+            {projectOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mb-6 block">
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">期限</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+          />
+        </label>
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-2xl px-5 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50">キャンセル</button>
           <button type="button" onClick={submit} className="rounded-2xl bg-blue-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-blue-500/25 hover:bg-blue-600">追加する</button>
@@ -3016,15 +3392,31 @@ function AddTaskModal({
   open,
   onClose,
   onSubmit,
-  caseTitles,
+  projectOptions,
+  defaultProject,
+  defaultDate,
+  defaultCaseId,
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { title: string; project: string; time: string }) => void;
-  caseTitles: string[];
+  onSubmit: (data: { title: string; project: string; date: string; caseId?: string }) => void;
+  projectOptions: readonly string[];
+  defaultProject?: string;
+  defaultDate?: string;
+  defaultCaseId?: string;
 }) {
   if (!open) return null;
-  return <AddTaskModalForm onClose={onClose} onSubmit={onSubmit} caseTitles={caseTitles} />;
+  return (
+    <AddTaskModalForm
+      key={`${defaultProject ?? "default"}-${defaultDate ?? "default"}-${defaultCaseId ?? "default"}`}
+      onClose={onClose}
+      onSubmit={onSubmit}
+      projectOptions={projectOptions}
+      defaultProject={defaultProject}
+      defaultDate={defaultDate}
+      defaultCaseId={defaultCaseId}
+    />
+  );
 }
 
 /* ─── Main Page ─── */
@@ -3058,6 +3450,7 @@ export default function Home() {
     tasks,
     cases,
     memos,
+    dailyMemos,
     setProjectColor,
     addProject,
     replaceProjects,
@@ -3073,10 +3466,15 @@ export default function Home() {
     addCase,
     saveProjectMemo,
     deleteProjectMemo,
+    saveDailyMemo,
   } = useGyokanData();
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskModalDefaultProject, setTaskModalDefaultProject] = useState<string | undefined>();
+  const [taskModalDefaultDate, setTaskModalDefaultDate] = useState<string | undefined>();
+  const [taskModalDefaultCaseId, setTaskModalDefaultCaseId] = useState<string | undefined>();
   const [caseModalOpen, setCaseModalOpen] = useState(false);
+  const [caseModalDefaultProject, setCaseModalDefaultProject] = useState<string | undefined>();
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [selectedCase, setSelectedCase] = useState<CaseItem | null>(null);
   const [viewingCaseId, setViewingCaseId] = useState<string | null>(null);
@@ -3092,6 +3490,11 @@ export default function Home() {
   const viewingCase = viewingCaseId
     ? cases.find((c) => c.id === viewingCaseId) ?? null
     : null;
+
+  const viewingCaseTasks = useMemo(() => {
+    if (!viewingCaseId) return [];
+    return sortTasksActiveFirst(tasks.filter((t) => t.caseId === viewingCaseId));
+  }, [tasks, viewingCaseId]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -3180,10 +3583,6 @@ export default function Home() {
     setCasesListOpen(true);
     setMobileTab("home");
   }, []);
-  const caseTitles = useMemo(
-    () => ongoingCases.map((c) => c.title),
-    [ongoingCases],
-  );
 
   const displayedTasks = useMemo(() => {
     let list = viewDateTasks;
@@ -3281,14 +3680,15 @@ export default function Home() {
     return ok;
   }, [addProject]);
 
-  const addTask = useCallback((data: { title: string; project: string; time: string }) => {
+  const addTask = useCallback((data: { title: string; project: string; date: string; caseId?: string }) => {
     persistAddTask({
       title: data.title,
       project: data.project,
-      time: data.time,
-      date: viewDateISO,
+      time: formatTaskTimeLabel(data.date),
+      date: data.date,
+      caseId: data.caseId,
     });
-  }, [persistAddTask, viewDateISO]);
+  }, [persistAddTask]);
 
   const updateTask = useCallback(
     (id: string, data: { title: string; project: string; date: string; dateEnd?: string }) => {
@@ -3328,6 +3728,41 @@ export default function Home() {
       return sortTasksByDateWithDoneLast(updated, task.date);
     });
   }, [replaceTasks]);
+
+  const openAddCaseModal = useCallback((project?: string) => {
+    setCaseModalDefaultProject(project);
+    setCaseModalOpen(true);
+  }, []);
+
+  const closeAddCaseModal = useCallback(() => {
+    setCaseModalOpen(false);
+    setCaseModalDefaultProject(undefined);
+  }, []);
+
+  const openAddTaskModal = useCallback((project?: string, date?: string, caseId?: string) => {
+    setTaskModalDefaultProject(project);
+    setTaskModalDefaultDate(date);
+    setTaskModalDefaultCaseId(caseId);
+    setTaskModalOpen(true);
+  }, []);
+
+  const closeAddTaskModal = useCallback(() => {
+    setTaskModalOpen(false);
+    setTaskModalDefaultProject(undefined);
+    setTaskModalDefaultDate(undefined);
+    setTaskModalDefaultCaseId(undefined);
+  }, []);
+
+  const openTaskModalForView = useCallback(() => {
+    openAddTaskModal(isAllProjects ? undefined : activeProject, viewDateISO);
+  }, [openAddTaskModal, isAllProjects, activeProject, viewDateISO]);
+
+  const openTaskModalForCase = useCallback(
+    (caseItem: CaseItem) => {
+      openAddTaskModal(caseItem.project, viewDateISO, caseItem.id);
+    },
+    [openAddTaskModal, viewDateISO],
+  );
 
   const openProjectCase = useCallback((item: CaseItem) => {
     setViewingCaseId(item.id);
@@ -3406,6 +3841,14 @@ export default function Home() {
         <div className="flex min-w-0 flex-1">
         <main className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0">
           <div className="mx-auto max-w-3xl px-2.5 py-2 sm:px-4 lg:max-w-none lg:px-5 lg:pb-2 lg:pt-2">
+            {loadError && (
+              <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
+                データの読み込みに問題があります: {loadError}
+                <span className="mt-1 block text-[12px] text-red-500/80">
+                  表示中のデータは保持されています。更新ボタンで再読み込みしてください。
+                </span>
+              </p>
+            )}
             {!casesListOpen && (
             <header className="mb-2 lg:mb-3">
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
@@ -3452,6 +3895,24 @@ export default function Home() {
                 sensors={sensors}
                 onDragEnd={handleCaseDragEnd}
               />
+            ) : mobileTab === "memo" ? (
+              <section className="space-y-3 lg:hidden">
+                <Card className="overflow-hidden p-1.5">
+                  <MobileCalendarWidget
+                    tasks={tasks}
+                    selectedDate={viewDateISO}
+                    onSelectDate={goToDate}
+                    peekMode={viewDateISO === todayISO()}
+                  />
+                </Card>
+                <Card className="p-4">
+                  <DailyMemoBoard
+                    memos={dailyMemos}
+                    viewDateISO={viewDateISO}
+                    onSave={saveDailyMemo}
+                  />
+                </Card>
+              </section>
             ) : mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
@@ -3467,6 +3928,10 @@ export default function Home() {
                       onSave={updateCase}
                       onBack={() => setViewingCaseId(null)}
                       onToggle={toggleCase}
+                      caseTasks={viewingCaseTasks}
+                      onAddTask={() => openTaskModalForCase(viewingCase)}
+                      onToggleTask={toggleTask}
+                      onOpenTask={setSelectedTask}
                     />
                   ) : (
                     <>
@@ -3478,6 +3943,7 @@ export default function Home() {
                         onOpenCase={openProjectCase}
                         onSaveMemo={saveProjectMemo}
                         onDeleteMemo={deleteProjectMemo}
+                        onAddCase={() => openAddCaseModal(activeProject)}
                         onBack={() => setActiveProject(ALL_PROJECTS_LABEL)}
                       />
                       <TodayTasksSection
@@ -3487,7 +3953,7 @@ export default function Home() {
                         displayedTasks={displayedTasks}
                         incompleteOtherTasks={incompleteOtherTasks}
                         renderTaskList={renderTaskList}
-                        onAddTask={() => setTaskModalOpen(true)}
+                        onAddTask={openTaskModalForView}
                       />
                     </>
                   )}
@@ -3514,6 +3980,10 @@ export default function Home() {
                   onSave={updateCase}
                   onBack={() => setViewingCaseId(null)}
                   onToggle={toggleCase}
+                  caseTasks={viewingCaseTasks}
+                  onAddTask={() => openTaskModalForCase(viewingCase)}
+                  onToggleTask={toggleTask}
+                  onOpenTask={setSelectedTask}
                   className="order-2 mb-4 lg:order-2 lg:mb-4"
                 />
               ) : (
@@ -3525,6 +3995,7 @@ export default function Home() {
                   onOpenCase={openProjectCase}
                   onSaveMemo={saveProjectMemo}
                   onDeleteMemo={deleteProjectMemo}
+                  onAddCase={() => openAddCaseModal(activeProject)}
                   className="order-2 mb-4 lg:order-2 lg:mb-4"
                 />
               )
@@ -3538,7 +4009,7 @@ export default function Home() {
                 displayedTasks={displayedTasks}
                 incompleteOtherTasks={incompleteOtherTasks}
                 renderTaskList={renderTaskList}
-                onAddTask={() => setTaskModalOpen(true)}
+                onAddTask={openTaskModalForView}
                 className={!isAllProjects ? "order-3 lg:order-3" : "order-2 lg:order-3"}
               />
             )}
@@ -3554,7 +4025,7 @@ export default function Home() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setTaskModalOpen(true)}
+                    onClick={openTaskModalForView}
                     className="shrink-0 text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
                   >
                     ＋ タスクを追加
@@ -3580,7 +4051,7 @@ export default function Home() {
                   <div className="flex shrink-0 items-center">
                     <button
                       type="button"
-                      onClick={() => setCaseModalOpen(true)}
+                      onClick={() => openAddCaseModal()}
                       className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
                     >
                       ＋ 案件を追加
@@ -3671,6 +4142,13 @@ export default function Home() {
               onSelectDate={goToDate}
             />
           </Card>
+          <Card className="mb-4 p-4">
+            <DailyMemoBoard
+              memos={dailyMemos}
+              viewDateISO={viewDateISO}
+              onSave={saveDailyMemo}
+            />
+          </Card>
           <Card className="p-6">
             <h3 className="mb-5 text-sm font-semibold text-gray-900">今月の状況</h3>
             <MonthlyStats
@@ -3691,6 +4169,7 @@ export default function Home() {
             { id: "home" as const, label: "ホーム", icon: "home" },
             { id: "projects" as const, label: "プロジェクト", icon: "folder" },
             { id: "cases" as const, label: "案件", icon: "cases" },
+            { id: "memo" as const, label: "メモ", icon: "memo" },
             { id: "more" as const, label: "その他", icon: "more" },
           ]).map((tab) => (
             <button
@@ -3724,8 +4203,10 @@ export default function Home() {
       {/* FAB */}
       <button
         type="button"
-        onClick={() => setTaskModalOpen(true)}
-        className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/35 transition-all duration-200 hover:scale-105 hover:bg-blue-600 active:scale-95 lg:hidden"
+        onClick={openTaskModalForView}
+        className={`fixed z-50 flex h-14 w-14 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/35 transition-all duration-200 hover:scale-105 hover:bg-blue-600 active:scale-95 lg:hidden ${
+          mobileTab === "memo" || mobileTab === "more" || casesListOpen ? "hidden" : ""
+        }`}
         style={{ right: "1.25rem", bottom: "calc(5.25rem + env(safe-area-inset-bottom))" }}
         aria-label="タスクを追加"
       >
@@ -3734,9 +4215,12 @@ export default function Home() {
 
       <AddTaskModal
         open={taskModalOpen}
-        onClose={() => setTaskModalOpen(false)}
+        onClose={closeAddTaskModal}
         onSubmit={addTask}
-        caseTitles={caseTitles.length > 0 ? caseTitles : ["未入力"]}
+        projectOptions={projectNames.length > 0 ? projectNames : ["未入力"]}
+        defaultProject={taskModalDefaultProject}
+        defaultDate={taskModalDefaultDate}
+        defaultCaseId={taskModalDefaultCaseId}
       />
       <AddProjectModal
         open={projectModalOpen}
@@ -3746,8 +4230,9 @@ export default function Home() {
       />
       <AddCaseModal
         open={caseModalOpen}
-        onClose={() => setCaseModalOpen(false)}
+        onClose={closeAddCaseModal}
         onSubmit={addCase}
+        defaultProject={caseModalDefaultProject}
       />
 
       <DetailOverlay

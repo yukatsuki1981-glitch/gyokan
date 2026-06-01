@@ -6,9 +6,11 @@ import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/client";
 import { ALL_PROJECTS_LABEL, DEFAULT_PROJECT_ACCENT } from "./constants";
 import { buildProjectMaps, newUuid } from "./mappers";
+import { parseCaseDeadlineInput } from "./date-format";
 import {
   assignSortOrders,
   deleteMemoDb,
+  deleteDailyMemoDb,
   deleteTaskDb,
   fetchGyokanData,
   projectsToColorMap,
@@ -16,15 +18,44 @@ import {
   updateProjectColor,
   upsertCase,
   upsertCasesBatch,
+  upsertDailyMemo,
   upsertMemo,
   upsertProject,
   upsertProjectsBatch,
   upsertTask,
   upsertTasksBatch,
 } from "./repository";
-import type { AppCase, AppMemo, AppProject, AppTask } from "./types";
+import {
+  caseDraftDiffers,
+  clearDraft,
+  mergeCasesWithDrafts,
+  mergeMemosWithDrafts,
+  mergeTasksWithDrafts,
+  memoDraftDiffers,
+  readDraft,
+  taskDraftDiffers,
+  type CaseDraftFields,
+  type MemoDraftFields,
+  type TaskDraftFields,
+} from "./drafts";
+import {
+  consolidateDailyMemosByDate,
+  dequeuePendingDailyMemo,
+  mergeDailyMemosWithPending,
+  queuePendingDailyMemo,
+  readPendingDailyMemos,
+} from "./local-cache";
+import type { AppCase, AppDailyMemo, AppMemo, AppProject, AppTask } from "./types";
 
-export type { AppCase as CaseItem, AppMemo as ProjectMemo, AppTask as Task } from "./types";
+export type { AppCase as CaseItem, AppDailyMemo as DailyMemo, AppMemo as ProjectMemo, AppTask as Task } from "./types";
+
+function formatLoadError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) {
+    return String((err as { message: string }).message);
+  }
+  return "データの読み込みに失敗しました";
+}
 
 function todayISO() {
   const d = new Date();
@@ -65,11 +96,13 @@ export function useGyokanData() {
   const [tasks, setTasks] = useState<AppTask[]>([]);
   const [cases, setCases] = useState<AppCase[]>([]);
   const [memos, setMemos] = useState<AppMemo[]>([]);
+  const [dailyMemos, setDailyMemos] = useState<AppDailyMemo[]>([]);
   const [lastViewDate, setLastViewDate] = useState<string | null>(null);
 
   const nameToIdRef = useRef<Record<string, string>>({});
   const userIdRef = useRef<string | null>(null);
   const viewDateSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
   const projectNames = useMemo(() => projects.map((p) => p.name), [projects]);
   const projectColors = useMemo(() => projectsToColorMap(projects), [projects]);
@@ -82,25 +115,146 @@ export function useGyokanData() {
     nameToIdRef.current = buildProjectMaps(list).nameToId;
   }, []);
 
-  const loadData = useCallback(async (uid: string) => {
-    setDataReady(false);
+  const flushPendingDrafts = useCallback(async (
+    serverCases: AppCase[],
+    serverTasks: AppTask[],
+    serverMemos: AppMemo[],
+  ) => {
+    const uid = userIdRef.current;
+    if (!uid) return;
+    const nameToId = nameToIdRef.current;
+    const supabase = getSupabase();
+
+    for (const item of serverCases) {
+      const draft = readDraft<CaseDraftFields>("case", item.id);
+      if (!draft || !caseDraftDiffers(item, draft)) continue;
+      const merged: AppCase = {
+        ...item,
+        title: draft.title,
+        project: draft.project,
+        goal: draft.goal,
+        status: draft.status,
+        statusTone: draft.statusTone,
+        deadline: parseCaseDeadlineInput(draft.deadline),
+      };
+      try {
+        await upsertCase(supabase, merged, uid, nameToId);
+        clearDraft("case", item.id);
+      } catch (err) {
+        console.error("Failed to flush case draft", err);
+      }
+    }
+
+    for (const item of serverTasks) {
+      const draft = readDraft<TaskDraftFields>("task", item.id);
+      if (!draft || !taskDraftDiffers(item, draft)) continue;
+      const dateEnd =
+        draft.useRange && draft.dateEnd && draft.dateEnd !== draft.date
+          ? draft.dateEnd
+          : undefined;
+      const merged: AppTask = {
+        ...item,
+        title: draft.title,
+        project: draft.project,
+        date: draft.date,
+        dateEnd,
+      };
+      try {
+        await upsertTask(supabase, merged, uid, nameToId);
+        clearDraft("task", item.id);
+      } catch (err) {
+        console.error("Failed to flush task draft", err);
+      }
+    }
+
+    for (const item of serverMemos) {
+      const draft = readDraft<MemoDraftFields>("memo", item.id);
+      if (!draft || !memoDraftDiffers(item, draft)) continue;
+      const merged: AppMemo = {
+        ...item,
+        date: draft.date,
+        body: draft.body,
+      };
+      try {
+        await upsertMemo(supabase, merged, uid, nameToId);
+        clearDraft("memo", item.id);
+      } catch (err) {
+        console.error("Failed to flush memo draft", err);
+      }
+    }
+  }, [getSupabase]);
+
+  const flushPendingDailyMemos = useCallback(async () => {
+    const uid = userIdRef.current;
+    if (!uid) return;
+    const pending = readPendingDailyMemos();
+    if (pending.length === 0) return;
+    for (const memo of pending) {
+      try {
+        await upsertDailyMemo(getSupabase(), memo, uid);
+        dequeuePendingDailyMemo(memo.id);
+      } catch (err) {
+        console.error("Failed to flush pending daily memo", err);
+      }
+    }
+  }, [getSupabase]);
+
+  const syncConsolidatedDailyMemos = useCallback(async (
+    before: AppDailyMemo[],
+    after: AppDailyMemo[],
+  ) => {
+    const uid = userIdRef.current;
+    if (!uid) return;
+    const keepIds = new Set(after.map((m) => m.id));
+    const supabase = getSupabase();
+    for (const memo of after) {
+      const previous = before.find((m) => m.id === memo.id);
+      if (!previous || previous.body !== memo.body) {
+        await upsertDailyMemo(supabase, memo, uid);
+      }
+    }
+    for (const memo of before) {
+      if (!keepIds.has(memo.id)) {
+        await deleteDailyMemoDb(supabase, memo.id);
+        dequeuePendingDailyMemo(memo.id);
+      }
+    }
+  }, [getSupabase]);
+
+  const loadData = useCallback(async (uid: string, options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? initialLoadDoneRef.current;
+    if (!silent) {
+      setDataReady(false);
+    }
     setLoadError(null);
     try {
       const data = await fetchGyokanData(getSupabase(), uid);
       setProjects(data.projects);
       syncMaps(data.projects);
-      setTasks(data.tasks);
-      setCases(data.cases);
-      setMemos(data.memos);
+      setTasks(mergeTasksWithDrafts(data.tasks));
+      setCases(mergeCasesWithDrafts(data.cases));
+      setMemos(mergeMemosWithDrafts(data.memos));
+      const mergedDailyMemos = mergeDailyMemosWithPending(data.dailyMemos);
+      const consolidatedDailyMemos = consolidateDailyMemosByDate(mergedDailyMemos);
+      setDailyMemos(consolidatedDailyMemos);
       setLastViewDate(data.lastViewDate);
+      setLoadError(null);
       setDataReady(true);
+      initialLoadDoneRef.current = true;
+      if (consolidatedDailyMemos.length < mergedDailyMemos.length) {
+        void syncConsolidatedDailyMemos(mergedDailyMemos, consolidatedDailyMemos);
+      }
+      void flushPendingDrafts(data.cases, data.tasks, data.memos);
+      void flushPendingDailyMemos();
       return data.lastViewDate;
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "データの読み込みに失敗しました");
+      const message = formatLoadError(err);
+      setLoadError(message);
       setDataReady(true);
+      initialLoadDoneRef.current = true;
       return null;
     }
-  }, [getSupabase, syncMaps]);
+  }, [getSupabase, syncMaps, flushPendingDrafts, flushPendingDailyMemos, syncConsolidatedDailyMemos]);
 
   useEffect(() => {
     let mounted = true;
@@ -115,19 +269,21 @@ export function useGyokanData() {
       if (u) void loadData(u.id);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       const u = session?.user ?? null;
       setUser(u);
       userIdRef.current = u?.id ?? null;
-      if (u) {
-        void loadData(u.id);
-      } else {
+      if (!u) {
         setProjects([]);
         setTasks([]);
         setCases([]);
         setMemos([]);
+        setDailyMemos([]);
         setDataReady(false);
+        return;
       }
+      if (event === "INITIAL_SESSION") return;
+      void loadData(u.id, { silent: true });
     });
 
     return () => {
@@ -136,13 +292,16 @@ export function useGyokanData() {
     };
   }, [getSupabase, loadData]);
 
-  const persistTask = useCallback(async (task: AppTask) => {
+  const persistTask = useCallback(async (task: AppTask): Promise<boolean> => {
     const uid = userIdRef.current;
-    if (!uid) return;
+    if (!uid) return false;
     try {
       await upsertTask(getSupabase(), task, uid, nameToIdRef.current);
+      clearDraft("task", task.id);
+      return true;
     } catch (err) {
       console.error("Failed to save task", err);
+      return false;
     }
   }, [getSupabase]);
 
@@ -156,13 +315,16 @@ export function useGyokanData() {
     }
   }, [getSupabase]);
 
-  const persistCase = useCallback(async (item: AppCase) => {
+  const persistCase = useCallback(async (item: AppCase): Promise<boolean> => {
     const uid = userIdRef.current;
-    if (!uid) return;
+    if (!uid) return false;
     try {
       await upsertCase(getSupabase(), item, uid, nameToIdRef.current);
+      clearDraft("case", item.id);
+      return true;
     } catch (err) {
       console.error("Failed to save case", err);
+      return false;
     }
   }, [getSupabase]);
 
@@ -176,13 +338,30 @@ export function useGyokanData() {
     }
   }, [getSupabase]);
 
-  const persistMemo = useCallback(async (memo: AppMemo) => {
+  const persistDailyMemo = useCallback(async (memo: AppDailyMemo): Promise<boolean> => {
     const uid = userIdRef.current;
-    if (!uid) return;
+    if (!uid) return false;
+    try {
+      await upsertDailyMemo(getSupabase(), memo, uid);
+      dequeuePendingDailyMemo(memo.id);
+      return true;
+    } catch (err) {
+      console.error("Failed to save daily memo", err);
+      queuePendingDailyMemo(memo);
+      return false;
+    }
+  }, [getSupabase]);
+
+  const persistMemo = useCallback(async (memo: AppMemo): Promise<boolean> => {
+    const uid = userIdRef.current;
+    if (!uid) return false;
     try {
       await upsertMemo(getSupabase(), memo, uid, nameToIdRef.current);
+      clearDraft("memo", memo.id);
+      return true;
     } catch (err) {
       console.error("Failed to save memo", err);
+      return false;
     }
   }, [getSupabase]);
 
@@ -266,14 +445,15 @@ export function useGyokanData() {
     });
   }, [persistProjects, syncMaps]);
 
-  const addTask = useCallback((data: { title: string; project: string; time: string; date: string }) => {
+  const addTask = useCallback((data: { title: string; project: string; time: string; date: string; caseId?: string }) => {
     const task: AppTask = {
       id: newUuid(),
       title: data.title,
-      time: data.time.includes("今日") ? data.time : `今日 ${data.time}`,
+      time: data.time,
       date: data.date,
       done: false,
       project: data.project,
+      caseId: data.caseId,
       sortOrder: 0,
     };
     setTasks((prev) => {
@@ -350,13 +530,15 @@ export function useGyokanData() {
       statusTone: AppCase["statusTone"];
       deadline: string;
     },
-  ) => {
+  ): Promise<boolean> => {
+    let updated: AppCase | undefined;
     setCases((prev) => {
       const next = prev.map((c) => (c.id === id ? { ...c, ...data } : c));
-      const updated = next.find((c) => c.id === id);
-      if (updated) void persistCase(updated);
+      updated = next.find((c) => c.id === id);
       return next;
     });
+    if (!updated) return Promise.resolve(false);
+    return persistCase(updated);
   }, [persistCase]);
 
   const toggleCase = useCallback((id: string) => {
@@ -411,6 +593,67 @@ export function useGyokanData() {
     void deleteMemoDb(getSupabase(), id);
   }, [getSupabase]);
 
+  const saveDailyMemo = useCallback(async (date: string, body: string): Promise<boolean> => {
+    const uid = userIdRef.current;
+    if (!uid) return false;
+
+    const supabase = getSupabase();
+    let memoToPersist: AppDailyMemo | null = null;
+    let memosToDelete: string[] = [];
+    let skipped = false;
+
+    setDailyMemos((prev) => {
+      const sameDay = prev
+        .filter((m) => m.date === date)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const primary = sameDay[0];
+
+      if (primary) {
+        if (!body.trim()) {
+          memosToDelete = sameDay.map((m) => m.id);
+          return prev.filter((m) => m.date !== date);
+        }
+
+        memoToPersist = { ...primary, body };
+        memosToDelete = sameDay.slice(1).map((m) => m.id);
+        return [...prev.filter((m) => m.date !== date), memoToPersist];
+      }
+
+      if (!body.trim()) {
+        skipped = true;
+        return prev;
+      }
+
+      memoToPersist = {
+        id: newUuid(),
+        date,
+        body,
+        createdAt: new Date().toISOString(),
+      };
+      return [...prev, memoToPersist];
+    });
+
+    if (skipped) return true;
+
+    try {
+      for (const id of memosToDelete) {
+        await deleteDailyMemoDb(supabase, id);
+        dequeuePendingDailyMemo(id);
+      }
+      if (!memoToPersist) return true;
+      return persistDailyMemo(memoToPersist);
+    } catch (err) {
+      console.error("Failed to save daily memo", err);
+      if (memoToPersist) queuePendingDailyMemo(memoToPersist);
+      return false;
+    }
+  }, [getSupabase, persistDailyMemo]);
+
+  const deleteDailyMemo = useCallback((id: string) => {
+    setDailyMemos((prev) => prev.filter((m) => m.id !== id));
+    void deleteDailyMemoDb(getSupabase(), id);
+  }, [getSupabase]);
+
   return {
     user,
     authReady,
@@ -423,6 +666,7 @@ export function useGyokanData() {
     tasks,
     cases,
     memos,
+    dailyMemos,
     lastViewDate,
     setProjectColor,
     addProject,
@@ -441,9 +685,11 @@ export function useGyokanData() {
     replaceCases,
     saveProjectMemo,
     deleteProjectMemo,
+    saveDailyMemo,
+    deleteDailyMemo,
     reload: () => {
       const uid = userIdRef.current;
-      if (uid) return loadData(uid);
+      if (uid) return loadData(uid, { silent: true });
       return Promise.resolve(null);
     },
   };

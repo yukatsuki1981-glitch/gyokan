@@ -1,13 +1,16 @@
 import type {
   AppCase,
+  AppDailyMemo,
   AppMemo,
   AppProject,
   AppTask,
   DbCase,
+  DbDailyMemo,
   DbMemo,
   DbProject,
   DbTask,
 } from "./types";
+import { DEFAULT_PROJECT_ACCENT } from "./constants";
 
 export function buildProjectMaps(projects: AppProject[]) {
   const idToName: Record<string, string> = {};
@@ -23,8 +26,8 @@ export function mapDbProject(row: DbProject): AppProject {
   return {
     id: row.id,
     name: row.name,
-    accentColor: row.accent_color,
-    sortOrder: row.sort_order,
+    accentColor: row.accent_color || DEFAULT_PROJECT_ACCENT,
+    sortOrder: row.sort_order ?? 0,
   };
 }
 
@@ -50,8 +53,9 @@ export function mapDbTask(row: DbTask, idToName: Record<string, string>): AppTas
     dateEnd,
     done: row.done,
     project: row.project_id ? (idToName[row.project_id] ?? "") : "",
+    caseId: row.case_id ?? undefined,
     starred: row.starred,
-    sortOrder: row.sort_order,
+    sortOrder: row.sort_order ?? 0,
   };
 }
 
@@ -71,7 +75,7 @@ export function mapDbCase(row: DbCase, idToName: Record<string, string>): AppCas
     done: row.done,
     createdAt: row.created_at,
     completedAt: row.completed_at,
-    sortOrder: row.sort_order,
+    sortOrder: row.sort_order ?? 0,
   };
 }
 
@@ -84,6 +88,15 @@ export function mapDbMemo(row: DbMemo, idToName: Record<string, string>): AppMem
   };
 }
 
+export function mapDbDailyMemo(row: DbDailyMemo): AppDailyMemo {
+  return {
+    id: row.id,
+    date: row.memo_date,
+    body: row.body,
+    createdAt: row.created_at,
+  };
+}
+
 export function mapTaskToDb(
   task: AppTask,
   userId: string,
@@ -93,6 +106,7 @@ export function mapTaskToDb(
     id: task.id,
     user_id: userId,
     project_id: nameToId[task.project] ?? null,
+    case_id: task.caseId ?? null,
     title: task.title,
     time_label: task.time,
     task_date: task.date,
@@ -129,6 +143,15 @@ export function mapCaseToDb(
     created_at: item.createdAt,
     completed_at: item.completedAt,
     sort_order: item.sortOrder,
+  };
+}
+
+export function mapDailyMemoToDb(memo: AppDailyMemo, userId: string) {
+  return {
+    id: memo.id,
+    user_id: userId,
+    memo_date: memo.date,
+    body: memo.body,
   };
 }
 

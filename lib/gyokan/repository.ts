@@ -4,25 +4,138 @@ import {
   buildProjectMaps,
   mapCaseToDb,
   mapDbCase,
+  mapDbDailyMemo,
   mapDbMemo,
   mapDbProject,
   mapDbTask,
+  mapDailyMemoToDb,
   mapMemoToDb,
   mapProjectToDb,
   mapTaskToDb,
   newUuid,
 } from "./mappers";
+import {
+  dedupeProjectsByName,
+  isMissingColumnError,
+  isMissingTableError,
+  normalizeCaseRow,
+  normalizeProjectRow,
+  normalizeTaskRow,
+  sortByOrder,
+  toLegacyCaseUpsert,
+  toLegacyProjectInsert,
+  toLegacyTaskUpsert,
+} from "./schema-compat";
 import type {
   AppCase,
+  AppDailyMemo,
   AppMemo,
   AppProject,
   AppTask,
   DbCase,
+  DbDailyMemo,
   DbMemo,
   DbProject,
   DbTask,
   GyokanData,
 } from "./types";
+
+async function fetchTaskRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DbTask[]> {
+  const res = await supabase.from("tasks").select("*").eq("user_id", userId);
+  if (res.error) throw res.error;
+
+  const rows = ((res.data as Record<string, unknown>[] | null) ?? []).map(
+    normalizeTaskRow,
+  );
+  return sortByOrder(rows);
+}
+
+async function fetchProjectRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DbProject[]> {
+  const res = await supabase.from("projects").select("*").eq("user_id", userId);
+  if (res.error) throw res.error;
+
+  const rows = ((res.data as Record<string, unknown>[] | null) ?? []).map(
+    normalizeProjectRow,
+  );
+  return dedupeProjectsByName(rows);
+}
+
+async function fetchCaseRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DbCase[]> {
+  const res = await supabase.from("cases").select("*").eq("user_id", userId);
+  if (res.error) throw res.error;
+
+  const rows = ((res.data as Record<string, unknown>[] | null) ?? []).map(
+    normalizeCaseRow,
+  );
+  return sortByOrder(rows);
+}
+
+async function fetchDailyMemoRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DbDailyMemo[]> {
+  const res = await supabase
+    .from("daily_memos")
+    .select("*")
+    .eq("user_id", userId)
+    .order("memo_date")
+    .order("created_at");
+  if (res.error) {
+    if (isMissingTableError(res.error)) {
+      console.warn("daily_memos unavailable (run migration if needed):", res.error.message);
+      return [];
+    }
+    throw res.error;
+  }
+  return (res.data as DbDailyMemo[] | null) ?? [];
+}
+
+async function fetchProjectMemoRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DbMemo[]> {
+  const res = await supabase
+    .from("project_memos")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (res.error) {
+    if (isMissingTableError(res.error)) {
+      console.warn("project_memos unavailable (run migration if needed):", res.error.message);
+      return [];
+    }
+    throw res.error;
+  }
+  return (res.data as DbMemo[] | null) ?? [];
+}
+
+async function fetchLastViewDate(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string | null> {
+  const res = await supabase
+    .from("user_preferences")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (res.error) {
+    if (isMissingTableError(res.error)) {
+      console.warn("user_preferences unavailable (run migration if needed):", res.error.message);
+      return null;
+    }
+    throw res.error;
+  }
+  return res.data?.last_view_date ?? null;
+}
 
 type LegacyTask = {
   id: string;
@@ -62,11 +175,33 @@ function isValidHex(value: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
+const seedProjectPromises = new Map<string, Promise<AppProject[]>>();
+
 export async function seedDefaultProjects(
   supabase: SupabaseClient,
   userId: string,
   colors: Record<string, string> = {},
 ): Promise<AppProject[]> {
+  const inflight = seedProjectPromises.get(userId);
+  if (inflight) return inflight;
+
+  const promise = seedDefaultProjectsOnce(supabase, userId, colors).finally(() => {
+    seedProjectPromises.delete(userId);
+  });
+  seedProjectPromises.set(userId, promise);
+  return promise;
+}
+
+async function seedDefaultProjectsOnce(
+  supabase: SupabaseClient,
+  userId: string,
+  colors: Record<string, string> = {},
+): Promise<AppProject[]> {
+  const existing = await fetchProjectRows(supabase, userId);
+  if (existing.length > 0) {
+    return existing.map(mapDbProject);
+  }
+
   const rows = DEFAULT_PROJECT_NAMES.map((name, index) => ({
     id: newUuid(),
     user_id: userId,
@@ -75,9 +210,15 @@ export async function seedDefaultProjects(
     sort_order: index,
   }));
 
-  const { data, error } = await supabase.from("projects").insert(rows).select("*");
+  let { error } = await supabase.from("projects").insert(rows);
+  if (error && isMissingColumnError(error, "accent_color")) {
+    const legacyRows = rows.map(toLegacyProjectInsert);
+    ({ error } = await supabase.from("projects").insert(legacyRows));
+  }
   if (error) throw error;
-  return (data as DbProject[]).map(mapDbProject).sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const seeded = await fetchProjectRows(supabase, userId);
+  return seeded.map(mapDbProject);
 }
 
 export async function fetchGyokanData(
@@ -85,26 +226,22 @@ export async function fetchGyokanData(
   userId: string,
 ): Promise<GyokanData> {
   const [
-    { data: projectRows, error: projectsError },
-    { data: taskRows, error: tasksError },
-    { data: caseRows, error: casesError },
-    { data: memoRows, error: memosError },
-    { data: prefRows, error: prefsError },
+    projectRows,
+    caseRows,
+    taskRows,
+    memoRows,
+    dailyMemoRows,
+    lastViewDate,
   ] = await Promise.all([
-    supabase.from("projects").select("*").eq("user_id", userId).order("sort_order"),
-    supabase.from("tasks").select("*").eq("user_id", userId).order("sort_order"),
-    supabase.from("cases").select("*").eq("user_id", userId).order("sort_order"),
-    supabase.from("project_memos").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
-    supabase.from("user_preferences").select("*").eq("user_id", userId).maybeSingle(),
+    fetchProjectRows(supabase, userId),
+    fetchCaseRows(supabase, userId),
+    fetchTaskRows(supabase, userId),
+    fetchProjectMemoRows(supabase, userId),
+    fetchDailyMemoRows(supabase, userId),
+    fetchLastViewDate(supabase, userId),
   ]);
 
-  if (projectsError) throw projectsError;
-  if (tasksError) throw tasksError;
-  if (casesError) throw casesError;
-  if (memosError) throw memosError;
-  if (prefsError) throw prefsError;
-
-  let projects = (projectRows as DbProject[] | null)?.map(mapDbProject) ?? [];
+  let projects = projectRows.map(mapDbProject);
 
   if (projects.length === 0) {
     const legacyColors = readLegacyColors();
@@ -120,10 +257,11 @@ export async function fetchGyokanData(
 
   return {
     projects,
-    tasks: ((taskRows as DbTask[] | null) ?? []).map((r) => mapDbTask(r, idToName)),
-    cases: ((caseRows as DbCase[] | null) ?? []).map((r) => mapDbCase(r, idToName)),
-    memos: ((memoRows as DbMemo[] | null) ?? []).map((r) => mapDbMemo(r, idToName)),
-    lastViewDate: prefRows?.last_view_date ?? null,
+    tasks: taskRows.map((r) => mapDbTask(r, idToName)),
+    cases: caseRows.map((r) => mapDbCase(r, idToName)),
+    memos: memoRows.map((r) => mapDbMemo(r, idToName)),
+    dailyMemos: dailyMemoRows.map(mapDbDailyMemo),
+    lastViewDate,
   };
 }
 
@@ -187,11 +325,9 @@ async function importLegacyData(
       user_id: userId,
       project_id: nameToId[t.project] ?? fallbackProjectId ?? null,
       title: t.title,
-      time_label: t.time,
-      task_date: t.date,
-      date_end: t.dateEnd && t.dateEnd !== t.date ? t.dateEnd : null,
+      date: t.date,
+      time: t.time,
       done: t.done,
-      starred: false,
       sort_order: index,
     }));
     await supabase.from("tasks").insert(rows);
@@ -202,18 +338,11 @@ async function importLegacyData(
       id: newUuid(),
       user_id: userId,
       project_id: nameToId[c.project] ?? fallbackProjectId!,
-      title: c.title,
-      status: c.status,
-      status_tone: c.statusTone,
+      name: c.title,
       deadline: c.deadline ?? "",
       progress: c.progress ?? 0,
       goal: c.goal ?? "",
-      subtasks_done: c.subtasksDone ?? 0,
-      subtasks_total: c.subtasksTotal ?? 5,
-      comments_count: c.comments ?? 0,
-      done: c.done,
       created_at: c.createdAt,
-      completed_at: c.completedAt,
       sort_order: index,
     }));
     await supabase.from("cases").insert(rows);
@@ -231,6 +360,26 @@ async function importLegacyData(
   }
 }
 
+async function upsertTaskRow(
+  supabase: SupabaseClient,
+  row: ReturnType<typeof mapTaskToDb>,
+) {
+  let { error } = await supabase.from("tasks").upsert(row);
+  if (
+    error &&
+    (isMissingColumnError(error, "task_date") ||
+      isMissingColumnError(error, "time_label"))
+  ) {
+    ({ error } = await supabase.from("tasks").upsert(toLegacyTaskUpsert(row)));
+  }
+  if (error && row.case_id != null && isMissingColumnError(error, "case_id")) {
+    const legacyRow = toLegacyTaskUpsert(row);
+    delete legacyRow.case_id;
+    ({ error } = await supabase.from("tasks").upsert(legacyRow));
+  }
+  if (error) throw error;
+}
+
 export async function upsertTask(
   supabase: SupabaseClient,
   task: AppTask,
@@ -238,12 +387,27 @@ export async function upsertTask(
   nameToId: Record<string, string>,
 ) {
   const row = mapTaskToDb(task, userId, nameToId);
-  const { error } = await supabase.from("tasks").upsert(row);
-  if (error) throw error;
+  await upsertTaskRow(supabase, row);
 }
 
 export async function deleteTaskDb(supabase: SupabaseClient, id: string) {
   const { error } = await supabase.from("tasks").delete().eq("id", id);
+  if (error) throw error;
+}
+
+async function upsertCaseRow(
+  supabase: SupabaseClient,
+  row: ReturnType<typeof mapCaseToDb>,
+) {
+  let { error } = await supabase.from("cases").upsert(row);
+  if (
+    error &&
+    (isMissingColumnError(error, "title") ||
+      isMissingColumnError(error, "status") ||
+      isMissingColumnError(error, "status_tone"))
+  ) {
+    ({ error } = await supabase.from("cases").upsert(toLegacyCaseUpsert(row)));
+  }
   if (error) throw error;
 }
 
@@ -254,8 +418,7 @@ export async function upsertCase(
   nameToId: Record<string, string>,
 ) {
   const row = mapCaseToDb(item, userId, nameToId);
-  const { error } = await supabase.from("cases").upsert(row);
-  if (error) throw error;
+  await upsertCaseRow(supabase, row);
 }
 
 export async function upsertCasesBatch(
@@ -266,8 +429,9 @@ export async function upsertCasesBatch(
 ) {
   if (items.length === 0) return;
   const rows = items.map((item) => mapCaseToDb(item, userId, nameToId));
-  const { error } = await supabase.from("cases").upsert(rows);
-  if (error) throw error;
+  for (const row of rows) {
+    await upsertCaseRow(supabase, row);
+  }
 }
 
 export async function upsertTasksBatch(
@@ -278,8 +442,9 @@ export async function upsertTasksBatch(
 ) {
   if (items.length === 0) return;
   const rows = items.map((item) => mapTaskToDb(item, userId, nameToId));
-  const { error } = await supabase.from("tasks").upsert(rows);
-  if (error) throw error;
+  for (const row of rows) {
+    await upsertTaskRow(supabase, row);
+  }
 }
 
 export async function upsertMemo(
@@ -290,11 +455,38 @@ export async function upsertMemo(
 ) {
   const row = mapMemoToDb(memo, userId, nameToId);
   const { error } = await supabase.from("project_memos").upsert(row);
-  if (error) throw error;
+  if (error) {
+    if (isMissingTableError(error)) {
+      console.warn("project_memos unavailable, memo not saved to server:", error.message);
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function deleteMemoDb(supabase: SupabaseClient, id: string) {
   const { error } = await supabase.from("project_memos").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function upsertDailyMemo(
+  supabase: SupabaseClient,
+  memo: AppDailyMemo,
+  userId: string,
+) {
+  const row = mapDailyMemoToDb(memo, userId);
+  const { error } = await supabase.from("daily_memos").upsert(row);
+  if (error) {
+    if (isMissingTableError(error)) {
+      console.warn("daily_memos unavailable, memo not saved to server:", error.message);
+      return;
+    }
+    throw error;
+  }
+}
+
+export async function deleteDailyMemoDb(supabase: SupabaseClient, id: string) {
+  const { error } = await supabase.from("daily_memos").delete().eq("id", id);
   if (error) throw error;
 }
 
@@ -303,10 +495,27 @@ export async function updateProjectColor(
   projectId: string,
   accentColor: string,
 ) {
-  const { error } = await supabase
+  let { error } = await supabase
     .from("projects")
     .update({ accent_color: accentColor })
     .eq("id", projectId);
+  if (error && isMissingColumnError(error, "accent_color")) {
+    ({ error } = await supabase
+      .from("projects")
+      .update({ color: accentColor })
+      .eq("id", projectId));
+  }
+  if (error) throw error;
+}
+
+async function upsertProjectRow(
+  supabase: SupabaseClient,
+  row: ReturnType<typeof mapProjectToDb>,
+) {
+  let { error } = await supabase.from("projects").upsert(row);
+  if (error && isMissingColumnError(error, "accent_color")) {
+    ({ error } = await supabase.from("projects").upsert(toLegacyProjectInsert(row)));
+  }
   if (error) throw error;
 }
 
@@ -316,8 +525,7 @@ export async function upsertProject(
   userId: string,
 ) {
   const row = mapProjectToDb(project, userId);
-  const { error } = await supabase.from("projects").upsert(row);
-  if (error) throw error;
+  await upsertProjectRow(supabase, row);
 }
 
 export async function upsertProjectsBatch(
@@ -327,8 +535,9 @@ export async function upsertProjectsBatch(
 ) {
   if (items.length === 0) return;
   const rows = items.map((item) => mapProjectToDb(item, userId));
-  const { error } = await supabase.from("projects").upsert(rows);
-  if (error) throw error;
+  for (const row of rows) {
+    await upsertProjectRow(supabase, row);
+  }
 }
 
 export async function saveLastViewDate(
@@ -340,7 +549,13 @@ export async function saveLastViewDate(
     user_id: userId,
     last_view_date: date,
   });
-  if (error) throw error;
+  if (error) {
+    if (isMissingTableError(error)) {
+      console.warn("user_preferences unavailable:", error.message);
+      return;
+    }
+    throw error;
+  }
 }
 
 export function projectsToColorMap(projects: AppProject[]): Record<string, string> {
