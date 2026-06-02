@@ -22,6 +22,19 @@ export function buildProjectMaps(projects: AppProject[]) {
   return { idToName, nameToId };
 }
 
+export function resolveProjectId(
+  projectName: string,
+  nameToId: Record<string, string>,
+): string | null {
+  const direct = nameToId[projectName];
+  if (direct) return direct;
+  const lower = projectName.trim().toLowerCase();
+  for (const [name, id] of Object.entries(nameToId)) {
+    if (name.trim().toLowerCase() === lower) return id;
+  }
+  return null;
+}
+
 export function mapDbProject(row: DbProject): AppProject {
   return {
     id: row.id,
@@ -125,7 +138,7 @@ export function mapCaseToDb(
   userId: string,
   nameToId: Record<string, string>,
 ) {
-  const projectId = nameToId[item.project];
+  const projectId = resolveProjectId(item.project, nameToId);
   if (!projectId) {
     throw new Error(`Unknown project: ${item.project}`);
   }
@@ -134,7 +147,6 @@ export function mapCaseToDb(
     user_id: userId,
     project_id: projectId,
     title: item.title,
-    name: item.title,
     status: item.status,
     status_tone: item.statusTone,
     deadline: item.deadline,

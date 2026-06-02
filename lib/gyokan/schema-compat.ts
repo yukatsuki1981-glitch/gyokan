@@ -8,16 +8,40 @@ export function isMissingColumnError(
   column: string,
 ) {
   const msg = error.message?.toLowerCase() ?? "";
-  return (
-    msg.includes(column.toLowerCase()) &&
-    (msg.includes("column") || msg.includes("schema cache"))
-  );
+  const columnIssue =
+    msg.includes("column") ||
+    msg.includes("schema cache") ||
+    error.code === "PGRST204";
+  if (!column) return columnIssue;
+  return columnIssue && msg.includes(column.toLowerCase());
 }
 
 export function isMissingTableError(error: { message?: string; code?: string }) {
   return (
     error.code === "PGRST205" ||
     (error.message?.includes("Could not find the table") ?? false)
+  );
+}
+
+/** Retry upsert with a simpler column set when PostgREST rejects unknown columns. */
+export function isSchemaMismatchError(error: { message?: string; code?: string }) {
+  const msg = error.message?.toLowerCase() ?? "";
+  if (isMissingColumnError(error, "")) return true;
+  return (
+    error.code === "PGRST204" ||
+    msg.includes("could not find the") ||
+    msg.includes("schema cache")
+  );
+}
+
+export function isAuthOrPolicyError(error: { message?: string; code?: string }) {
+  const msg = error.message?.toLowerCase() ?? "";
+  return (
+    msg.includes("permission") ||
+    msg.includes("policy") ||
+    msg.includes("jwt") ||
+    msg.includes("not authenticated") ||
+    error.code === "42501"
   );
 }
 
@@ -146,11 +170,10 @@ export function toLegacyCaseUpsert(row: {
   created_at: string;
   sort_order: number;
 }) {
-  const legacy: Row = {
+  return {
     id: row.id,
     user_id: row.user_id,
     project_id: row.project_id,
-    title: row.title,
     name: row.title,
     deadline: row.deadline,
     progress: row.progress,
@@ -158,5 +181,90 @@ export function toLegacyCaseUpsert(row: {
     created_at: row.created_at,
     sort_order: row.sort_order,
   };
-  return legacy;
+}
+
+export type CaseUpsertRow = {
+  id: string;
+  user_id: string;
+  project_id: string;
+  title: string;
+  status: string;
+  status_tone: string;
+  deadline: string;
+  progress: number;
+  goal: string;
+  subtasks_done: number;
+  subtasks_total: number;
+  comments_count: number;
+  done: boolean;
+  created_at: string;
+  completed_at: string | null;
+  sort_order: number;
+};
+
+export function buildCaseUpsertAttempts(row: CaseUpsertRow): Row[] {
+  const {
+    id,
+    user_id,
+    project_id,
+    title,
+    status,
+    status_tone,
+    deadline,
+    progress,
+    goal,
+    subtasks_done,
+    subtasks_total,
+    comments_count,
+    done,
+    created_at,
+    completed_at,
+    sort_order,
+  } = row;
+
+  const modern = {
+    id,
+    user_id,
+    project_id,
+    title,
+    status,
+    status_tone,
+    deadline,
+    progress,
+    goal,
+    subtasks_done,
+    subtasks_total,
+    comments_count,
+    done,
+    created_at,
+    completed_at,
+    sort_order,
+  };
+
+  const modernWithName = { ...modern, name: title };
+
+  const nameCore = {
+    id,
+    user_id,
+    project_id,
+    name: title,
+    deadline,
+    progress,
+    goal,
+    created_at,
+    sort_order,
+  };
+
+  const nameExtended = {
+    ...nameCore,
+    status,
+    status_tone,
+    done,
+    completed_at,
+    subtasks_done,
+    subtasks_total,
+    comments_count,
+  };
+
+  return [modern, modernWithName, nameExtended, nameCore, toLegacyCaseUpsert(row)];
 }

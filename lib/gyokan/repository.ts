@@ -15,14 +15,16 @@ import {
   newUuid,
 } from "./mappers";
 import {
+  buildCaseUpsertAttempts,
   dedupeProjectsByName,
+  isAuthOrPolicyError,
   isMissingColumnError,
   isMissingTableError,
+  isSchemaMismatchError,
   normalizeCaseRow,
   normalizeProjectRow,
   normalizeTaskRow,
   sortByOrder,
-  toLegacyCaseUpsert,
   toLegacyProjectInsert,
   toLegacyTaskUpsert,
 } from "./schema-compat";
@@ -405,12 +407,19 @@ async function upsertCaseRow(
   supabase: SupabaseClient,
   row: ReturnType<typeof mapCaseToDb>,
 ) {
-  const payload = { ...row, name: row.title };
-  let { error } = await supabase.from("cases").upsert(payload);
-  if (error) {
-    ({ error } = await supabase.from("cases").upsert(toLegacyCaseUpsert(row)));
+  const attempts = buildCaseUpsertAttempts(row);
+  let lastError: { message?: string; code?: string } | null = null;
+
+  for (const payload of attempts) {
+    const { error } = await supabase.from("cases").upsert(payload);
+    if (!error) return;
+    lastError = error;
+    if (isAuthOrPolicyError(error) || !isSchemaMismatchError(error)) {
+      break;
+    }
   }
-  if (error) throw error;
+
+  if (lastError) throw lastError;
 }
 
 export async function upsertCase(

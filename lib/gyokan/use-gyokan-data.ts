@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { User } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/client";
 import { ALL_PROJECTS_LABEL, DEFAULT_PROJECT_ACCENT } from "./constants";
@@ -279,7 +279,8 @@ export function useGyokanData() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange(
+      (event: AuthChangeEvent, session: Session | null) => {
       if (!mounted) return;
       const u = session?.user ?? null;
       setUser(u);
@@ -301,7 +302,8 @@ export function useGyokanData() {
       const silent =
         event !== "INITIAL_SESSION" && initialLoadDoneRef.current;
       scheduleLoad(u.id, silent);
-    });
+      },
+    );
 
     const authFallback = window.setTimeout(() => {
       if (!mounted) return;
@@ -565,7 +567,8 @@ export function useGyokanData() {
     setCases((prev) => {
       const next = assignSortOrders([item, ...prev]);
       casesRef.current = next;
-      void persistCase(item);
+      const toSave = next.find((c) => c.id === item.id) ?? item;
+      void persistCase(toSave);
       return next;
     });
   }, [persistCase]);
