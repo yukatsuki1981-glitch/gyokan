@@ -90,6 +90,7 @@ export function useGyokanData() {
   }, []);
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const [dataReady, setDataReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -283,6 +284,7 @@ export function useGyokanData() {
       const u = session?.user ?? null;
       setUser(u);
       userIdRef.current = u?.id ?? null;
+      setAuthChecked(true);
       setAuthReady(true);
 
       if (!u) {
@@ -303,6 +305,7 @@ export function useGyokanData() {
 
     const authFallback = window.setTimeout(() => {
       if (!mounted) return;
+      setAuthChecked(true);
       setAuthReady(true);
     }, 8000);
 
@@ -707,6 +710,7 @@ export function useGyokanData() {
   return {
     user,
     authReady,
+    authChecked,
     dataReady,
     loadError,
     projects,

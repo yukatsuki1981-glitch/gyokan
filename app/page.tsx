@@ -3512,6 +3512,7 @@ export default function Home() {
   const {
     user,
     authReady,
+    authChecked,
     dataReady,
     loadError,
     projectNames,
@@ -3568,11 +3569,11 @@ export default function Home() {
   }, [tasks, viewingCaseId]);
 
   useEffect(() => {
-    if (!authReady) return;
+    if (!authReady || !authChecked) return;
     if (!user) {
       router.replace("/login");
     }
-  }, [authReady, user, router]);
+  }, [authReady, authChecked, user, router]);
 
   useEffect(() => {
     setViewingCaseId(null);

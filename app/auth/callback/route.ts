@@ -1,8 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
-function getSafeOrigin(request: NextRequest) {
+function getRedirectOrigin(request: NextRequest) {
   const forwardedHost = request.headers.get("x-forwarded-host");
   const forwardedProto = request.headers.get("x-forwarded-proto") ?? "https";
   if (forwardedHost) {
@@ -23,9 +22,10 @@ function getSafeOrigin(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const origin = getSafeOrigin(request);
+  const origin = getRedirectOrigin(request);
   const next = searchParams.get("next") ?? "/";
   const safeNext = next.startsWith("/") ? next : "/";
+  const successUrl = `${origin}${safeNext}`;
 
   const oauthError = searchParams.get("error");
   const oauthDescription = searchParams.get("error_description");
@@ -42,19 +42,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=auth&reason=no_code`);
   }
 
-  const cookieStore = await cookies();
+  // Session cookies must be written on the redirect response (not only via cookies()).
+  let response = NextResponse.redirect(successUrl);
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value),
+          );
+          response = NextResponse.redirect(successUrl);
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options),
+          );
         },
       },
     },
@@ -70,5 +76,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.redirect(`${origin}${safeNext}`);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
 }

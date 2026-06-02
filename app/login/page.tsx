@@ -26,16 +26,31 @@ function LoginForm() {
 
   useEffect(() => {
     const supabase = createClient();
+    let redirected = false;
+    const goHomeIfSignedIn = (hasUser: boolean) => {
+      setChecking(false);
+      if (hasUser && !redirected) {
+        redirected = true;
+        router.replace("/");
+      }
+    };
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setChecking(false);
-      if (session?.user) {
-        router.replace("/");
-      }
+      goHomeIfSignedIn(!!session?.user);
     });
+
+    // After OAuth, cookies may exist before INITIAL_SESSION fires.
+    const sessionProbe = window.setTimeout(() => {
+      void supabase.auth.getSession().then(({ data: { session } }) => {
+        goHomeIfSignedIn(!!session?.user);
+      });
+    }, 100);
+
     const fallback = window.setTimeout(() => setChecking(false), 5000);
     return () => {
+      window.clearTimeout(sessionProbe);
       window.clearTimeout(fallback);
       subscription.unsubscribe();
     };
