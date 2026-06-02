@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
+import { signInWithGoogle } from "./actions";
 
 function LoginForm() {
   const router = useRouter();
@@ -20,6 +21,9 @@ function LoginForm() {
     }
     if (authReason === "session") {
       return "セッションの作成に失敗しました。ページを再読み込みして再度お試しください。";
+    }
+    if (authReason === "no_code") {
+      return "認証コードがありません。もう一度 Google ログインを試してください。";
     }
     return "ログインに失敗しました。Supabase の Redirect URLs と Google 設定を確認してください。";
   })();
@@ -55,14 +59,6 @@ function LoginForm() {
       subscription.unsubscribe();
     };
   }, [router]);
-
-  const signInWithGoogle = async () => {
-    const supabase = createClient();
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: getAuthCallbackUrl() },
-    });
-  };
 
   if (checking) {
     return (
@@ -102,9 +98,9 @@ function LoginForm() {
             )}
           </div>
         )}
+        <form action={signInWithGoogle}>
         <button
-          type="button"
-          onClick={() => void signInWithGoogle()}
+          type="submit"
           className="flex w-full items-center justify-center gap-3 rounded-xl border border-black/[0.08] bg-white px-4 py-3 text-[14px] font-medium text-gray-800 transition-colors hover:bg-gray-50"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>
@@ -115,6 +111,7 @@ function LoginForm() {
           </svg>
           Google でログイン
         </button>
+        </form>
       </div>
     </div>
   );

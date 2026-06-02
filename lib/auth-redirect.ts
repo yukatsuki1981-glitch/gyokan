@@ -19,3 +19,11 @@ export function getAuthRedirectOrigin() {
 export function getAuthCallbackUrl() {
   return `${getAuthRedirectOrigin()}/auth/callback`;
 }
+
+/** Server Actions / Route Handlers (no window). */
+export function getServerAuthCallbackUrl() {
+  const base =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
+    "http://localhost:3000";
+  return `${base}/auth/callback`;
+}
