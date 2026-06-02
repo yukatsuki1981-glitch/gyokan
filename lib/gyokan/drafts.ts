@@ -1,3 +1,4 @@
+import { enrichTaskWithCase, buildCaseById } from "./task-case";
 import type { AppCase, AppMemo, AppTask } from "./types";
 import { formatCaseDeadlineForInput, parseCaseDeadlineInput } from "./date-format";
 
@@ -16,7 +17,7 @@ export type CaseDraftFields = {
 
 export type TaskDraftFields = {
   title: string;
-  project: string;
+  caseId: string;
   date: string;
   dateEnd?: string;
   useRange: boolean;
@@ -83,21 +84,28 @@ export function mergeCasesWithDrafts(cases: AppCase[]): AppCase[] {
   });
 }
 
-export function mergeTasksWithDrafts(tasks: AppTask[]): AppTask[] {
+export function mergeTasksWithDrafts(
+  tasks: AppTask[],
+  cases: AppCase[] = [],
+): AppTask[] {
+  const caseById = buildCaseById(cases);
   return tasks.map((item) => {
     const draft = readDraft<TaskDraftFields>("task", item.id);
-    if (!draft) return item;
+    if (!draft) return enrichTaskWithCase(item, caseById);
     const dateEnd =
       draft.useRange && draft.dateEnd && draft.dateEnd !== draft.date
         ? draft.dateEnd
         : undefined;
-    return {
-      ...item,
-      title: draft.title,
-      project: draft.project,
-      date: draft.date,
-      dateEnd,
-    };
+    return enrichTaskWithCase(
+      {
+        ...item,
+        title: draft.title,
+        caseId: draft.caseId || item.caseId,
+        date: draft.date,
+        dateEnd,
+      },
+      caseById,
+    );
   });
 }
 
@@ -137,7 +145,7 @@ export function taskDraftDiffers(item: AppTask, draft: TaskDraftFields) {
       : undefined;
   return (
     item.title !== draft.title ||
-    item.project !== draft.project ||
+    (item.caseId ?? "") !== draft.caseId ||
     item.date !== draft.date ||
     (item.dateEnd ?? undefined) !== dateEnd
   );

@@ -14,6 +14,11 @@ import {
   type TaskDraftFields,
 } from "@/lib/gyokan/drafts";
 import { useAutosaveForm } from "@/lib/gyokan/use-autosave-form";
+import {
+  caseSelectLabel,
+  pickDefaultCaseId,
+  taskBelongsToProject,
+} from "@/lib/gyokan/task-case";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
 import { useRouter } from "next/navigation";
 import {
@@ -269,12 +274,18 @@ type ProjectColorsContextValue = {
   colors: Record<string, string>;
   setProjectColor: (project: string, accent: string) => void;
   projectOptions: string[];
+  cases: CaseItem[];
+  ongoingCases: CaseItem[];
+  caseTitleById: Record<string, string>;
 };
 
 const ProjectColorsContext = createContext<ProjectColorsContextValue>({
   colors: {},
   setProjectColor: () => {},
   projectOptions: [...PROJECT_OPTIONS_FALLBACK],
+  cases: [],
+  ongoingCases: [],
+  caseTitleById: {},
 });
 
 function useProjectColors() {
@@ -532,6 +543,33 @@ function tagColor(project: string, colors: Record<string, string>) {
 function truncateTagText(text: string, maxLen = 5) {
   if (text.length <= maxLen) return text;
   return `${text.slice(0, maxLen)}...`;
+}
+
+function CaseNameTag({
+  caseId,
+  muted,
+}: {
+  caseId?: string;
+  muted?: boolean;
+}) {
+  const { colors, caseTitleById, cases } = useProjectColors();
+  if (!caseId) return null;
+  const title = caseTitleById[caseId];
+  if (!title) return null;
+  const project = cases.find((c) => c.id === caseId)?.project ?? "";
+  const color = tagColor(project, colors);
+  return (
+    <span
+      className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium"
+      style={
+        muted
+          ? { backgroundColor: "#f3f4f6", color: "#9ca3af" }
+          : { backgroundColor: color.bg, color: color.text }
+      }
+    >
+      {truncateTagText(title)}
+    </span>
+  );
 }
 
 function ProjectNameTag({ name, muted }: { name: string; muted?: boolean }) {
@@ -1289,15 +1327,27 @@ function TaskDetailEditor({
   onClose,
 }: {
   item: Task;
-  onSave: (id: string, data: { title: string; project: string; date: string; dateEnd?: string }) => void;
+  onSave: (
+    id: string,
+    data: { title: string; caseId: string; date: string; dateEnd?: string },
+  ) => void | boolean | Promise<void | boolean>;
   onClose: () => void;
 }) {
-  const { projectOptions } = useProjectColors();
   const itemIdRef = useRef(item.id);
+  const { ongoingCases, cases } = useProjectColors();
+
+  const caseOptions = useMemo(() => {
+    const list = [...ongoingCases];
+    if (item.caseId && !list.some((c) => c.id === item.caseId)) {
+      const current = cases.find((c) => c.id === item.caseId);
+      if (current) list.unshift(current);
+    }
+    return list;
+  }, [ongoingCases, cases, item.caseId]);
 
   const loadTaskFields = useCallback((source: Task): TaskDraftFields => ({
     title: source.title,
-    project: source.project,
+    caseId: source.caseId ?? "",
     date: source.date,
     dateEnd: source.dateEnd ?? "",
     useRange: isRangeTask(source),
@@ -1305,7 +1355,9 @@ function TaskDetailEditor({
 
   const initialDraft = readDraft<TaskDraftFields>("task", item.id);
   const [title, setTitle] = useState(initialDraft?.title ?? item.title);
-  const [project, setProject] = useState(initialDraft?.project ?? item.project);
+  const [caseId, setCaseId] = useState(
+    initialDraft?.caseId ?? item.caseId ?? caseOptions[0]?.id ?? "",
+  );
   const [date, setDate] = useState(initialDraft?.date ?? item.date);
   const [dateEnd, setDateEnd] = useState(initialDraft?.dateEnd ?? item.dateEnd ?? "");
   const [useRange, setUseRange] = useState(initialDraft?.useRange ?? isRangeTask(item));
@@ -1316,7 +1368,7 @@ function TaskDetailEditor({
     const draft = readDraft<TaskDraftFields>("task", item.id);
     const next = draft ?? loadTaskFields(item);
     setTitle(next.title);
-    setProject(next.project);
+    setCaseId(next.caseId);
     setDate(next.date);
     setDateEnd(next.dateEnd ?? "");
     setUseRange(next.useRange);
@@ -1324,29 +1376,29 @@ function TaskDetailEditor({
 
   const formValues = useMemo((): TaskDraftFields => ({
     title,
-    project,
+    caseId,
     date,
     dateEnd,
     useRange,
-  }), [title, project, date, dateEnd, useRange]);
+  }), [title, caseId, date, dateEnd, useRange]);
 
   const formBaseline = useMemo((): TaskDraftFields => ({
     title: item.title,
-    project: item.project,
+    caseId: item.caseId ?? "",
     date: item.date,
     dateEnd: item.dateEnd ?? "",
     useRange: isRangeTask(item),
   }), [item]);
 
   const persistTask = useCallback((values: TaskDraftFields) => {
-    if (!values.title.trim()) return;
+    if (!values.title.trim() || !values.caseId) return false;
     const end =
       values.useRange && values.dateEnd && values.dateEnd !== values.date
         ? values.dateEnd
         : undefined;
-    onSave(item.id, {
+    return onSave(item.id, {
       title: values.title.trim(),
-      project: values.project,
+      caseId: values.caseId,
       date: values.date,
       dateEnd: end,
     });
@@ -1371,11 +1423,15 @@ function TaskDetailEditor({
       <DetailField label="タスク名">
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={fieldInputClass} />
       </DetailField>
-      <DetailField label="プロジェクト">
-        <select value={project} onChange={(e) => setProject(e.target.value)} className={fieldInputClass}>
-          {projectOptions.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
+      <DetailField label="案件">
+        <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={fieldInputClass}>
+          {caseOptions.length === 0 ? (
+            <option value="">進行中の案件がありません</option>
+          ) : (
+            caseOptions.map((c) => (
+              <option key={c.id} value={c.id}>{caseSelectLabel(c)}</option>
+            ))
+          )}
         </select>
       </DetailField>
       {!useRange && (
@@ -2209,7 +2265,7 @@ function TaskRowContent({
       >
         {task.title}
       </p>
-      <ProjectNameTag name={task.project} muted={task.done} />
+      <CaseNameTag caseId={task.caseId} muted={task.done} />
       {isRangeTask(task) && (
         <span className="shrink-0 text-[10px] text-gray-400">{formatTaskPeriod(task)}</span>
       )}
@@ -3303,27 +3359,38 @@ function AddCaseModal({
 function AddTaskModalForm({
   onClose,
   onSubmit,
-  projectOptions,
+  ongoingCases,
   defaultProject,
   defaultDate,
   defaultCaseId,
 }: {
   onClose: () => void;
-  onSubmit: (data: { title: string; project: string; date: string; caseId?: string }) => void;
-  projectOptions: readonly string[];
+  onSubmit: (data: { title: string; date: string; caseId: string }) => void;
+  ongoingCases: CaseItem[];
   defaultProject?: string;
   defaultDate?: string;
   defaultCaseId?: string;
 }) {
+  const casePool = useMemo(
+    () =>
+      defaultProject
+        ? ongoingCases.filter((c) => c.project === defaultProject)
+        : ongoingCases,
+    [ongoingCases, defaultProject],
+  );
   const [title, setTitle] = useState("");
-  const [project, setProject] = useState(defaultProject ?? projectOptions[0] ?? "");
+  const [caseId, setCaseId] = useState(
+    defaultCaseId ?? pickDefaultCaseId(ongoingCases, defaultProject) ?? "",
+  );
   const [date, setDate] = useState(defaultDate ?? todayISO());
 
   useEffect(() => {
-    if (defaultProject) {
-      setProject(defaultProject);
+    if (defaultCaseId) {
+      setCaseId(defaultCaseId);
+      return;
     }
-  }, [defaultProject]);
+    setCaseId(pickDefaultCaseId(ongoingCases, defaultProject) ?? "");
+  }, [defaultCaseId, defaultProject, ongoingCases]);
 
   useEffect(() => {
     if (defaultDate) {
@@ -3332,8 +3399,8 @@ function AddTaskModalForm({
   }, [defaultDate]);
 
   const submit = () => {
-    if (!title.trim() || !project) return;
-    onSubmit({ title: title.trim(), project, date, caseId: defaultCaseId });
+    if (!title.trim() || !caseId) return;
+    onSubmit({ title: title.trim(), date, caseId });
     onClose();
   };
 
@@ -3357,17 +3424,21 @@ function AddTaskModalForm({
           />
         </label>
         <label className="mb-4 block">
-          <span className="mb-2 block text-[12px] font-medium text-gray-400">プロジェクト</span>
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">案件</span>
           <select
-            value={project}
-            onChange={(e) => setProject(e.target.value)}
+            value={caseId}
+            onChange={(e) => setCaseId(e.target.value)}
             className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
           >
-            {projectOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
+            {casePool.length === 0 ? (
+              <option value="">進行中の案件がありません</option>
+            ) : (
+              casePool.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {caseSelectLabel(c)}
+                </option>
+              ))
+            )}
           </select>
         </label>
         <label className="mb-6 block">
@@ -3392,15 +3463,15 @@ function AddTaskModal({
   open,
   onClose,
   onSubmit,
-  projectOptions,
+  ongoingCases,
   defaultProject,
   defaultDate,
   defaultCaseId,
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { title: string; project: string; date: string; caseId?: string }) => void;
-  projectOptions: readonly string[];
+  onSubmit: (data: { title: string; date: string; caseId: string }) => void;
+  ongoingCases: CaseItem[];
   defaultProject?: string;
   defaultDate?: string;
   defaultCaseId?: string;
@@ -3411,7 +3482,7 @@ function AddTaskModal({
       key={`${defaultProject ?? "default"}-${defaultDate ?? "default"}-${defaultCaseId ?? "default"}`}
       onClose={onClose}
       onSubmit={onSubmit}
-      projectOptions={projectOptions}
+      ongoingCases={ongoingCases}
       defaultProject={defaultProject}
       defaultDate={defaultDate}
       defaultCaseId={defaultCaseId}
@@ -3526,15 +3597,6 @@ export default function Home() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const projectColorsValue = useMemo(
-    () => ({
-      colors: projectColors,
-      setProjectColor,
-      projectOptions: projectNames,
-    }),
-    [projectColors, setProjectColor, projectNames],
-  );
-
   const handleRefresh = useCallback(async () => {
     const lastView = await reload();
     if (lastView) setViewDateISO(lastView);
@@ -3547,6 +3609,39 @@ export default function Home() {
   const activeTasks = useMemo(() => viewDateTasks.filter((t) => !t.done), [viewDateTasks]);
   const completedTasks = useMemo(() => viewDateTasks.filter((t) => t.done), [viewDateTasks]);
 
+  const ongoingCases = useMemo(
+    () => cases.filter((c) => !c.done),
+    [cases],
+  );
+
+  const caseById = useMemo(() => {
+    const map: Record<string, CaseItem> = {};
+    for (const item of cases) {
+      map[item.id] = item;
+    }
+    return map;
+  }, [cases]);
+
+  const caseTitleById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const item of cases) {
+      map[item.id] = item.title;
+    }
+    return map;
+  }, [cases]);
+
+  const projectColorsValue = useMemo(
+    () => ({
+      colors: projectColors,
+      setProjectColor,
+      projectOptions: projectNames,
+      cases,
+      ongoingCases,
+      caseTitleById,
+    }),
+    [projectColors, setProjectColor, projectNames, cases, ongoingCases, caseTitleById],
+  );
+
   const incompleteOtherTasks = useMemo(() => {
     if (viewDateISO > todayISO()) {
       return [];
@@ -3555,22 +3650,19 @@ export default function Home() {
       (t) => !t.done && !isRangeTask(t) && t.date < viewDateISO,
     );
     if (!isAllProjects) {
-      list = list.filter((t) => t.project === activeProject);
+      list = list.filter((t) => taskBelongsToProject(t, activeProject, caseById));
     }
     return sortTasksActiveFirst(list);
-  }, [tasks, viewDateISO, activeProject, isAllProjects]);
+  }, [tasks, viewDateISO, activeProject, isAllProjects, caseById]);
 
   const upcomingRangeTasks = useMemo(() => {
     let list = tasks.filter((t) => isActiveRangeTask(t, viewDateISO));
     if (!isAllProjects) {
-      list = list.filter((t) => t.project === activeProject);
+      list = list.filter((t) => taskBelongsToProject(t, activeProject, caseById));
     }
     return list;
-  }, [tasks, viewDateISO, activeProject, isAllProjects]);
-  const ongoingCases = useMemo(
-    () => cases.filter((c) => !c.done),
-    [cases],
-  );
+  }, [tasks, viewDateISO, activeProject, isAllProjects, caseById]);
+
   const completedCasesCount = useMemo(
     () => cases.filter((c) => c.done).length,
     [cases],
@@ -3587,12 +3679,12 @@ export default function Home() {
   const displayedTasks = useMemo(() => {
     let list = viewDateTasks;
     if (!isAllProjects) {
-      list = list.filter((t) => t.project === activeProject);
+      list = list.filter((t) => taskBelongsToProject(t, activeProject, caseById));
     }
     const active = list.filter((t) => !t.done);
     const done = list.filter((t) => t.done);
     return [...active, ...done];
-  }, [viewDateTasks, activeProject, isAllProjects]);
+  }, [viewDateTasks, activeProject, isAllProjects, caseById]);
 
   const goToDate = useCallback((iso: string) => {
     setViewDateISO(iso);
@@ -3624,7 +3716,7 @@ export default function Home() {
       replaceTasks((prev) => {
         let visible = prev.filter((t) => !isRangeTask(t) && t.date === viewDateISO);
         if (!isAllProjects) {
-          visible = visible.filter((t) => t.project === activeProject);
+          visible = visible.filter((t) => taskBelongsToProject(t, activeProject, caseById));
         }
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
@@ -3640,7 +3732,7 @@ export default function Home() {
       replaceTasks((prev) => {
         let visible = prev.filter((t) => isActiveRangeTask(t, viewDateISO));
         if (!isAllProjects) {
-          visible = visible.filter((t) => t.project === activeProject);
+          visible = visible.filter((t) => taskBelongsToProject(t, activeProject, caseById));
         }
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
@@ -3680,10 +3772,9 @@ export default function Home() {
     return ok;
   }, [addProject]);
 
-  const addTask = useCallback((data: { title: string; project: string; date: string; caseId?: string }) => {
+  const addTask = useCallback((data: { title: string; date: string; caseId: string }) => {
     persistAddTask({
       title: data.title,
-      project: data.project,
       time: formatTaskTimeLabel(data.date),
       date: data.date,
       caseId: data.caseId,
@@ -3691,14 +3782,16 @@ export default function Home() {
   }, [persistAddTask]);
 
   const updateTask = useCallback(
-    (id: string, data: { title: string; project: string; date: string; dateEnd?: string }) => {
+    (id: string, data: { title: string; caseId: string; date: string; dateEnd?: string }) => {
+      const linked = caseById[data.caseId];
       replaceTasks((prev) =>
         prev.map((t) => {
           if (t.id !== id) return t;
           const next: Task = {
             ...t,
             title: data.title,
-            project: data.project,
+            caseId: data.caseId,
+            project: linked?.project ?? t.project,
             date: data.date,
             dateEnd: data.dateEnd,
           };
@@ -3717,7 +3810,7 @@ export default function Home() {
         }),
       );
     },
-    [replaceTasks],
+    [replaceTasks, caseById],
   );
 
   const toggleTask = useCallback((id: string) => {
@@ -4217,7 +4310,7 @@ export default function Home() {
         open={taskModalOpen}
         onClose={closeAddTaskModal}
         onSubmit={addTask}
-        projectOptions={projectNames.length > 0 ? projectNames : ["未入力"]}
+        ongoingCases={ongoingCases}
         defaultProject={taskModalDefaultProject}
         defaultDate={taskModalDefaultDate}
         defaultCaseId={taskModalDefaultCaseId}

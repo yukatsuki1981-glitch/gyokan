@@ -26,6 +26,7 @@ import {
   toLegacyProjectInsert,
   toLegacyTaskUpsert,
 } from "./schema-compat";
+import { enrichTaskWithCase } from "./task-case";
 import type {
   AppCase,
   AppDailyMemo,
@@ -254,11 +255,15 @@ export async function fetchGyokanData(
   }
 
   const { idToName } = buildProjectMaps(projects);
+  const cases = caseRows.map((r) => mapDbCase(r, idToName));
+  const caseById = Object.fromEntries(cases.map((c) => [c.id, c]));
 
   return {
     projects,
-    tasks: taskRows.map((r) => mapDbTask(r, idToName)),
-    cases: caseRows.map((r) => mapDbCase(r, idToName)),
+    tasks: taskRows.map((r) =>
+      enrichTaskWithCase(mapDbTask(r, idToName), caseById),
+    ),
+    cases,
     memos: memoRows.map((r) => mapDbMemo(r, idToName)),
     dailyMemos: dailyMemoRows.map(mapDbDailyMemo),
     lastViewDate,
@@ -385,8 +390,9 @@ export async function upsertTask(
   task: AppTask,
   userId: string,
   nameToId: Record<string, string>,
+  caseById: Record<string, AppCase> = {},
 ) {
-  const row = mapTaskToDb(task, userId, nameToId);
+  const row = mapTaskToDb(task, userId, nameToId, caseById);
   await upsertTaskRow(supabase, row);
 }
 
@@ -399,13 +405,9 @@ async function upsertCaseRow(
   supabase: SupabaseClient,
   row: ReturnType<typeof mapCaseToDb>,
 ) {
-  let { error } = await supabase.from("cases").upsert(row);
-  if (
-    error &&
-    (isMissingColumnError(error, "title") ||
-      isMissingColumnError(error, "status") ||
-      isMissingColumnError(error, "status_tone"))
-  ) {
+  const payload = { ...row, name: row.title };
+  let { error } = await supabase.from("cases").upsert(payload);
+  if (error) {
     ({ error } = await supabase.from("cases").upsert(toLegacyCaseUpsert(row)));
   }
   if (error) throw error;
@@ -439,9 +441,10 @@ export async function upsertTasksBatch(
   items: AppTask[],
   userId: string,
   nameToId: Record<string, string>,
+  caseById: Record<string, AppCase> = {},
 ) {
   if (items.length === 0) return;
-  const rows = items.map((item) => mapTaskToDb(item, userId, nameToId));
+  const rows = items.map((item) => mapTaskToDb(item, userId, nameToId, caseById));
   for (const row of rows) {
     await upsertTaskRow(supabase, row);
   }

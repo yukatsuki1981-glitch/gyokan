@@ -6,6 +6,7 @@ import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/client";
 import { ALL_PROJECTS_LABEL, DEFAULT_PROJECT_ACCENT } from "./constants";
 import { buildProjectMaps, newUuid } from "./mappers";
+import { buildCaseById, enrichTaskWithCase } from "./task-case";
 import { parseCaseDeadlineInput } from "./date-format";
 import {
   assignSortOrders,
@@ -100,6 +101,7 @@ export function useGyokanData() {
   const [lastViewDate, setLastViewDate] = useState<string | null>(null);
 
   const nameToIdRef = useRef<Record<string, string>>({});
+  const casesRef = useRef<AppCase[]>([]);
   const userIdRef = useRef<string | null>(null);
   const viewDateSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDoneRef = useRef(false);
@@ -152,15 +154,18 @@ export function useGyokanData() {
         draft.useRange && draft.dateEnd && draft.dateEnd !== draft.date
           ? draft.dateEnd
           : undefined;
-      const merged: AppTask = {
-        ...item,
-        title: draft.title,
-        project: draft.project,
-        date: draft.date,
-        dateEnd,
-      };
+      const merged = enrichTaskWithCase(
+        {
+          ...item,
+          title: draft.title,
+          caseId: draft.caseId || item.caseId,
+          date: draft.date,
+          dateEnd,
+        },
+        buildCaseById(casesRef.current),
+      );
       try {
-        await upsertTask(supabase, merged, uid, nameToId);
+        await upsertTask(supabase, merged, uid, nameToId, buildCaseById(casesRef.current));
         clearDraft("task", item.id);
       } catch (err) {
         console.error("Failed to flush task draft", err);
@@ -231,8 +236,10 @@ export function useGyokanData() {
       const data = await fetchGyokanData(getSupabase(), uid);
       setProjects(data.projects);
       syncMaps(data.projects);
-      setTasks(mergeTasksWithDrafts(data.tasks));
-      setCases(mergeCasesWithDrafts(data.cases));
+      const mergedCases = mergeCasesWithDrafts(data.cases);
+      setCases(mergedCases);
+      casesRef.current = mergedCases;
+      setTasks(mergeTasksWithDrafts(data.tasks, mergedCases));
       setMemos(mergeMemosWithDrafts(data.memos));
       const mergedDailyMemos = mergeDailyMemosWithPending(data.dailyMemos);
       const consolidatedDailyMemos = consolidateDailyMemosByDate(mergedDailyMemos);
@@ -296,7 +303,13 @@ export function useGyokanData() {
     const uid = userIdRef.current;
     if (!uid) return false;
     try {
-      await upsertTask(getSupabase(), task, uid, nameToIdRef.current);
+      await upsertTask(
+        getSupabase(),
+        task,
+        uid,
+        nameToIdRef.current,
+        buildCaseById(casesRef.current),
+      );
       clearDraft("task", task.id);
       return true;
     } catch (err) {
@@ -309,7 +322,13 @@ export function useGyokanData() {
     const uid = userIdRef.current;
     if (!uid) return;
     try {
-      await upsertTasksBatch(getSupabase(), list, uid, nameToIdRef.current);
+      await upsertTasksBatch(
+        getSupabase(),
+        list,
+        uid,
+        nameToIdRef.current,
+        buildCaseById(casesRef.current),
+      );
     } catch (err) {
       console.error("Failed to save tasks", err);
     }
@@ -445,17 +464,24 @@ export function useGyokanData() {
     });
   }, [persistProjects, syncMaps]);
 
-  const addTask = useCallback((data: { title: string; project: string; time: string; date: string; caseId?: string }) => {
-    const task: AppTask = {
-      id: newUuid(),
-      title: data.title,
-      time: data.time,
-      date: data.date,
-      done: false,
-      project: data.project,
-      caseId: data.caseId,
-      sortOrder: 0,
-    };
+  const addTask = useCallback((data: { title: string; time: string; date: string; caseId: string }) => {
+    const caseById = buildCaseById(casesRef.current);
+    const linked = caseById[data.caseId];
+    if (!linked) return;
+
+    const task = enrichTaskWithCase(
+      {
+        id: newUuid(),
+        title: data.title,
+        time: data.time,
+        date: data.date,
+        done: false,
+        project: linked.project,
+        caseId: data.caseId,
+        sortOrder: 0,
+      },
+      caseById,
+    );
     setTasks((prev) => {
       const next = assignSortOrders([task, ...prev]);
       void persistTasks(next);
@@ -463,9 +489,15 @@ export function useGyokanData() {
     });
   }, [persistTasks]);
 
-  const updateTask = useCallback((id: string, patch: Partial<AppTask> & { title: string; project: string; date: string; dateEnd?: string }) => {
+  const updateTask = useCallback((
+    id: string,
+    patch: Partial<AppTask> & { title: string; caseId: string; date: string; dateEnd?: string },
+  ) => {
     setTasks((prev) => {
-      const next = prev.map((t) => (t.id === id ? { ...t, ...patch } : t));
+      const next = prev.map((t) => {
+        if (t.id !== id) return t;
+        return enrichTaskWithCase({ ...t, ...patch }, buildCaseById(casesRef.current));
+      });
       const updated = next.find((t) => t.id === id);
       if (updated) void persistTask(updated);
       return next;
@@ -515,6 +547,7 @@ export function useGyokanData() {
     };
     setCases((prev) => {
       const next = assignSortOrders([item, ...prev]);
+      casesRef.current = next;
       void persistCase(item);
       return next;
     });
@@ -535,6 +568,7 @@ export function useGyokanData() {
     setCases((prev) => {
       const next = prev.map((c) => (c.id === id ? { ...c, ...data } : c));
       updated = next.find((c) => c.id === id);
+      casesRef.current = next;
       return next;
     });
     if (!updated) return Promise.resolve(false);
@@ -554,6 +588,7 @@ export function useGyokanData() {
       });
       const updated = next.find((c) => c.id === id);
       if (updated) void persistCase(updated);
+      casesRef.current = next;
       return next;
     });
   }, [persistCase]);
@@ -561,6 +596,7 @@ export function useGyokanData() {
   const replaceCases = useCallback((updater: (prev: AppCase[]) => AppCase[]) => {
     setCases((prev) => {
       const next = assignSortOrders(updater(prev));
+      casesRef.current = next;
       void persistCases(next);
       return next;
     });

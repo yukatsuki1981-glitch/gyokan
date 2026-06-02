@@ -150,6 +150,7 @@ export function toLegacyCaseUpsert(row: {
     id: row.id,
     user_id: row.user_id,
     project_id: row.project_id,
+    title: row.title,
     name: row.title,
     deadline: row.deadline,
     progress: row.progress,

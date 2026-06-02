@@ -101,11 +101,14 @@ export function mapTaskToDb(
   task: AppTask,
   userId: string,
   nameToId: Record<string, string>,
+  caseById: Record<string, AppCase> = {},
 ) {
+  const projectName =
+    (task.caseId && caseById[task.caseId]?.project) || task.project;
   return {
     id: task.id,
     user_id: userId,
-    project_id: nameToId[task.project] ?? null,
+    project_id: nameToId[projectName] ?? null,
     case_id: task.caseId ?? null,
     title: task.title,
     time_label: task.time,
@@ -131,6 +134,7 @@ export function mapCaseToDb(
     user_id: userId,
     project_id: projectId,
     title: item.title,
+    name: item.title,
     status: item.status,
     status_tone: item.statusTone,
     deadline: item.deadline,
