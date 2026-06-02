@@ -26,13 +26,19 @@ function LoginForm() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setChecking(false);
       if (session?.user) {
         router.replace("/");
-        return;
       }
-      setChecking(false);
     });
+    const fallback = window.setTimeout(() => setChecking(false), 5000);
+    return () => {
+      window.clearTimeout(fallback);
+      subscription.unsubscribe();
+    };
   }, [router]);
 
   const signInWithGoogle = async () => {

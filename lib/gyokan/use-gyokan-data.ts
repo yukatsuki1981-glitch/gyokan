@@ -267,19 +267,24 @@ export function useGyokanData() {
     let mounted = true;
     const supabase = getSupabase();
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Do not call getSession() here — running it alongside onAuthStateChange and
+    // then issuing Supabase queries from the callback can deadlock auth (issue #762).
+    const scheduleLoad = (uid: string, silent: boolean) => {
+      window.setTimeout(() => {
+        if (!mounted) return;
+        void loadData(uid, { silent });
+      }, 0);
+    };
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       const u = session?.user ?? null;
       setUser(u);
       userIdRef.current = u?.id ?? null;
       setAuthReady(true);
-      if (u) void loadData(u.id);
-    });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      userIdRef.current = u?.id ?? null;
       if (!u) {
         setProjects([]);
         setTasks([]);
@@ -287,14 +292,23 @@ export function useGyokanData() {
         setMemos([]);
         setDailyMemos([]);
         setDataReady(false);
+        initialLoadDoneRef.current = false;
         return;
       }
-      if (event === "INITIAL_SESSION") return;
-      void loadData(u.id, { silent: true });
+
+      const silent =
+        event !== "INITIAL_SESSION" && initialLoadDoneRef.current;
+      scheduleLoad(u.id, silent);
     });
+
+    const authFallback = window.setTimeout(() => {
+      if (!mounted) return;
+      setAuthReady(true);
+    }, 8000);
 
     return () => {
       mounted = false;
+      window.clearTimeout(authFallback);
       subscription.unsubscribe();
     };
   }, [getSupabase, loadData]);

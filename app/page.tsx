@@ -3863,8 +3863,13 @@ export default function Home() {
 
   if (!isClient || !authReady || (user && !dataReady)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#fafafa]">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#fafafa] px-6">
         <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
+        {loadError && (
+          <p className="max-w-sm text-center text-[13px] text-red-600">
+            データの読み込みに問題があります: {loadError}
+          </p>
+        )}
       </div>
     );
   }
