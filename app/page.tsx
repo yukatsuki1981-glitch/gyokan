@@ -513,7 +513,7 @@ function calendarDayCellClass(
   isToday: boolean,
 ) {
   if (isSelected) return "bg-blue-500 text-white";
-  if (isToday) return "bg-blue-100 text-blue-600";
+  if (isToday && inMonth) return "bg-blue-100 text-blue-600";
   if (!inMonth) return "text-gray-300";
   if (dayOfWeek === 0) return "text-rose-500 hover:bg-rose-50";
   if (dayOfWeek === 6) return "text-blue-500 hover:bg-blue-50";
@@ -2156,21 +2156,21 @@ function TodayTasksSection({
 }) {
   return (
     <section className={`mb-4 ${className}`}>
-      <div className="mb-2 flex items-center justify-between gap-4">
-        <div className="flex min-w-0 items-baseline gap-3">
-          <h3 className="shrink-0 text-[17px] font-semibold tracking-tight text-gray-900">
+      <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-hidden">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+          <h3 className="min-w-0 truncate text-[15px] font-semibold tracking-tight text-gray-900">
             {taskSectionLabel(viewDateISO)}
           </h3>
-          <span className="text-[13px] text-gray-400">
-            未完了 {activeTaskCount}件 · 完了 {completedTaskCount}件
+          <span className="shrink-0 whitespace-nowrap text-[11px] text-gray-400">
+            未完了{activeTaskCount}件·完了{completedTaskCount}件
           </span>
         </div>
         <button
           type="button"
           onClick={onAddTask}
-          className="shrink-0 text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
+          className="shrink-0 whitespace-nowrap text-[11px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF] sm:text-[13px]"
         >
-          ＋ タスクを追加
+          ＋タスク追加
         </button>
       </div>
 
@@ -2400,7 +2400,6 @@ function CalendarWidget({
 }) {
   const selected = new Date(selectedDate + "T12:00:00");
   const [viewDate, setViewDate] = useState(() => selected);
-  const today = new Date();
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const grid = getCalendarGrid(year, month);
@@ -2409,23 +2408,8 @@ function CalendarWidget({
     month: "long",
   }).format(viewDate);
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
-  const isViewingToday =
-    today.getFullYear() === year && today.getMonth() === month;
 
-  const taskDaysInMonth = useMemo(() => {
-    const set = new Set<number>();
-    tasks.forEach((t) => {
-      const addDay = (iso: string) => {
-        const d = new Date(iso + "T12:00:00");
-        if (d.getFullYear() === year && d.getMonth() === month) {
-          set.add(d.getDate());
-        }
-      };
-      addDay(t.date);
-      if (t.dateEnd) addDay(t.dateEnd);
-    });
-    return set;
-  }, [tasks, year, month]);
+  const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
 
   const goPrev = () => setViewDate(new Date(year, month - 1, 1));
   const goNext = () => setViewDate(new Date(year, month + 1, 1));
@@ -2467,19 +2451,17 @@ function CalendarWidget({
 
       <div className="grid grid-cols-7 gap-0">
         {grid.map((cell, i) => {
-          const cellIso = cell.inMonth ? isoDate(new Date(year, month, cell.day)) : null;
-          const isToday =
-            isViewingToday && cell.inMonth && cell.day === today.getDate();
+          const cellIso = getGridCellIso(year, month, i);
+          const isToday = cellIso === todayISO();
           const isSelected = cellIso === selectedDate;
-          const hasTask = cell.inMonth && taskDaysInMonth.has(cell.day);
+          const hasTask = (tasksByDate.get(cellIso) ?? []).length > 0;
           const dayOfWeek = i % 7;
 
           return (
             <button
               key={`${i}-${cell.day}-${cell.inMonth}`}
               type="button"
-              disabled={!cell.inMonth}
-              onClick={() => cellIso && onSelectDate(cellIso)}
+              onClick={() => onSelectDate(cellIso)}
               className={`relative flex h-7 items-center justify-center rounded-full text-[11px] font-medium leading-none transition-all duration-200 ${calendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
             >
               {cell.day}
@@ -2543,7 +2525,7 @@ function MobileCalendarDayCell({
   onSelect: (iso: string) => void;
 }) {
   const { colors } = useProjectColors();
-  const cellIso = cell.inMonth ? isoDate(new Date(year, month, cell.day)) : null;
+  const cellIso = getGridCellIso(year, month, cellIndex);
   const isSelected = cellIso === selectedDate;
   const isToday = cellIso === todayISO();
   const dayOfWeek = cellIndex % 7;
@@ -2553,13 +2535,12 @@ function MobileCalendarDayCell({
   return (
     <button
       type="button"
-      disabled={!cell.inMonth}
-      onClick={() => cellIso && onSelect(cellIso)}
+      onClick={() => onSelect(cellIso)}
       className={`relative flex flex-col border-b border-r border-black/[0.04] p-0.5 text-left transition-colors ${mobileCalendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
       style={{ height: CALENDAR_CELL_ROW_H, touchAction: "pan-x" }}
     >
       <span className="shrink-0 px-0.5 text-[11px] font-semibold leading-none">{cell.day}</span>
-      {cell.inMonth && preview.length > 0 && (
+      {preview.length > 0 && (
         <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-px overflow-hidden">
           {preview.map((task, i) => {
             const taskColor = getProjectColor(colors[task.project]);
@@ -2848,8 +2829,8 @@ function MobileCalendarWidget({
     year: number,
     month: number,
   ) => {
-    const cellIso = cell.inMonth ? isoDate(new Date(year, month, cell.day)) : null;
-    const dayTasks = cellIso ? tasksByDate.get(cellIso) ?? [] : [];
+    const cellIso = getGridCellIso(year, month, cellIndex);
+    const dayTasks = tasksByDate.get(cellIso) ?? [];
 
     return (
       <MobileCalendarDayCell
@@ -2930,10 +2911,11 @@ function MobileCalendarWidget({
           touchAction: "pan-x pinch-zoom",
         }}
       >
-        {months.map(({ year, month }) => {
+        {months.map(({ year, month }, monthIdx) => {
           const grid = getCalendarGrid(year, month);
           const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
           const isFocusMonth = monthKey === selectedMonthKey;
+          const monthPanelBg = monthIdx % 2 === 0 ? "bg-white" : "bg-gray-50";
           const weekCount = getMonthWeekCount(year, month);
           const peekRowOffset =
             isPeek && isFocusMonth
@@ -2949,7 +2931,7 @@ function MobileCalendarWidget({
           return (
             <div
               key={`${year}-${month}`}
-              className="box-border h-full min-w-full flex-[0_0_100%] shrink-0 overflow-hidden px-0.5 py-2"
+              className={`box-border h-full min-w-full flex-[0_0_100%] shrink-0 overflow-hidden px-0.5 py-2 ${monthPanelBg}`}
             >
               {renderMonthHeader(year, month, monthLabel)}
               {weekdayHeader(year, month)}
