@@ -2606,16 +2606,31 @@ function MobileCalendarWidget({
   const peekSuppressClickRef = useRef(false);
   const lastScrolledMonthRef = useRef<string | null>(null);
   const gestureStartMonthIdxRef = useRef(0);
+  const gestureStartScrollLeftRef = useRef(0);
+  const gestureDeltaXRef = useRef(0);
 
   const isPeek = peekMode && !peekEngaged;
   const PEEK_WEEKS = 3;
   const PEEK_GRID_H = CALENDAR_CELL_ROW_H * PEEK_WEEKS;
   const PEEK_HEADER_H = 58;
-  const PEEK_WRAP_H = PEEK_HEADER_H + PEEK_GRID_H;
+  const MONTH_PANEL_Y_PAD = 16;
+  const PEEK_WRAP_H = PEEK_HEADER_H + PEEK_GRID_H + MONTH_PANEL_Y_PAD;
+  const SWIPE_MONTH_THRESHOLD_PX = 8;
   const selectedMonthKey = selectedDate.slice(0, 7);
 
   const months = useMemo(() => buildMonthRange(selectedDate, 12, 12), [selectedDate]);
   const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
+
+  const selectedMonthIdx = useMemo(() => {
+    const idx = getMonthIndexInRange(selectedDate, months);
+    return idx >= 0 ? idx : 0;
+  }, [selectedDate, months]);
+
+  const [visibleMonthIdx, setVisibleMonthIdx] = useState(0);
+
+  useLayoutEffect(() => {
+    setVisibleMonthIdx(selectedMonthIdx);
+  }, [selectedMonthIdx]);
 
   const getMonthIndexFromScroll = useCallback(() => {
     const strip = horizontalRef.current;
@@ -2628,6 +2643,7 @@ function MobileCalendarWidget({
       const strip = horizontalRef.current;
       if (!strip || strip.clientWidth <= 0) return;
       const clamped = Math.max(0, Math.min(months.length - 1, idx));
+      setVisibleMonthIdx(clamped);
       const left = clamped * strip.clientWidth;
       if (behavior === "smooth") {
         strip.scrollTo({ left, behavior: "smooth" });
@@ -2647,19 +2663,37 @@ function MobileCalendarWidget({
     [months, scrollToMonthIndex],
   );
 
+  const resolveGestureTargetMonth = useCallback(() => {
+    const strip = horizontalRef.current;
+    if (!strip) return gestureStartMonthIdxRef.current;
+
+    const startIdx = gestureStartMonthIdxRef.current;
+    const touchDx = gestureDeltaXRef.current;
+    const scrollDelta = strip.scrollLeft - gestureStartScrollLeftRef.current;
+
+    let dir = 0;
+    if (Math.abs(touchDx) >= SWIPE_MONTH_THRESHOLD_PX) {
+      dir = touchDx > 0 ? 1 : -1;
+    } else if (Math.abs(scrollDelta) >= SWIPE_MONTH_THRESHOLD_PX) {
+      dir = scrollDelta > 0 ? 1 : -1;
+    } else if (touchDx !== 0 || scrollDelta !== 0) {
+      dir = (touchDx || scrollDelta) > 0 ? 1 : -1;
+    }
+
+    if (dir === 0) return startIdx;
+
+    const targetIdx = Math.max(
+      0,
+      Math.min(months.length - 1, Math.max(startIdx - 1, Math.min(startIdx + 1, startIdx + dir))),
+    );
+    return targetIdx;
+  }, [months.length]);
+
   const snapToGestureMonth = useCallback(
     (behavior: ScrollBehavior = "smooth") => {
-      const strip = horizontalRef.current;
-      if (!strip || strip.clientWidth <= 0) return;
-      const startIdx = gestureStartMonthIdxRef.current;
-      const rawIdx = Math.round(strip.scrollLeft / strip.clientWidth);
-      let targetIdx = rawIdx;
-      if (targetIdx > startIdx + 1) targetIdx = startIdx + 1;
-      if (targetIdx < startIdx - 1) targetIdx = startIdx - 1;
-      targetIdx = Math.max(0, Math.min(months.length - 1, targetIdx));
-      scrollToMonthIndex(targetIdx, behavior);
+      scrollToMonthIndex(resolveGestureTargetMonth(), behavior);
     },
-    [months.length, scrollToMonthIndex],
+    [resolveGestureTargetMonth, scrollToMonthIndex],
   );
 
   const goToday = useCallback(() => {
@@ -2722,7 +2756,9 @@ function MobileCalendarWidget({
       tracking = true;
       didDrag = false;
       peekSuppressClickRef.current = false;
+      gestureDeltaXRef.current = 0;
       gestureStartMonthIdxRef.current = getMonthIndexFromScroll();
+      gestureStartScrollLeftRef.current = strip.scrollLeft;
       engagePeek();
     };
 
@@ -2738,6 +2774,7 @@ function MobileCalendarWidget({
 
       if (Math.abs(dx) >= Math.abs(dy)) {
         didDrag = true;
+        gestureDeltaXRef.current = dx;
         peekSuppressClickRef.current = true;
         engagePeek();
       }
@@ -2774,6 +2811,8 @@ function MobileCalendarWidget({
 
     const onPointerDown = () => {
       gestureStartMonthIdxRef.current = getMonthIndexFromScroll();
+      gestureStartScrollLeftRef.current = strip.scrollLeft;
+      gestureDeltaXRef.current = 0;
     };
 
     const onScrollEnd = () => {
@@ -2864,23 +2903,31 @@ function MobileCalendarWidget({
     </div>
   );
 
+  const visibleMonth = months[visibleMonthIdx] ?? months[selectedMonthIdx];
+  const visibleWeekCount = visibleMonth
+    ? getMonthWeekCount(visibleMonth.year, visibleMonth.month)
+    : 5;
+  const engagedWrapH =
+    PEEK_HEADER_H + visibleWeekCount * CALENDAR_CELL_ROW_H + MONTH_PANEL_Y_PAD;
+  const calendarShellH = isPeek ? PEEK_WRAP_H : engagedWrapH;
+
   return (
     <div
       data-mobile-calendar
-      className="relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04] transition-[max-height] duration-300 ease-out"
+      className="relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04] transition-[height,max-height] duration-300 ease-out"
       style={{
-        maxHeight: isPeek ? `${PEEK_WRAP_H}px` : undefined,
+        height: `${calendarShellH}px`,
+        maxHeight: `${calendarShellH}px`,
         touchAction: "pan-x pinch-zoom",
       }}
       onPointerDown={engagePeek}
     >
       <div
         ref={horizontalRef}
-        className="flex w-full overflow-x-auto overscroll-x-contain snap-x snap-mandatory scrollbar-none"
+        className="flex h-full w-full overflow-x-auto overscroll-x-contain scrollbar-none"
         style={{
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-x pinch-zoom",
-          scrollSnapType: "x mandatory",
         }}
       >
         {months.map(({ year, month }) => {
@@ -2902,8 +2949,7 @@ function MobileCalendarWidget({
           return (
             <div
               key={`${year}-${month}`}
-              className="box-border min-w-full flex-[0_0_100%] shrink-0 snap-center px-0.5 py-2"
-              style={{ scrollSnapAlign: "center", scrollSnapStop: "always" }}
+              className="box-border h-full min-w-full flex-[0_0_100%] shrink-0 overflow-hidden px-0.5 py-2"
             >
               {renderMonthHeader(year, month, monthLabel)}
               {weekdayHeader(year, month)}
