@@ -133,6 +133,13 @@ export function mapTaskToDb(
   };
 }
 
+const VALID_STATUS_TONES = new Set<AppCase["statusTone"]>([
+  "blue",
+  "amber",
+  "emerald",
+  "violet",
+]);
+
 export function mapCaseToDb(
   item: AppCase,
   userId: string,
@@ -142,13 +149,16 @@ export function mapCaseToDb(
   if (!projectId) {
     throw new Error(`Unknown project: ${item.project}`);
   }
+  const statusTone = VALID_STATUS_TONES.has(item.statusTone)
+    ? item.statusTone
+    : "emerald";
   return {
     id: item.id,
     user_id: userId,
     project_id: projectId,
-    title: item.title,
-    status: item.status,
-    status_tone: item.statusTone,
+    title: item.title.trim() || "（無題）",
+    status: item.status || "情報収集中",
+    status_tone: statusTone,
     deadline: item.deadline,
     progress: item.progress,
     goal: item.goal,

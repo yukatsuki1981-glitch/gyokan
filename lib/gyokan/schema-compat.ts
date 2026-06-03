@@ -266,5 +266,5 @@ export function buildCaseUpsertAttempts(row: CaseUpsertRow): Row[] {
     comments_count,
   };
 
-  return [modern, modernWithName, nameExtended, nameCore, toLegacyCaseUpsert(row)];
+  return [nameCore, toLegacyCaseUpsert(row), modern, modernWithName, nameExtended];
 }

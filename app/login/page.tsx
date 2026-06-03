@@ -1,10 +1,10 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { signInWithGoogle } from "./actions";
 
 function LoginForm() {
   const router = useRouter();
@@ -41,20 +41,14 @@ function LoginForm() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      goHomeIfSignedIn(!!session?.user);
-    });
-
-    // After OAuth, cookies may exist before INITIAL_SESSION fires.
-    const sessionProbe = window.setTimeout(() => {
-      void supabase.auth.getSession().then(({ data: { session } }) => {
+    } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
         goHomeIfSignedIn(!!session?.user);
-      });
-    }, 100);
+      },
+    );
 
     const fallback = window.setTimeout(() => setChecking(false), 5000);
     return () => {
-      window.clearTimeout(sessionProbe);
       window.clearTimeout(fallback);
       subscription.unsubscribe();
     };
@@ -98,9 +92,8 @@ function LoginForm() {
             )}
           </div>
         )}
-        <form action={signInWithGoogle}>
-        <button
-          type="submit"
+        <a
+          href="/auth/login/google"
           className="flex w-full items-center justify-center gap-3 rounded-xl border border-black/[0.08] bg-white px-4 py-3 text-[14px] font-medium text-gray-800 transition-colors hover:bg-gray-50"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>
@@ -110,8 +103,7 @@ function LoginForm() {
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
           </svg>
           Google でログイン
-        </button>
-        </form>
+        </a>
       </div>
     </div>
   );

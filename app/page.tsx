@@ -15,6 +15,11 @@ import {
 } from "@/lib/gyokan/drafts";
 import { useAutosaveForm } from "@/lib/gyokan/use-autosave-form";
 import {
+  parseCaseCreatedAt,
+  sortCasesByProjectOrder,
+  sortTasksInCase,
+} from "@/lib/gyokan/case-order";
+import {
   caseSelectLabel,
   pickDefaultCaseId,
   taskBelongsToProject,
@@ -301,17 +306,11 @@ function formatCaseDate(date: Date) {
   return `${y}.${m}.${d}`;
 }
 
-function parseCaseCreatedAt(createdAt: string) {
-  const normalized = createdAt.replace(/\./g, "-").replace(/\//g, "-");
-  const [y, m, d] = normalized.split("-").map(Number);
-  if (!y || !m || !d) return 0;
-  return new Date(y, m - 1, d).getTime();
-}
-
 function sortProjectCases(list: CaseItem[]) {
   return [...list].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
-    return parseCaseCreatedAt(b.createdAt) - parseCaseCreatedAt(a.createdAt);
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return parseCaseCreatedAt(a.createdAt) - parseCaseCreatedAt(b.createdAt);
   });
 }
 
@@ -346,7 +345,7 @@ function buildProjectTimeline(
     const aDone = a.kind === "case" ? a.done : false;
     const bDone = b.kind === "case" ? b.done : false;
     if (aDone !== bDone) return aDone ? 1 : -1;
-    return b.sortDate - a.sortDate;
+    return a.sortDate - b.sortDate;
   });
 }
 
@@ -3360,37 +3359,48 @@ function AddTaskModalForm({
   onClose,
   onSubmit,
   ongoingCases,
+  projectOptions,
   defaultProject,
   defaultDate,
   defaultCaseId,
 }: {
   onClose: () => void;
-  onSubmit: (data: { title: string; date: string; caseId: string }) => void;
+  onSubmit: (data: {
+    title: string;
+    date: string;
+    project: string;
+    caseId?: string;
+  }) => void;
   ongoingCases: CaseItem[];
+  projectOptions: readonly string[];
   defaultProject?: string;
   defaultDate?: string;
   defaultCaseId?: string;
 }) {
-  const casePool = useMemo(
-    () =>
-      defaultProject
-        ? ongoingCases.filter((c) => c.project === defaultProject)
-        : ongoingCases,
-    [ongoingCases, defaultProject],
-  );
   const [title, setTitle] = useState("");
-  const [caseId, setCaseId] = useState(
-    defaultCaseId ?? pickDefaultCaseId(ongoingCases, defaultProject) ?? "",
+  const [project, setProject] = useState(
+    defaultProject ?? projectOptions[0] ?? "",
   );
+  const casePool = useMemo(
+    () => ongoingCases.filter((c) => c.project === project),
+    [ongoingCases, project],
+  );
+  const [caseId, setCaseId] = useState(defaultCaseId ?? "");
   const [date, setDate] = useState(defaultDate ?? todayISO());
+
+  useEffect(() => {
+    if (defaultProject) {
+      setProject(defaultProject);
+    }
+  }, [defaultProject]);
 
   useEffect(() => {
     if (defaultCaseId) {
       setCaseId(defaultCaseId);
       return;
     }
-    setCaseId(pickDefaultCaseId(ongoingCases, defaultProject) ?? "");
-  }, [defaultCaseId, defaultProject, ongoingCases]);
+    setCaseId("");
+  }, [defaultCaseId, project]);
 
   useEffect(() => {
     if (defaultDate) {
@@ -3399,8 +3409,13 @@ function AddTaskModalForm({
   }, [defaultDate]);
 
   const submit = () => {
-    if (!title.trim() || !caseId) return;
-    onSubmit({ title: title.trim(), date, caseId });
+    if (!title.trim() || !project) return;
+    onSubmit({
+      title: title.trim(),
+      date,
+      project,
+      caseId: caseId || undefined,
+    });
     onClose();
   };
 
@@ -3424,21 +3439,35 @@ function AddTaskModalForm({
           />
         </label>
         <label className="mb-4 block">
-          <span className="mb-2 block text-[12px] font-medium text-gray-400">案件</span>
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">プロジェクト</span>
+          <select
+            value={project}
+            onChange={(e) => {
+              setProject(e.target.value);
+              setCaseId("");
+            }}
+            className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+          >
+            {projectOptions.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mb-4 block">
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">案件（任意）</span>
           <select
             value={caseId}
             onChange={(e) => setCaseId(e.target.value)}
             className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
           >
-            {casePool.length === 0 ? (
-              <option value="">進行中の案件がありません</option>
-            ) : (
-              casePool.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {caseSelectLabel(c)}
-                </option>
-              ))
-            )}
+            <option value="">プロジェクト直下</option>
+            {casePool.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
           </select>
         </label>
         <label className="mb-6 block">
@@ -3464,14 +3493,21 @@ function AddTaskModal({
   onClose,
   onSubmit,
   ongoingCases,
+  projectOptions,
   defaultProject,
   defaultDate,
   defaultCaseId,
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { title: string; date: string; caseId: string }) => void;
+  onSubmit: (data: {
+    title: string;
+    date: string;
+    project: string;
+    caseId?: string;
+  }) => void;
   ongoingCases: CaseItem[];
+  projectOptions: readonly string[];
   defaultProject?: string;
   defaultDate?: string;
   defaultCaseId?: string;
@@ -3483,6 +3519,7 @@ function AddTaskModal({
       onClose={onClose}
       onSubmit={onSubmit}
       ongoingCases={ongoingCases}
+      projectOptions={projectOptions}
       defaultProject={defaultProject}
       defaultDate={defaultDate}
       defaultCaseId={defaultCaseId}
@@ -3515,9 +3552,10 @@ export default function Home() {
     authChecked,
     dataReady,
     loadError,
+    caseSaveError,
     projectNames,
-    projectColors,
     projects,
+    projectColors,
     lastViewDate,
     tasks,
     cases,
@@ -3565,7 +3603,7 @@ export default function Home() {
 
   const viewingCaseTasks = useMemo(() => {
     if (!viewingCaseId) return [];
-    return sortTasksActiveFirst(tasks.filter((t) => t.caseId === viewingCaseId));
+    return sortTasksInCase(tasks.filter((t) => t.caseId === viewingCaseId));
   }, [tasks, viewingCaseId]);
 
   useEffect(() => {
@@ -3613,6 +3651,11 @@ export default function Home() {
   const ongoingCases = useMemo(
     () => cases.filter((c) => !c.done),
     [cases],
+  );
+
+  const orderedOngoingCases = useMemo(
+    () => sortCasesByProjectOrder(ongoingCases, projects),
+    [ongoingCases, projects],
   );
 
   const caseById = useMemo(() => {
@@ -3669,8 +3712,8 @@ export default function Home() {
     [cases],
   );
   const caseGridDisplay = useMemo(
-    () => getCaseGridDisplay(ongoingCases),
-    [ongoingCases],
+    () => getCaseGridDisplay(orderedOngoingCases),
+    [orderedOngoingCases],
   );
   const openCasesList = useCallback(() => {
     setCasesListOpen(true);
@@ -3773,14 +3816,18 @@ export default function Home() {
     return ok;
   }, [addProject]);
 
-  const addTask = useCallback((data: { title: string; date: string; caseId: string }) => {
-    persistAddTask({
-      title: data.title,
-      time: formatTaskTimeLabel(data.date),
-      date: data.date,
-      caseId: data.caseId,
-    });
-  }, [persistAddTask]);
+  const addTask = useCallback(
+    (data: { title: string; date: string; project: string; caseId?: string }) => {
+      persistAddTask({
+        title: data.title,
+        time: formatTaskTimeLabel(data.date),
+        date: data.date,
+        project: data.project,
+        caseId: data.caseId,
+      });
+    },
+    [persistAddTask],
+  );
 
   const updateTask = useCallback(
     (id: string, data: { title: string; caseId: string; date: string; dateEnd?: string }) => {
@@ -3948,6 +3995,11 @@ export default function Home() {
                 </span>
               </p>
             )}
+            {caseSaveError && (
+              <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
+                案件の保存に失敗しました: {caseSaveError}
+              </p>
+            )}
             {!casesListOpen && (
             <header className="mb-2 lg:mb-3">
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
@@ -3987,7 +4039,7 @@ export default function Home() {
 
             {casesListOpen ? (
               <CasesListSection
-                cases={cases}
+                cases={orderedOngoingCases}
                 onToggle={toggleCase}
                 onOpen={setSelectedCase}
                 onBack={() => setCasesListOpen(false)}
@@ -4200,6 +4252,11 @@ export default function Home() {
                     {loadError}
                   </p>
                 )}
+                {caseSaveError && (
+                  <p className="rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
+                    案件の保存に失敗しました: {caseSaveError}
+                  </p>
+                )}
                 <Card className="p-6">
                   <h3 className="mb-4 text-[15px] font-semibold">設定</h3>
                   <ul className="space-y-2">
@@ -4317,7 +4374,11 @@ export default function Home() {
         onClose={closeAddTaskModal}
         onSubmit={addTask}
         ongoingCases={ongoingCases}
-        defaultProject={taskModalDefaultProject}
+        projectOptions={projectNames}
+        defaultProject={
+          taskModalDefaultProject ??
+          (isAllProjects ? undefined : activeProject)
+        }
         defaultDate={taskModalDefaultDate}
         defaultCaseId={taskModalDefaultCaseId}
       />

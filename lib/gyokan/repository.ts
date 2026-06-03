@@ -20,7 +20,6 @@ import {
   isAuthOrPolicyError,
   isMissingColumnError,
   isMissingTableError,
-  isSchemaMismatchError,
   normalizeCaseRow,
   normalizeProjectRow,
   normalizeTaskRow,
@@ -407,16 +406,24 @@ async function upsertCaseRow(
   supabase: SupabaseClient,
   row: ReturnType<typeof mapCaseToDb>,
 ) {
-  const attempts = buildCaseUpsertAttempts(row);
+  const attempts = [
+    ...buildCaseUpsertAttempts(row),
+    {
+      id: row.id,
+      user_id: row.user_id,
+      project_id: row.project_id,
+      name: row.title,
+    },
+  ];
   let lastError: { message?: string; code?: string } | null = null;
 
   for (const payload of attempts) {
-    const { error } = await supabase.from("cases").upsert(payload);
+    const { error } = await supabase.from("cases").upsert(payload, {
+      onConflict: "id",
+    });
     if (!error) return;
     lastError = error;
-    if (isAuthOrPolicyError(error) || !isSchemaMismatchError(error)) {
-      break;
-    }
+    if (isAuthOrPolicyError(error)) break;
   }
 
   if (lastError) throw lastError;

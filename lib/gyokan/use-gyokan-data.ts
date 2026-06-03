@@ -93,6 +93,7 @@ export function useGyokanData() {
   const [authChecked, setAuthChecked] = useState(false);
   const [dataReady, setDataReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [caseSaveError, setCaseSaveError] = useState<string | null>(null);
 
   const [projects, setProjects] = useState<AppProject[]>([]);
   const [tasks, setTasks] = useState<AppTask[]>([]);
@@ -483,10 +484,18 @@ export function useGyokanData() {
     });
   }, [persistProjects, syncMaps]);
 
-  const addTask = useCallback((data: { title: string; time: string; date: string; caseId: string }) => {
+  const addTask = useCallback(
+    (data: {
+      title: string;
+      time: string;
+      date: string;
+      project: string;
+      caseId?: string;
+    }) => {
     const caseById = buildCaseById(casesRef.current);
-    const linked = caseById[data.caseId];
-    if (!linked) return;
+    const linked = data.caseId ? caseById[data.caseId] : undefined;
+    const project = linked?.project ?? data.project;
+    if (!project) return;
 
     const task = enrichTaskWithCase(
       {
@@ -495,7 +504,7 @@ export function useGyokanData() {
         time: data.time,
         date: data.date,
         done: false,
-        project: linked.project,
+        project,
         caseId: data.caseId,
         sortOrder: 0,
       },
@@ -716,6 +725,7 @@ export function useGyokanData() {
     authChecked,
     dataReady,
     loadError,
+    caseSaveError,
     projects,
     projectNames,
     projectColors,
