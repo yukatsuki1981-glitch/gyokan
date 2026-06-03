@@ -73,9 +73,10 @@ export function mapDbTask(row: DbTask, idToName: Record<string, string>): AppTas
 }
 
 export function mapDbCase(row: DbCase, idToName: Record<string, string>): AppCase {
+  const title = (row.title || "").trim();
   return {
     id: row.id,
-    title: row.title,
+    title: title || "（無題）",
     project: idToName[row.project_id] ?? "",
     status: row.status,
     statusTone: row.status_tone,
@@ -157,6 +158,7 @@ export function mapCaseToDb(
     user_id: userId,
     project_id: projectId,
     title: item.title.trim() || "（無題）",
+    name: item.title.trim() || "（無題）",
     status: item.status || "情報収集中",
     status_tone: statusTone,
     deadline: item.deadline,

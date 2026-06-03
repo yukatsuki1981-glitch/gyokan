@@ -74,8 +74,8 @@ export function mergeCasesWithDrafts(cases: AppCase[]): AppCase[] {
     if (!draft) return item;
     return {
       ...item,
-      title: draft.title,
-      project: draft.project,
+      title: draft.title.trim() || item.title,
+      project: draft.project || item.project,
       goal: draft.goal,
       status: draft.status,
       statusTone: draft.statusTone,

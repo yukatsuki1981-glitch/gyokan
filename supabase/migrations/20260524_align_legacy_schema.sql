@@ -32,8 +32,12 @@ begin
   ) then
     execute $sql$
       update public.tasks
-      set time_label = coalesce(nullif(time_label, ''), time::text, '')
-      where coalesce(time_label, '') = '' and time is not null
+      set time_label = coalesce(
+        nullif(trim(time_label), ''),
+        to_char(time, 'HH24:MI'),
+        ''
+      )
+      where coalesce(trim(time_label), '') = '' and time is not null
     $sql$;
   end if;
 end $$;

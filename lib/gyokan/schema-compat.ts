@@ -82,7 +82,7 @@ export function normalizeCaseRow(row: Row, index: number): DbCase {
     id: String(row.id),
     user_id: String(row.user_id),
     project_id: String(row.project_id ?? ""),
-    title: String(row.title ?? row.name ?? ""),
+    title: String(row.title || row.name || ""),
     status: String(row.status ?? "情報収集中"),
     status_tone: (row.status_tone as DbCase["status_tone"]) ?? "emerald",
     deadline: String(row.deadline ?? ""),
@@ -266,5 +266,6 @@ export function buildCaseUpsertAttempts(row: CaseUpsertRow): Row[] {
     comments_count,
   };
 
-  return [nameCore, toLegacyCaseUpsert(row), modern, modernWithName, nameExtended];
+  // Prefer payloads that set both title and name when the DB has both columns.
+  return [modernWithName, modern, nameExtended, nameCore, toLegacyCaseUpsert(row)];
 }

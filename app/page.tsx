@@ -2494,12 +2494,30 @@ function CalendarWidget({
   );
 }
 
+/** Selected day’s week plus one week before and after (3 weeks). */
 function getPeekWeekStartIndex(selectedISO: string, year: number, month: number) {
-  const anchorISO = shiftISODate(selectedISO, -7);
+  const selected = new Date(selectedISO + "T12:00:00");
+  const weekStart = new Date(selected);
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  weekStart.setDate(weekStart.getDate() - 7);
+  const anchorISO = isoDate(weekStart);
+
   const grid = getCalendarGrid(year, month);
-  let anchorIndex = grid.findIndex((_, i) => getGridCellIso(year, month, i) === anchorISO);
-  if (anchorIndex === -1) anchorIndex = 0;
-  return Math.floor(anchorIndex / 7) * 7;
+  for (let i = 0; i < grid.length; i++) {
+    if (getGridCellIso(year, month, i) === anchorISO) {
+      return Math.floor(i / 7) * 7;
+    }
+  }
+  for (let i = 0; i < grid.length; i++) {
+    if (getGridCellIso(year, month, i) >= anchorISO) {
+      return Math.floor(i / 7) * 7;
+    }
+  }
+  return 0;
+}
+
+function getMonthWeekCount(year: number, month: number) {
+  return Math.ceil(getCalendarGrid(year, month).length / 7);
 }
 
 function getMonthIndexInRange(iso: string, months: { year: number; month: number }[]) {
@@ -2587,38 +2605,62 @@ function MobileCalendarWidget({
   const horizontalRef = useRef<HTMLDivElement>(null);
   const peekSuppressClickRef = useRef(false);
   const lastScrolledMonthRef = useRef<string | null>(null);
+  const gestureStartMonthIdxRef = useRef(0);
 
   const isPeek = peekMode && !peekEngaged;
-  const PEEK_GRID_H = CALENDAR_CELL_ROW_H * 3;
+  const PEEK_WEEKS = 3;
+  const PEEK_GRID_H = CALENDAR_CELL_ROW_H * PEEK_WEEKS;
   const PEEK_HEADER_H = 58;
   const PEEK_WRAP_H = PEEK_HEADER_H + PEEK_GRID_H;
   const selectedMonthKey = selectedDate.slice(0, 7);
 
-  const months = useMemo(() => buildMonthRange(todayISO(), 12, 12), []);
+  const months = useMemo(() => buildMonthRange(selectedDate, 12, 12), [selectedDate]);
   const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
+
+  const getMonthIndexFromScroll = useCallback(() => {
+    const strip = horizontalRef.current;
+    if (!strip || strip.clientWidth <= 0) return 0;
+    return Math.round(strip.scrollLeft / strip.clientWidth);
+  }, []);
+
+  const scrollToMonthIndex = useCallback(
+    (idx: number, behavior: ScrollBehavior = "auto") => {
+      const strip = horizontalRef.current;
+      if (!strip || strip.clientWidth <= 0) return;
+      const clamped = Math.max(0, Math.min(months.length - 1, idx));
+      const left = clamped * strip.clientWidth;
+      if (behavior === "smooth") {
+        strip.scrollTo({ left, behavior: "smooth" });
+      } else {
+        strip.scrollLeft = left;
+      }
+    },
+    [months.length],
+  );
 
   const scrollToMonth = useCallback(
     (iso: string, behavior: ScrollBehavior = "auto") => {
-      const el = horizontalRef.current;
-      if (!el || el.clientWidth <= 0) return;
       const idx = getMonthIndexInRange(iso, months);
       if (idx < 0) return;
-      const left = idx * el.clientWidth;
-      if (behavior === "smooth") {
-        el.scrollTo({ left, behavior: "smooth" });
-      } else {
-        el.scrollLeft = left;
-      }
+      scrollToMonthIndex(idx, behavior);
     },
-    [months],
+    [months, scrollToMonthIndex],
   );
 
-  const snapToNearestMonth = useCallback(() => {
-    const strip = horizontalRef.current;
-    if (!strip || strip.clientWidth <= 0) return;
-    const idx = Math.round(strip.scrollLeft / strip.clientWidth);
-    strip.scrollLeft = idx * strip.clientWidth;
-  }, []);
+  const snapToGestureMonth = useCallback(
+    (behavior: ScrollBehavior = "smooth") => {
+      const strip = horizontalRef.current;
+      if (!strip || strip.clientWidth <= 0) return;
+      const startIdx = gestureStartMonthIdxRef.current;
+      const rawIdx = Math.round(strip.scrollLeft / strip.clientWidth);
+      let targetIdx = rawIdx;
+      if (targetIdx > startIdx + 1) targetIdx = startIdx + 1;
+      if (targetIdx < startIdx - 1) targetIdx = startIdx - 1;
+      targetIdx = Math.max(0, Math.min(months.length - 1, targetIdx));
+      scrollToMonthIndex(targetIdx, behavior);
+    },
+    [months.length, scrollToMonthIndex],
+  );
 
   const goToday = useCallback(() => {
     const today = todayISO();
@@ -2650,7 +2692,7 @@ function MobileCalendarWidget({
     } else {
       setPeekEngaged(true);
     }
-  }, [peekMode]);
+  }, [peekMode, selectedDate]);
 
   const handleDaySelect = (cellIso: string) => {
     if (peekSuppressClickRef.current) return;
@@ -2680,6 +2722,7 @@ function MobileCalendarWidget({
       tracking = true;
       didDrag = false;
       peekSuppressClickRef.current = false;
+      gestureStartMonthIdxRef.current = getMonthIndexFromScroll();
       engagePeek();
     };
 
@@ -2705,7 +2748,7 @@ function MobileCalendarWidget({
       tracking = false;
 
       if (didDrag) {
-        snapToNearestMonth();
+        snapToGestureMonth("smooth");
         window.setTimeout(() => {
           peekSuppressClickRef.current = false;
         }, 350);
@@ -2721,21 +2764,44 @@ function MobileCalendarWidget({
       }, 350);
     };
 
+    let scrollSnapTimer: ReturnType<typeof setTimeout> | undefined;
+    const onScrollSnap = () => {
+      if (scrollSnapTimer) clearTimeout(scrollSnapTimer);
+      scrollSnapTimer = setTimeout(() => {
+        if (!tracking) snapToGestureMonth("smooth");
+      }, 120);
+    };
+
+    const onPointerDown = () => {
+      gestureStartMonthIdxRef.current = getMonthIndexFromScroll();
+    };
+
+    const onScrollEnd = () => {
+      if (!tracking) snapToGestureMonth("smooth");
+    };
+
+    strip.addEventListener("pointerdown", onPointerDown, { passive: true });
     strip.addEventListener("touchstart", onTouchStart, { passive: true });
     strip.addEventListener("touchmove", onTouchMove, { passive: true });
     strip.addEventListener("touchend", onTouchEnd, { passive: true });
     strip.addEventListener("touchcancel", onTouchEnd, { passive: true });
     strip.addEventListener("scroll", onScroll, { passive: true });
+    strip.addEventListener("scroll", onScrollSnap, { passive: true });
+    strip.addEventListener("scrollend", onScrollEnd);
 
     return () => {
+      strip.removeEventListener("pointerdown", onPointerDown);
       strip.removeEventListener("touchstart", onTouchStart);
       strip.removeEventListener("touchmove", onTouchMove);
       strip.removeEventListener("touchend", onTouchEnd);
       strip.removeEventListener("touchcancel", onTouchEnd);
       strip.removeEventListener("scroll", onScroll);
+      strip.removeEventListener("scroll", onScrollSnap);
+      strip.removeEventListener("scrollend", onScrollEnd);
       if (suppressTimer) clearTimeout(suppressTimer);
+      if (scrollSnapTimer) clearTimeout(scrollSnapTimer);
     };
-  }, [engagePeek, snapToNearestMonth]);
+  }, [engagePeek, getMonthIndexFromScroll, snapToGestureMonth]);
 
   const renderDayButton = (
     cell: CalendarCell,
@@ -2811,17 +2877,23 @@ function MobileCalendarWidget({
       <div
         ref={horizontalRef}
         className="flex w-full overflow-x-auto overscroll-x-contain snap-x snap-mandatory scrollbar-none"
-        style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x pinch-zoom" }}
+        style={{
+          WebkitOverflowScrolling: "touch",
+          touchAction: "pan-x pinch-zoom",
+          scrollSnapType: "x mandatory",
+        }}
       >
         {months.map(({ year, month }) => {
           const grid = getCalendarGrid(year, month);
           const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
           const isFocusMonth = monthKey === selectedMonthKey;
+          const weekCount = getMonthWeekCount(year, month);
           const peekRowOffset =
             isPeek && isFocusMonth
-              ? Math.floor(getPeekWeekStartIndex(selectedDate, year, month) / 7) * CALENDAR_CELL_ROW_H
+              ? Math.floor(getPeekWeekStartIndex(selectedDate, year, month) / 7) *
+                CALENDAR_CELL_ROW_H
               : 0;
-          const fullGridH = Math.ceil(grid.length / 7) * CALENDAR_CELL_ROW_H;
+          const fullGridH = weekCount * CALENDAR_CELL_ROW_H;
           const monthLabel = new Intl.DateTimeFormat("ja-JP", {
             year: "numeric",
             month: "long",
@@ -2830,7 +2902,8 @@ function MobileCalendarWidget({
           return (
             <div
               key={`${year}-${month}`}
-              className="box-border min-w-full flex-[0_0_100%] snap-center snap-always px-0.5 py-2"
+              className="box-border min-w-full flex-[0_0_100%] shrink-0 snap-center px-0.5 py-2"
+              style={{ scrollSnapAlign: "center", scrollSnapStop: "always" }}
             >
               {renderMonthHeader(year, month, monthLabel)}
               {weekdayHeader(year, month)}
@@ -4053,7 +4126,7 @@ export default function Home() {
                     tasks={tasks}
                     selectedDate={viewDateISO}
                     onSelectDate={goToDate}
-                    peekMode={viewDateISO === todayISO()}
+                    peekMode
                   />
                 </Card>
                 <Card className="p-4">
@@ -4119,7 +4192,7 @@ export default function Home() {
                   tasks={tasks}
                   selectedDate={viewDateISO}
                   onSelectDate={goToDate}
-                  peekMode={viewDateISO === todayISO()}
+                  peekMode
                 />
               </section>
             )}

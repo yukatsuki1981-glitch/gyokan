@@ -20,6 +20,7 @@ import {
   isAuthOrPolicyError,
   isMissingColumnError,
   isMissingTableError,
+  isSchemaMismatchError,
   normalizeCaseRow,
   normalizeProjectRow,
   normalizeTaskRow,
@@ -421,12 +422,29 @@ async function upsertCaseRow(
     const { error } = await supabase.from("cases").upsert(payload, {
       onConflict: "id",
     });
-    if (!error) return;
+    if (!error) {
+      await syncCaseTitleAndName(supabase, row.id, row.title);
+      return;
+    }
     lastError = error;
     if (isAuthOrPolicyError(error)) break;
   }
 
   if (lastError) throw lastError;
+}
+
+async function syncCaseTitleAndName(
+  supabase: SupabaseClient,
+  id: string,
+  title: string,
+) {
+  const label = title.trim() || "（無題）";
+  const variants = [{ title: label, name: label }, { title: label }, { name: label }];
+  for (const payload of variants) {
+    const { error } = await supabase.from("cases").update(payload).eq("id", id);
+    if (!error) return;
+    if (isAuthOrPolicyError(error) || !isSchemaMismatchError(error)) return;
+  }
 }
 
 export async function upsertCase(

@@ -23,4 +23,13 @@ begin
   end if;
 end $$;
 
+-- Backfill empty titles from name (and vice versa)
+update public.cases
+set title = coalesce(nullif(trim(title), ''), nullif(trim(name), ''), title)
+where coalesce(trim(title), '') = '' and coalesce(trim(name), '') <> '';
+
+update public.cases
+set name = coalesce(nullif(trim(name), ''), nullif(trim(title), ''), name)
+where coalesce(trim(name), '') = '' and coalesce(trim(title), '') <> '';
+
 notify pgrst, 'reload schema';
