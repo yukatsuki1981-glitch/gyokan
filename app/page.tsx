@@ -1441,6 +1441,27 @@ function TaskDetailEditor({
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={fieldInputClass} />
       </DetailField>
       <DetailField label="案件">
+        <select
+          value={caseId}
+          onChange={(e) => setCaseId(e.target.value)}
+          disabled={underProjectDirect}
+          className={`${fieldInputClass} mb-2 ${
+            underProjectDirect ? "cursor-not-allowed bg-gray-100 text-gray-400 opacity-60" : ""
+          }`}
+        >
+          {caseOptions.length === 0 ? (
+            <option value="">進行中の案件がありません</option>
+          ) : (
+            <>
+              <option value="">案件を選択</option>
+              {caseOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {caseSelectLabel(c)}
+                </option>
+              ))}
+            </>
+          )}
+        </select>
         <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-gray-600">
           <input
             type="checkbox"
@@ -1458,7 +1479,7 @@ function TaskDetailEditor({
           <select
             value={project}
             onChange={(e) => setProject(e.target.value)}
-            className={`${fieldInputClass} mb-2`}
+            className={fieldInputClass}
           >
             {projectOptions.map((p) => (
               <option key={p} value={p}>
@@ -1467,27 +1488,6 @@ function TaskDetailEditor({
             ))}
           </select>
         )}
-        <select
-          value={caseId}
-          onChange={(e) => setCaseId(e.target.value)}
-          disabled={underProjectDirect}
-          className={`${fieldInputClass} ${
-            underProjectDirect ? "cursor-not-allowed bg-gray-100 text-gray-400 opacity-60" : ""
-          }`}
-        >
-          {caseOptions.length === 0 ? (
-            <option value="">進行中の案件がありません</option>
-          ) : (
-            <>
-              <option value="">案件を選択</option>
-              {caseOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {caseSelectLabel(c)}
-                </option>
-              ))}
-            </>
-          )}
-        </select>
       </DetailField>
       {!useRange && (
         <DetailField label="期限">
@@ -2320,7 +2320,11 @@ function TaskRowContent({
       >
         {task.title}
       </p>
-      <CaseNameTag caseId={task.caseId} muted={task.done} />
+      {task.caseId ? (
+        <CaseNameTag caseId={task.caseId} muted={task.done} />
+      ) : task.project ? (
+        <ProjectNameTag name={task.project} muted={task.done} />
+      ) : null}
       {isRangeTask(task) && (
         <span className="shrink-0 text-[10px] text-gray-400">{formatTaskPeriod(task)}</span>
       )}
@@ -3615,6 +3619,23 @@ function AddTaskModalForm({
         </label>
         <label className="mb-4 block">
           <span className="mb-2 block text-[12px] font-medium text-gray-400">案件（任意）</span>
+          <select
+            value={caseId}
+            onChange={(e) => setCaseId(e.target.value)}
+            disabled={underProjectDirect}
+            className={`mb-2 w-full rounded-2xl border border-gray-100 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50 ${
+              underProjectDirect
+                ? "cursor-not-allowed bg-gray-100 text-gray-400 opacity-60"
+                : "bg-gray-50/60"
+            }`}
+          >
+            <option value="">案件を選択</option>
+            {casePool.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
           <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-gray-700">
             <input
               type="checkbox"
@@ -3632,7 +3653,7 @@ function AddTaskModalForm({
             <select
               value={project}
               onChange={(e) => setProject(e.target.value)}
-              className="mb-2 w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+              className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
             >
               {projectOptions.map((p) => (
                 <option key={p} value={p}>
@@ -3641,23 +3662,6 @@ function AddTaskModalForm({
               ))}
             </select>
           )}
-          <select
-            value={caseId}
-            onChange={(e) => setCaseId(e.target.value)}
-            disabled={underProjectDirect}
-            className={`w-full rounded-2xl border border-gray-100 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50 ${
-              underProjectDirect
-                ? "cursor-not-allowed bg-gray-100 text-gray-400 opacity-60"
-                : "bg-gray-50/60"
-            }`}
-          >
-            <option value="">案件を選択</option>
-            {casePool.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-              </option>
-            ))}
-          </select>
         </label>
         <label className="mb-6 block">
           <span className="mb-2 block text-[12px] font-medium text-gray-400">期限</span>
