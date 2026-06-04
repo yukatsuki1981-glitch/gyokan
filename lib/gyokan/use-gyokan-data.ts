@@ -494,8 +494,7 @@ export function useGyokanData() {
     }) => {
     const caseById = buildCaseById(casesRef.current);
     const linked = data.caseId ? caseById[data.caseId] : undefined;
-    const project = linked?.project ?? data.project;
-    if (!project) return;
+    const project = linked?.project ?? data.project ?? "";
 
     const task = enrichTaskWithCase(
       {

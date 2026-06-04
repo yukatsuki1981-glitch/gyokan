@@ -1359,14 +1359,13 @@ function TaskDetailEditor({
   }), []);
 
   const initialDraft = readDraft<TaskDraftFields>("task", item.id);
+  const initialCaseId = initialDraft?.caseId ?? item.caseId ?? "";
   const [title, setTitle] = useState(initialDraft?.title ?? item.title);
   const [underProjectDirect, setUnderProjectDirect] = useState(
-    () => !(initialDraft?.caseId ?? item.caseId),
+    () => !initialCaseId && !!item.project.trim(),
   );
   const [project, setProject] = useState(item.project);
-  const [caseId, setCaseId] = useState(
-    initialDraft?.caseId ?? item.caseId ?? "",
-  );
+  const [caseId, setCaseId] = useState(initialCaseId);
   const [date, setDate] = useState(initialDraft?.date ?? item.date);
   const [dateEnd, setDateEnd] = useState(initialDraft?.dateEnd ?? item.dateEnd ?? "");
   const [useRange, setUseRange] = useState(initialDraft?.useRange ?? isRangeTask(item));
@@ -1377,7 +1376,7 @@ function TaskDetailEditor({
     const draft = readDraft<TaskDraftFields>("task", item.id);
     const next = draft ?? loadTaskFields(item);
     setTitle(next.title);
-    setUnderProjectDirect(!next.caseId);
+    setUnderProjectDirect(!next.caseId && !!item.project.trim());
     setProject(item.project);
     setCaseId(next.caseId);
     setDate(next.date);
@@ -1404,7 +1403,6 @@ function TaskDetailEditor({
   const persistTask = useCallback(
     (values: TaskDraftFields, direct: boolean, projectName: string) => {
       if (!values.title.trim()) return false;
-      if (!direct && !values.caseId) return false;
       if (direct && !projectName.trim()) return false;
       const end =
         values.useRange && values.dateEnd && values.dateEnd !== values.date
@@ -1415,7 +1413,7 @@ function TaskDetailEditor({
         caseId: direct ? "" : values.caseId,
         date: values.date,
         dateEnd: end,
-        project: direct ? projectName : undefined,
+        project: direct ? projectName : values.caseId ? undefined : "",
       });
     },
     [onSave, item.id],
@@ -2322,7 +2320,7 @@ function TaskRowContent({
       </p>
       {task.caseId ? (
         <CaseNameTag caseId={task.caseId} muted={task.done} />
-      ) : task.project ? (
+      ) : task.project.trim() ? (
         <ProjectNameTag name={task.project} muted={task.done} />
       ) : null}
       {isRangeTask(task) && (
@@ -2536,12 +2534,11 @@ function CalendarWidget({
   );
 }
 
-/** Selected day’s week plus one week before and after (3 weeks). */
+/** Selected day’s week plus the following week (2 weeks). */
 function getPeekWeekStartIndex(selectedISO: string, year: number, month: number) {
   const selected = new Date(selectedISO + "T12:00:00");
   const weekStart = new Date(selected);
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  weekStart.setDate(weekStart.getDate() - 7);
   const anchorISO = isoDate(weekStart);
 
   const grid = getCalendarGrid(year, month);
@@ -2651,27 +2648,27 @@ function MobileCalendarWidget({
   const gestureDeltaXRef = useRef(0);
 
   const isPeek = peekMode && !peekEngaged;
-  const PEEK_WEEKS = 3;
+  const PEEK_WEEKS = 2;
   const PEEK_GRID_H = CALENDAR_CELL_ROW_H * PEEK_WEEKS;
   const PEEK_HEADER_H = 58;
   const MONTH_PANEL_Y_PAD = 16;
   const PEEK_WRAP_H = PEEK_HEADER_H + PEEK_GRID_H + MONTH_PANEL_Y_PAD;
   const SWIPE_MONTH_THRESHOLD_PX = 8;
-  const selectedMonthKey = selectedDate.slice(0, 7);
 
-  const months = useMemo(() => buildMonthRange(selectedDate, 12, 12), [selectedDate]);
+  const [calendarAnchorISO] = useState(() => {
+    const d = new Date(selectedDate + "T12:00:00");
+    return isoDate(new Date(d.getFullYear(), d.getMonth(), 1));
+  });
+
+  const months = useMemo(() => buildMonthRange(calendarAnchorISO, 12, 12), [calendarAnchorISO]);
   const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
 
-  const selectedMonthIdx = useMemo(() => {
-    const idx = getMonthIndexInRange(selectedDate, months);
-    return idx >= 0 ? idx : 0;
-  }, [selectedDate, months]);
+  const [visibleMonthIdx, setVisibleMonthIdx] = useState(12);
 
-  const [visibleMonthIdx, setVisibleMonthIdx] = useState(0);
-
-  useLayoutEffect(() => {
-    setVisibleMonthIdx(selectedMonthIdx);
-  }, [selectedMonthIdx]);
+  const displayMonth = months[visibleMonthIdx];
+  const displayMonthKey = displayMonth
+    ? `${displayMonth.year}-${String(displayMonth.month + 1).padStart(2, "0")}`
+    : "";
 
   const getMonthIndexFromScroll = useCallback(() => {
     const strip = horizontalRef.current;
@@ -2740,26 +2737,39 @@ function MobileCalendarWidget({
   const goToday = useCallback(() => {
     const today = todayISO();
     onSelectDate(today);
+    const todayMonth = today.slice(0, 7);
+    const idx = months.findIndex(
+      ({ year, month }) =>
+        `${year}-${String(month + 1).padStart(2, "0")}` === todayMonth,
+    );
     if (peekMode) {
       setPeekEngaged(false);
-      requestAnimationFrame(() => scrollToMonth(today));
     } else {
       lastScrolledMonthRef.current = null;
-      requestAnimationFrame(() => scrollToMonth(today));
     }
-  }, [onSelectDate, peekMode, scrollToMonth]);
+    if (idx >= 0) {
+      requestAnimationFrame(() => scrollToMonthIndex(idx));
+    }
+  }, [onSelectDate, peekMode, months, scrollToMonthIndex]);
+
+  useLayoutEffect(() => {
+    const idx = getMonthIndexInRange(calendarAnchorISO, months);
+    if (idx < 0) return;
+    setVisibleMonthIdx(idx);
+    scrollToMonthIndex(idx, "auto");
+  }, [calendarAnchorISO, months, scrollToMonthIndex]);
 
   useLayoutEffect(() => {
     if (isPeek) {
       lastScrolledMonthRef.current = null;
     }
-    const monthKey = selectedDate.slice(0, 7);
+    const monthKey = calendarAnchorISO.slice(0, 7);
     if (!isPeek && lastScrolledMonthRef.current === monthKey) return;
-    scrollToMonth(selectedDate);
+    scrollToMonth(calendarAnchorISO);
     if (!isPeek) {
       lastScrolledMonthRef.current = monthKey;
     }
-  }, [isPeek, selectedDate, scrollToMonth]);
+  }, [isPeek, calendarAnchorISO, scrollToMonth]);
 
   useEffect(() => {
     if (peekMode) {
@@ -2767,7 +2777,7 @@ function MobileCalendarWidget({
     } else {
       setPeekEngaged(true);
     }
-  }, [peekMode, selectedDate]);
+  }, [peekMode]);
 
   const handleDaySelect = (cellIso: string) => {
     if (peekSuppressClickRef.current) return;
@@ -2777,9 +2787,9 @@ function MobileCalendarWidget({
   const engagePeek = useCallback(() => {
     if (peekMode && !peekEngaged) {
       setPeekEngaged(true);
-      requestAnimationFrame(() => scrollToMonth(selectedDate));
+      requestAnimationFrame(() => scrollToMonthIndex(visibleMonthIdx));
     }
-  }, [peekMode, peekEngaged, scrollToMonth, selectedDate]);
+  }, [peekMode, peekEngaged, scrollToMonthIndex, visibleMonthIdx]);
 
   useEffect(() => {
     const strip = horizontalRef.current;
@@ -2944,7 +2954,7 @@ function MobileCalendarWidget({
     </div>
   );
 
-  const visibleMonth = months[visibleMonthIdx] ?? months[selectedMonthIdx];
+  const visibleMonth = months[visibleMonthIdx];
   const visibleWeekCount = visibleMonth
     ? getMonthWeekCount(visibleMonth.year, visibleMonth.month)
     : 5;
@@ -2974,7 +2984,7 @@ function MobileCalendarWidget({
         {months.map(({ year, month }, monthIdx) => {
           const grid = getCalendarGrid(year, month);
           const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
-          const isFocusMonth = monthKey === selectedMonthKey;
+          const isFocusMonth = monthKey === displayMonthKey;
           const monthPanelBg = monthIdx % 2 === 0 ? "bg-white" : "bg-gray-50";
           const weekCount = getMonthWeekCount(year, month);
           const peekRowOffset =
@@ -3584,14 +3594,12 @@ function AddTaskModalForm({
         caseId: undefined,
       });
     } else {
-      const linked = ongoingCases.find((c) => c.id === caseId);
-      const resolvedProject =
-        linked?.project ?? defaultProject ?? projectOptions[0] ?? "";
-      if (!resolvedProject) return;
+      const linked = caseId ? ongoingCases.find((c) => c.id === caseId) : undefined;
+      if (caseId && !linked) return;
       onSubmit({
         title: title.trim(),
         date,
-        project: resolvedProject,
+        project: linked?.project ?? "",
         caseId: caseId || undefined,
       });
     }
@@ -4041,7 +4049,7 @@ export default function Home() {
             ...t,
             title: data.title,
             caseId: data.caseId || undefined,
-            project: linked?.project ?? data.project ?? t.project,
+            project: linked?.project ?? (data.project !== undefined ? data.project : t.project),
             date: data.date,
             dateEnd: data.dateEnd,
           };
