@@ -1328,12 +1328,18 @@ function TaskDetailEditor({
   item: Task;
   onSave: (
     id: string,
-    data: { title: string; caseId: string; date: string; dateEnd?: string },
+    data: {
+      title: string;
+      caseId: string;
+      date: string;
+      dateEnd?: string;
+      project?: string;
+    },
   ) => void | boolean | Promise<void | boolean>;
   onClose: () => void;
 }) {
   const itemIdRef = useRef(item.id);
-  const { ongoingCases, cases } = useProjectColors();
+  const { ongoingCases, cases, projectOptions } = useProjectColors();
 
   const caseOptions = useMemo(() => {
     const list = [...ongoingCases];
@@ -1354,8 +1360,12 @@ function TaskDetailEditor({
 
   const initialDraft = readDraft<TaskDraftFields>("task", item.id);
   const [title, setTitle] = useState(initialDraft?.title ?? item.title);
+  const [underProjectDirect, setUnderProjectDirect] = useState(
+    () => !(initialDraft?.caseId ?? item.caseId),
+  );
+  const [project, setProject] = useState(item.project);
   const [caseId, setCaseId] = useState(
-    initialDraft?.caseId ?? item.caseId ?? caseOptions[0]?.id ?? "",
+    initialDraft?.caseId ?? item.caseId ?? "",
   );
   const [date, setDate] = useState(initialDraft?.date ?? item.date);
   const [dateEnd, setDateEnd] = useState(initialDraft?.dateEnd ?? item.dateEnd ?? "");
@@ -1367,6 +1377,8 @@ function TaskDetailEditor({
     const draft = readDraft<TaskDraftFields>("task", item.id);
     const next = draft ?? loadTaskFields(item);
     setTitle(next.title);
+    setUnderProjectDirect(!next.caseId);
+    setProject(item.project);
     setCaseId(next.caseId);
     setDate(next.date);
     setDateEnd(next.dateEnd ?? "");
@@ -1389,31 +1401,37 @@ function TaskDetailEditor({
     useRange: isRangeTask(item),
   }), [item]);
 
-  const persistTask = useCallback((values: TaskDraftFields) => {
-    if (!values.title.trim() || !values.caseId) return false;
-    const end =
-      values.useRange && values.dateEnd && values.dateEnd !== values.date
-        ? values.dateEnd
-        : undefined;
-    return onSave(item.id, {
-      title: values.title.trim(),
-      caseId: values.caseId,
-      date: values.date,
-      dateEnd: end,
-    });
-  }, [onSave, item.id]);
+  const persistTask = useCallback(
+    (values: TaskDraftFields, direct: boolean, projectName: string) => {
+      if (!values.title.trim()) return false;
+      if (!direct && !values.caseId) return false;
+      if (direct && !projectName.trim()) return false;
+      const end =
+        values.useRange && values.dateEnd && values.dateEnd !== values.date
+          ? values.dateEnd
+          : undefined;
+      return onSave(item.id, {
+        title: values.title.trim(),
+        caseId: direct ? "" : values.caseId,
+        date: values.date,
+        dateEnd: end,
+        project: direct ? projectName : undefined,
+      });
+    },
+    [onSave, item.id],
+  );
 
   useAutosaveForm({
     kind: "task",
     entityId: item.id,
     values: formValues,
     baseline: formBaseline,
-    onPersist: persistTask,
+    onPersist: (values) => persistTask(values, underProjectDirect, project),
   });
 
   const save = () => {
     if (!title.trim()) return;
-    persistTask(formValues);
+    persistTask(formValues, underProjectDirect, project);
     onClose();
   };
 
@@ -1423,13 +1441,51 @@ function TaskDetailEditor({
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={fieldInputClass} />
       </DetailField>
       <DetailField label="案件">
-        <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={fieldInputClass}>
+        <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-gray-600">
+          <input
+            type="checkbox"
+            checked={underProjectDirect}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setUnderProjectDirect(checked);
+              if (checked) setCaseId("");
+            }}
+            className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-200"
+          />
+          プロジェクト直下
+        </label>
+        {underProjectDirect && (
+          <select
+            value={project}
+            onChange={(e) => setProject(e.target.value)}
+            className={`${fieldInputClass} mb-2`}
+          >
+            {projectOptions.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        )}
+        <select
+          value={caseId}
+          onChange={(e) => setCaseId(e.target.value)}
+          disabled={underProjectDirect}
+          className={`${fieldInputClass} ${
+            underProjectDirect ? "cursor-not-allowed bg-gray-100 text-gray-400 opacity-60" : ""
+          }`}
+        >
           {caseOptions.length === 0 ? (
             <option value="">進行中の案件がありません</option>
           ) : (
-            caseOptions.map((c) => (
-              <option key={c.id} value={c.id}>{caseSelectLabel(c)}</option>
-            ))
+            <>
+              <option value="">案件を選択</option>
+              {caseOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {caseSelectLabel(c)}
+                </option>
+              ))}
+            </>
           )}
         </select>
       </DetailField>
@@ -3479,13 +3535,16 @@ function AddTaskModalForm({
   defaultCaseId?: string;
 }) {
   const [title, setTitle] = useState("");
+  const [underProjectDirect, setUnderProjectDirect] = useState(false);
   const [project, setProject] = useState(
     defaultProject ?? projectOptions[0] ?? "",
   );
-  const casePool = useMemo(
-    () => ongoingCases.filter((c) => c.project === project),
-    [ongoingCases, project],
-  );
+  const casePool = useMemo(() => {
+    if (defaultProject) {
+      return ongoingCases.filter((c) => c.project === defaultProject);
+    }
+    return ongoingCases;
+  }, [ongoingCases, defaultProject]);
   const [caseId, setCaseId] = useState(defaultCaseId ?? "");
   const [date, setDate] = useState(defaultDate ?? todayISO());
 
@@ -3497,11 +3556,12 @@ function AddTaskModalForm({
 
   useEffect(() => {
     if (defaultCaseId) {
+      setUnderProjectDirect(false);
       setCaseId(defaultCaseId);
       return;
     }
     setCaseId("");
-  }, [defaultCaseId, project]);
+  }, [defaultCaseId]);
 
   useEffect(() => {
     if (defaultDate) {
@@ -3510,13 +3570,27 @@ function AddTaskModalForm({
   }, [defaultDate]);
 
   const submit = () => {
-    if (!title.trim() || !project) return;
-    onSubmit({
-      title: title.trim(),
-      date,
-      project,
-      caseId: caseId || undefined,
-    });
+    if (!title.trim()) return;
+    if (underProjectDirect) {
+      if (!project) return;
+      onSubmit({
+        title: title.trim(),
+        date,
+        project,
+        caseId: undefined,
+      });
+    } else {
+      const linked = ongoingCases.find((c) => c.id === caseId);
+      const resolvedProject =
+        linked?.project ?? defaultProject ?? projectOptions[0] ?? "";
+      if (!resolvedProject) return;
+      onSubmit({
+        title: title.trim(),
+        date,
+        project: resolvedProject,
+        caseId: caseId || undefined,
+      });
+    }
     onClose();
   };
 
@@ -3540,30 +3614,44 @@ function AddTaskModalForm({
           />
         </label>
         <label className="mb-4 block">
-          <span className="mb-2 block text-[12px] font-medium text-gray-400">プロジェクト</span>
-          <select
-            value={project}
-            onChange={(e) => {
-              setProject(e.target.value);
-              setCaseId("");
-            }}
-            className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
-          >
-            {projectOptions.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="mb-4 block">
           <span className="mb-2 block text-[12px] font-medium text-gray-400">案件（任意）</span>
+          <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-gray-700">
+            <input
+              type="checkbox"
+              checked={underProjectDirect}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setUnderProjectDirect(checked);
+                if (checked) setCaseId("");
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-200"
+            />
+            プロジェクト直下
+          </label>
+          {underProjectDirect && (
+            <select
+              value={project}
+              onChange={(e) => setProject(e.target.value)}
+              className="mb-2 w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+            >
+              {projectOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             value={caseId}
             onChange={(e) => setCaseId(e.target.value)}
-            className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+            disabled={underProjectDirect}
+            className={`w-full rounded-2xl border border-gray-100 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50 ${
+              underProjectDirect
+                ? "cursor-not-allowed bg-gray-100 text-gray-400 opacity-60"
+                : "bg-gray-50/60"
+            }`}
           >
-            <option value="">プロジェクト直下</option>
+            <option value="">案件を選択</option>
             {casePool.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title}
@@ -3931,16 +4019,25 @@ export default function Home() {
   );
 
   const updateTask = useCallback(
-    (id: string, data: { title: string; caseId: string; date: string; dateEnd?: string }) => {
-      const linked = caseById[data.caseId];
+    (
+      id: string,
+      data: {
+        title: string;
+        caseId: string;
+        date: string;
+        dateEnd?: string;
+        project?: string;
+      },
+    ) => {
+      const linked = data.caseId ? caseById[data.caseId] : undefined;
       replaceTasks((prev) =>
         prev.map((t) => {
           if (t.id !== id) return t;
           const next: Task = {
             ...t,
             title: data.title,
-            caseId: data.caseId,
-            project: linked?.project ?? t.project,
+            caseId: data.caseId || undefined,
+            project: linked?.project ?? data.project ?? t.project,
             date: data.date,
             dateEnd: data.dateEnd,
           };
