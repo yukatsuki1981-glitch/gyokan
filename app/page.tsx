@@ -2779,8 +2779,17 @@ function MobileCalendarWidget({
     }
   }, [peekMode]);
 
+  useEffect(() => {
+    if (peekMode) {
+      setPeekEngaged(false);
+    }
+  }, [peekMode, selectedDate]);
+
   const handleDaySelect = (cellIso: string) => {
     if (peekSuppressClickRef.current) return;
+    if (peekMode) {
+      setPeekEngaged(false);
+    }
     onSelectDate(cellIso);
   };
 
@@ -2810,7 +2819,6 @@ function MobileCalendarWidget({
       gestureDeltaXRef.current = 0;
       gestureStartMonthIdxRef.current = getMonthIndexFromScroll();
       gestureStartScrollLeftRef.current = strip.scrollLeft;
-      engagePeek();
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -2971,7 +2979,6 @@ function MobileCalendarWidget({
         maxHeight: `${calendarShellH}px`,
         touchAction: "pan-x pinch-zoom",
       }}
-      onPointerDown={engagePeek}
     >
       <div
         ref={horizontalRef}
