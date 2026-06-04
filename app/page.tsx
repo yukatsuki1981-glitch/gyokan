@@ -3125,19 +3125,13 @@ function DailyMemoEditor({
   );
 }
 
-function MobileMemoSheet({
+function MobileMemoModal({
   onClose,
-  tasks,
-  selectedDate,
-  onSelectDate,
   memos,
   viewDateISO,
   onSave,
 }: {
   onClose: () => void;
-  tasks: Task[];
-  selectedDate: string;
-  onSelectDate: (iso: string) => void;
   memos: DailyMemo[];
   viewDateISO: string;
   onSave: (date: string, body: string) => Promise<boolean>;
@@ -3150,18 +3144,21 @@ function MobileMemoSheet({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col lg:hidden"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:hidden"
       role="dialog"
       aria-modal="true"
       aria-label="メモ"
     >
       <button
         type="button"
-        className="h-[30%] w-full shrink-0 bg-white/55 backdrop-blur-[1px]"
+        className="absolute inset-0 bg-white/55 backdrop-blur-[1px]"
         aria-label="メモを閉じる"
         onClick={onClose}
       />
-      <div className="flex h-[70%] min-h-0 flex-col overflow-hidden rounded-t-3xl bg-white shadow-[0_-12px_48px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.04]">
+      <div
+        className="relative flex h-[84vh] w-[84vw] max-h-[84dvh] flex-col overflow-hidden rounded-3xl bg-white shadow-[0_24px_80px_rgba(0,0,0,0.15)] ring-1 ring-black/[0.06]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-4 py-3">
           <h2 className="text-[17px] font-semibold text-gray-900">メモ</h2>
           <button
@@ -3173,20 +3170,8 @@ function MobileMemoSheet({
             <Icon name="x" className="h-5 w-5" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2">
-          <div className="space-y-3">
-            <Card className="overflow-hidden p-1.5">
-              <MobileCalendarWidget
-                tasks={tasks}
-                selectedDate={selectedDate}
-                onSelectDate={onSelectDate}
-                peekMode
-              />
-            </Card>
-            <Card className="p-4">
-              <DailyMemoBoard memos={memos} viewDateISO={viewDateISO} onSave={onSave} />
-            </Card>
-          </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <DailyMemoBoard memos={memos} viewDateISO={viewDateISO} onSave={onSave} />
         </div>
       </div>
     </div>
@@ -3866,6 +3851,7 @@ export default function Home() {
   const [viewingCaseId, setViewingCaseId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("home");
+  const [memoSheetOpen, setMemoSheetOpen] = useState(false);
   const [activeProject, setActiveProject] = useState<string>(ALL_PROJECTS_LABEL);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
   const [casesListOpen, setCasesListOpen] = useState(false);
@@ -4585,12 +4571,9 @@ export default function Home() {
         </div>
       </div>
 
-      {mobileTab === "memo" && (
-        <MobileMemoSheet
-          onClose={() => setMobileTab("home")}
-          tasks={tasks}
-          selectedDate={viewDateISO}
-          onSelectDate={goToDate}
+      {memoSheetOpen && (
+        <MobileMemoModal
+          onClose={() => setMemoSheetOpen(false)}
           memos={dailyMemos}
           viewDateISO={viewDateISO}
           onSave={saveDailyMemo}
@@ -4612,18 +4595,28 @@ export default function Home() {
               type="button"
               onClick={() => {
                 if (tab.id === "cases") {
+                  setMemoSheetOpen(false);
                   openCasesList();
                 } else if (tab.id === "projects") {
+                  setMemoSheetOpen(false);
                   setCasesListOpen(false);
                   setActiveProject(ALL_PROJECTS_LABEL);
                   setMobileTab("projects");
+                } else if (tab.id === "memo") {
+                  setCasesListOpen(false);
+                  setMemoSheetOpen(true);
                 } else {
+                  setMemoSheetOpen(false);
                   setCasesListOpen(false);
                   setMobileTab(tab.id);
                 }
               }}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-all duration-200 ${
-                (tab.id === "cases" ? casesListOpen : mobileTab === tab.id)
+                (tab.id === "cases"
+                  ? casesListOpen
+                  : tab.id === "memo"
+                    ? memoSheetOpen
+                    : mobileTab === tab.id)
                   ? "text-blue-500"
                   : "text-gray-400"
               }`}
@@ -4640,7 +4633,7 @@ export default function Home() {
         type="button"
         onClick={openTaskModalForView}
         className={`fixed z-50 flex h-14 w-14 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/35 transition-all duration-200 hover:scale-105 hover:bg-blue-600 active:scale-95 lg:hidden ${
-          mobileTab === "memo" || mobileTab === "more" || casesListOpen ? "hidden" : ""
+          memoSheetOpen || mobileTab === "more" || casesListOpen ? "hidden" : ""
         }`}
         style={{ right: "1.25rem", bottom: "calc(5.25rem + env(safe-area-inset-bottom))" }}
         aria-label="タスクを追加"
