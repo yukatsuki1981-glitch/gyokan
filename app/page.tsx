@@ -3125,6 +3125,74 @@ function DailyMemoEditor({
   );
 }
 
+function MobileMemoSheet({
+  onClose,
+  tasks,
+  selectedDate,
+  onSelectDate,
+  memos,
+  viewDateISO,
+  onSave,
+}: {
+  onClose: () => void;
+  tasks: Task[];
+  selectedDate: string;
+  onSelectDate: (iso: string) => void;
+  memos: DailyMemo[];
+  viewDateISO: string;
+  onSave: (date: string, body: string) => Promise<boolean>;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col lg:hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="メモ"
+    >
+      <button
+        type="button"
+        className="h-[30%] w-full shrink-0 bg-white/55 backdrop-blur-[1px]"
+        aria-label="メモを閉じる"
+        onClick={onClose}
+      />
+      <div className="flex h-[70%] min-h-0 flex-col overflow-hidden rounded-t-3xl bg-white shadow-[0_-12px_48px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.04]">
+        <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-4 py-3">
+          <h2 className="text-[17px] font-semibold text-gray-900">メモ</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-50"
+          >
+            <Icon name="x" className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-2">
+          <div className="space-y-3">
+            <Card className="overflow-hidden p-1.5">
+              <MobileCalendarWidget
+                tasks={tasks}
+                selectedDate={selectedDate}
+                onSelectDate={onSelectDate}
+                peekMode
+              />
+            </Card>
+            <Card className="p-4">
+              <DailyMemoBoard memos={memos} viewDateISO={viewDateISO} onSave={onSave} />
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DailyMemoBoard({
   memos,
   viewDateISO,
@@ -4263,24 +4331,6 @@ export default function Home() {
                 sensors={sensors}
                 onDragEnd={handleCaseDragEnd}
               />
-            ) : mobileTab === "memo" ? (
-              <section className="space-y-3 lg:hidden">
-                <Card className="overflow-hidden p-1.5">
-                  <MobileCalendarWidget
-                    tasks={tasks}
-                    selectedDate={viewDateISO}
-                    onSelectDate={goToDate}
-                    peekMode
-                  />
-                </Card>
-                <Card className="p-4">
-                  <DailyMemoBoard
-                    memos={dailyMemos}
-                    viewDateISO={viewDateISO}
-                    onSave={saveDailyMemo}
-                  />
-                </Card>
-              </section>
             ) : mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
@@ -4534,6 +4584,18 @@ export default function Home() {
         </aside>
         </div>
       </div>
+
+      {mobileTab === "memo" && (
+        <MobileMemoSheet
+          onClose={() => setMobileTab("home")}
+          tasks={tasks}
+          selectedDate={viewDateISO}
+          onSelectDate={goToDate}
+          memos={dailyMemos}
+          viewDateISO={viewDateISO}
+          onSave={saveDailyMemo}
+        />
+      )}
 
       {/* Mobile Tab Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-black/[0.06] bg-white/80 backdrop-blur-2xl lg:hidden">
