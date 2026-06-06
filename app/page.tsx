@@ -4217,7 +4217,7 @@ export default function Home() {
       <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
       <div className="mx-auto flex min-h-screen max-w-[1480px]">
         {/* Left Sidebar */}
-        <aside className="sticky top-0 hidden h-screen w-[168px] shrink-0 flex-col border-r border-black/[0.06] bg-white/70 px-3 py-5 backdrop-blur-xl lg:flex">
+        <aside className="sticky top-0 hidden h-screen w-[168px] shrink-0 flex-col border-r border-black/[0.06] bg-white/70 px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col">
           <div className="mb-6 flex items-center justify-between gap-2 px-1">
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#007AFF] text-[11px] font-bold text-white shadow-sm">行</div>
@@ -4240,6 +4240,21 @@ export default function Home() {
             <Icon name="folder" className="h-3.5 w-3.5 text-gray-400" />
             完了済み
           </button>
+
+          <div className="mt-auto border-t border-black/[0.06] pt-4">
+            {user.email && (
+              <p className="mb-2 truncate px-1 text-[10px] text-gray-400" title={user.email}>
+                {user.email}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="w-full rounded-lg border border-black/[0.08] px-2 py-2 text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.02]"
+            >
+              ログアウト
+            </button>
+          </div>
         </aside>
 
         {/* Main + Right Panel */}
