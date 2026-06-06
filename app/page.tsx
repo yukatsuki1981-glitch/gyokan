@@ -2646,8 +2646,11 @@ function MobileCalendarWidget({
   const gestureStartMonthIdxRef = useRef(0);
   const gestureStartScrollLeftRef = useRef(0);
   const gestureDeltaXRef = useRef(0);
+  const isSnappingRef = useRef(false);
+  const isPeekRef = useRef(false);
 
   const isPeek = peekMode && !peekEngaged;
+  isPeekRef.current = isPeek;
   const PEEK_WEEKS = 2;
   const PEEK_GRID_H = CALENDAR_CELL_ROW_H * PEEK_WEEKS;
   const PEEK_HEADER_H = 58;
@@ -2729,9 +2732,20 @@ function MobileCalendarWidget({
 
   const snapToGestureMonth = useCallback(
     (behavior: ScrollBehavior = "smooth") => {
-      scrollToMonthIndex(resolveGestureTargetMonth(), behavior);
+      if (isSnappingRef.current) return;
+      isSnappingRef.current = true;
+      const targetIdx = resolveGestureTargetMonth();
+      if (peekMode && !peekEngaged) {
+        setPeekEngaged(true);
+      }
+      requestAnimationFrame(() => {
+        scrollToMonthIndex(targetIdx, behavior);
+        window.setTimeout(() => {
+          isSnappingRef.current = false;
+        }, 400);
+      });
     },
-    [resolveGestureTargetMonth, scrollToMonthIndex],
+    [peekMode, peekEngaged, resolveGestureTargetMonth, scrollToMonthIndex],
   );
 
   const goToday = useCallback(() => {
@@ -2793,13 +2807,6 @@ function MobileCalendarWidget({
     onSelectDate(cellIso);
   };
 
-  const engagePeek = useCallback(() => {
-    if (peekMode && !peekEngaged) {
-      setPeekEngaged(true);
-      requestAnimationFrame(() => scrollToMonthIndex(visibleMonthIdx));
-    }
-  }, [peekMode, peekEngaged, scrollToMonthIndex, visibleMonthIdx]);
-
   useEffect(() => {
     const strip = horizontalRef.current;
     if (!strip) return;
@@ -2808,8 +2815,6 @@ function MobileCalendarWidget({
     let touchStartY = 0;
     let tracking = false;
     let didDrag = false;
-    let suppressTimer: ReturnType<typeof setTimeout> | undefined;
-
     const onTouchStart = (e: TouchEvent) => {
       touchStartX = e.touches[0]?.clientX ?? 0;
       touchStartY = e.touches[0]?.clientY ?? 0;
@@ -2835,7 +2840,6 @@ function MobileCalendarWidget({
         didDrag = true;
         gestureDeltaXRef.current = dx;
         peekSuppressClickRef.current = true;
-        engagePeek();
       }
     };
 
@@ -2847,44 +2851,30 @@ function MobileCalendarWidget({
         snapToGestureMonth("smooth");
         window.setTimeout(() => {
           peekSuppressClickRef.current = false;
-        }, 350);
-      }
-    };
-
-    const onScroll = () => {
-      engagePeek();
-      peekSuppressClickRef.current = true;
-      if (suppressTimer) clearTimeout(suppressTimer);
-      suppressTimer = setTimeout(() => {
+        }, 300);
+      } else {
         peekSuppressClickRef.current = false;
-      }, 350);
-    };
-
-    let scrollSnapTimer: ReturnType<typeof setTimeout> | undefined;
-    const onScrollSnap = () => {
-      if (scrollSnapTimer) clearTimeout(scrollSnapTimer);
-      scrollSnapTimer = setTimeout(() => {
-        if (!tracking) snapToGestureMonth("smooth");
-      }, 120);
+      }
     };
 
     const onPointerDown = () => {
       gestureStartMonthIdxRef.current = getMonthIndexFromScroll();
       gestureStartScrollLeftRef.current = strip.scrollLeft;
       gestureDeltaXRef.current = 0;
-    };
-
-    const onScrollEnd = () => {
-      if (!tracking) snapToGestureMonth("smooth");
+      isSnappingRef.current = false;
     };
 
     strip.addEventListener("pointerdown", onPointerDown, { passive: true });
     strip.addEventListener("touchstart", onTouchStart, { passive: true });
     strip.addEventListener("touchmove", onTouchMove, { passive: true });
+    const onScrollEnd = () => {
+      if (tracking || isPeekRef.current || isSnappingRef.current) return;
+      const idx = getMonthIndexFromScroll();
+      scrollToMonthIndex(idx, "smooth");
+    };
+
     strip.addEventListener("touchend", onTouchEnd, { passive: true });
     strip.addEventListener("touchcancel", onTouchEnd, { passive: true });
-    strip.addEventListener("scroll", onScroll, { passive: true });
-    strip.addEventListener("scroll", onScrollSnap, { passive: true });
     strip.addEventListener("scrollend", onScrollEnd);
 
     return () => {
@@ -2893,13 +2883,9 @@ function MobileCalendarWidget({
       strip.removeEventListener("touchmove", onTouchMove);
       strip.removeEventListener("touchend", onTouchEnd);
       strip.removeEventListener("touchcancel", onTouchEnd);
-      strip.removeEventListener("scroll", onScroll);
-      strip.removeEventListener("scroll", onScrollSnap);
       strip.removeEventListener("scrollend", onScrollEnd);
-      if (suppressTimer) clearTimeout(suppressTimer);
-      if (scrollSnapTimer) clearTimeout(scrollSnapTimer);
     };
-  }, [engagePeek, getMonthIndexFromScroll, snapToGestureMonth]);
+  }, [getMonthIndexFromScroll, scrollToMonthIndex, snapToGestureMonth]);
 
   const renderDayButton = (
     cell: CalendarCell,
@@ -2982,10 +2968,12 @@ function MobileCalendarWidget({
     >
       <div
         ref={horizontalRef}
-        className="flex h-full w-full overflow-x-auto overscroll-x-contain scrollbar-none"
+        className={`flex h-full w-full overscroll-x-contain scrollbar-none ${
+          isPeek ? "overflow-x-hidden" : "overflow-x-auto"
+        }`}
         style={{
           WebkitOverflowScrolling: "touch",
-          touchAction: "pan-x pinch-zoom",
+          touchAction: isPeek ? "pan-y pinch-zoom" : "pan-x pinch-zoom",
         }}
       >
         {months.map(({ year, month }, monthIdx) => {

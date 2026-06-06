@@ -13,6 +13,12 @@ function LoginForm() {
   const authReason = searchParams.get("reason");
   const authDetail = searchParams.get("detail");
   const [checking, setChecking] = useState(true);
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formMessage, setFormMessage] = useState<string | null>(null);
 
   const errorMessage = (() => {
     if (!authError) return null;
@@ -54,6 +60,58 @@ function LoginForm() {
     };
   }, [router]);
 
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setFormMessage(null);
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      setFormError("メールアドレスとパスワードを入力してください。");
+      return;
+    }
+
+    setSubmitting(true);
+    const supabase = createClient();
+
+    try {
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: trimmedEmail,
+          password,
+        });
+        if (error) {
+          setFormError(
+            error.message.includes("Invalid login credentials")
+              ? "メールアドレスまたはパスワードが正しくありません。"
+              : error.message,
+          );
+          return;
+        }
+        router.replace("/");
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+      });
+      if (error) {
+        setFormError(error.message);
+        return;
+      }
+      if (data.session) {
+        router.replace("/");
+        return;
+      }
+      setFormMessage(
+        "確認メールを送信しました。メール内のリンクから登録を完了してください。",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (checking) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#fafafa]">
@@ -92,6 +150,74 @@ function LoginForm() {
             )}
           </div>
         )}
+        {formError && (
+          <div className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-center text-[13px] text-red-600">
+            {formError}
+          </div>
+        )}
+        {formMessage && (
+          <div className="mb-4 rounded-xl bg-emerald-50 px-3 py-2 text-center text-[13px] leading-relaxed text-emerald-700">
+            {formMessage}
+          </div>
+        )}
+        <form onSubmit={handleEmailAuth} className="mb-4 space-y-3">
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] font-medium text-gray-500">
+              メールアドレス
+            </span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              className="w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[14px] outline-none transition-colors focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+              placeholder="name@example.com"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] font-medium text-gray-500">
+              パスワード
+            </span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              className="w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[14px] outline-none transition-colors focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+              placeholder="8文字以上"
+              minLength={8}
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full rounded-xl bg-[#007AFF] px-4 py-3 text-[14px] font-medium text-white transition-colors hover:bg-[#0066d6] disabled:opacity-60"
+          >
+            {submitting
+              ? "処理中…"
+              : mode === "login"
+                ? "メールでログイン"
+                : "アカウントを作成"}
+          </button>
+        </form>
+        <button
+          type="button"
+          onClick={() => {
+            setMode((m) => (m === "login" ? "signup" : "login"));
+            setFormError(null);
+            setFormMessage(null);
+          }}
+          className="mb-4 w-full text-center text-[12px] text-gray-500 transition-colors hover:text-[#007AFF]"
+        >
+          {mode === "login"
+            ? "アカウントをお持ちでない方はこちら"
+            : "すでにアカウントをお持ちの方はこちら"}
+        </button>
+        <div className="mb-4 flex items-center gap-3">
+          <div className="h-px flex-1 bg-black/[0.06]" />
+          <span className="text-[11px] text-gray-400">または</span>
+          <div className="h-px flex-1 bg-black/[0.06]" />
+        </div>
         <a
           href="/auth/login/google"
           className="flex w-full items-center justify-center gap-3 rounded-xl border border-black/[0.08] bg-white px-4 py-3 text-[14px] font-medium text-gray-800 transition-colors hover:bg-gray-50"
