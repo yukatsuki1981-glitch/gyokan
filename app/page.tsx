@@ -404,8 +404,20 @@ function isRangeTask(task: Task) {
   return !!task.dateEnd && task.dateEnd !== task.date;
 }
 
-function isActiveRangeTask(task: Task, today: string) {
-  return isRangeTask(task) && today >= task.date && today <= task.dateEnd!;
+function isActiveRangeTask(task: Task, viewDate: string) {
+  return isRangeTask(task) && viewDate >= task.date && viewDate <= task.dateEnd!;
+}
+
+function isRangeTaskEndingOn(task: Task, viewDate: string) {
+  return isRangeTask(task) && task.dateEnd === viewDate;
+}
+
+function isOngoingRangeTask(task: Task, viewDate: string) {
+  return isActiveRangeTask(task, viewDate) && task.dateEnd !== viewDate;
+}
+
+function isTopSectionTask(task: Task, viewDate: string) {
+  return (!isRangeTask(task) && task.date === viewDate) || isRangeTaskEndingOn(task, viewDate);
 }
 
 function formatMonthDay(iso: string) {
@@ -419,9 +431,13 @@ function formatTaskTimeLabel(date: string) {
   return date.replace(/-/g, "/");
 }
 
+function formatRangeTaskDeadline(task: Task) {
+  return `${formatMonthDay(task.dateEnd!)}までの期限`;
+}
+
 function formatTaskPeriod(task: Task) {
   if (isRangeTask(task)) {
-    return `～${formatMonthDay(task.dateEnd!)}`;
+    return formatRangeTaskDeadline(task);
   }
   if (task.date === todayISO()) return "今日";
   if (task.date === tomorrowISO()) return "明日";
@@ -461,7 +477,16 @@ function getGridCellIso(year: number, month: number, cellIndex: number) {
 function buildSingleDayTasksByDate(tasks: Task[]) {
   const map = new Map<string, Task[]>();
   for (const task of tasks) {
-    if (isRangeTask(task)) continue;
+    if (isRangeTask(task)) {
+      let day = task.date;
+      while (day <= task.dateEnd!) {
+        const list = map.get(day) ?? [];
+        list.push(task);
+        map.set(day, list);
+        day = shiftISODate(day, 1);
+      }
+      continue;
+    }
     const list = map.get(task.date) ?? [];
     list.push(task);
     map.set(task.date, list);
@@ -1174,9 +1199,9 @@ function CaseDetailEditor({
 
   const formValues = useMemo((): CaseDraftFields => ({
     title,
-    project,
+      project,
     goal,
-    status,
+      status,
     statusTone: STATUS_OPTIONS.find((s) => s.label === status)?.tone ?? item.statusTone,
     deadline,
   }), [title, project, goal, status, deadline, item.statusTone]);
@@ -1307,10 +1332,10 @@ function CaseDetailEditor({
       )}
       <div className={`flex gap-2 ${layout === "page" ? "mt-5 justify-end" : "mt-5 justify-end"}`}>
         {layout === "modal" && onClose && (
-          <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
+        <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
         )}
         {layout === "modal" && (
-          <button type="button" onClick={save} className="rounded-xl bg-[#007AFF] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
+        <button type="button" onClick={save} className="rounded-xl bg-[#007AFF] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
         )}
         {layout === "page" && (
           <p className="text-[11px] text-gray-300">入力内容は自動保存されます</p>
@@ -1387,7 +1412,7 @@ function TaskDetailEditor({
   const formValues = useMemo((): TaskDraftFields => ({
     title,
     caseId,
-    date,
+      date,
     dateEnd,
     useRange,
   }), [title, caseId, date, dateEnd, useRange]);
@@ -1412,7 +1437,7 @@ function TaskDetailEditor({
         title: values.title.trim(),
         caseId: direct ? "" : values.caseId,
         date: values.date,
-        dateEnd: end,
+      dateEnd: end,
         project: direct ? projectName : values.caseId ? undefined : "",
       });
     },
@@ -1492,7 +1517,7 @@ function TaskDetailEditor({
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={fieldInputClass} />
         </DetailField>
       )}
-      <label className="mb-4 flex items-center gap-2 text-[13px] text-gray-600">
+      <label className="mb-3 flex items-center gap-2 text-[13px] text-gray-600">
         <input
           type="checkbox"
           checked={useRange}
@@ -1505,17 +1530,26 @@ function TaskDetailEditor({
           }}
           className="rounded border-gray-300"
         />
-        期限指定
+        実施期間を選択
       </label>
       {useRange && (
-        <>
-          <DetailField label="開始日">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={fieldInputClass} />
-          </DetailField>
-          <DetailField label="終了日">
-            <input type="date" value={dateEnd || date} onChange={(e) => setDateEnd(e.target.value)} className={fieldInputClass} />
-          </DetailField>
-        </>
+        <DetailField label="実施期間">
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className={`${fieldInputClass} min-w-0 flex-1`}
+            />
+            <span className="shrink-0 text-[13px] text-gray-400">～</span>
+            <input
+              type="date"
+              value={dateEnd || date}
+              onChange={(e) => setDateEnd(e.target.value)}
+              className={`${fieldInputClass} min-w-0 flex-1`}
+            />
+          </div>
+        </DetailField>
       )}
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
@@ -1987,7 +2021,7 @@ function ProjectMemoEditor({
           >
             保存
           </button>
-        </div>
+      </div>
       </div>
     </div>
   );
@@ -2191,6 +2225,7 @@ function TodayTasksSection({
   completedTaskCount,
   displayedTasks,
   incompleteOtherTasks,
+  ongoingRangeTasks,
   renderTaskList,
   onAddTask,
   className = "",
@@ -2200,6 +2235,7 @@ function TodayTasksSection({
   completedTaskCount: number;
   displayedTasks: Task[];
   incompleteOtherTasks: Task[];
+  ongoingRangeTasks: Task[];
   renderTaskList: (
     list: Task[],
     dragScope: "today" | "upcoming" | "range",
@@ -2229,7 +2265,9 @@ function TodayTasksSection({
       </div>
 
       <Card className="overflow-hidden p-1.5">
-        {displayedTasks.length === 0 && incompleteOtherTasks.length === 0 ? (
+        {displayedTasks.length === 0 &&
+        incompleteOtherTasks.length === 0 &&
+        ongoingRangeTasks.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-[12px] text-gray-400">タスクがありません</p>
           </div>
@@ -2243,6 +2281,17 @@ function TodayTasksSection({
                   <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
                 </div>
                 {renderTaskList(incompleteOtherTasks, "range", { showOriginalDeadline: true })}
+              </div>
+            )}
+            {ongoingRangeTasks.length > 0 && (
+              <div
+                className={
+                  displayedTasks.length > 0 || incompleteOtherTasks.length > 0
+                    ? "mt-2 border-t border-black/[0.04] pt-2"
+                    : ""
+                }
+              >
+                {renderTaskList(ongoingRangeTasks, "upcoming")}
               </div>
             )}
           </>
@@ -2285,14 +2334,14 @@ function TaskRowContent({
       } ${sortable ? "select-none" : ""}`}
     >
       {sortable && (
-        <button
-          type="button"
-          aria-label="並び替え"
-          onClick={(e) => e.stopPropagation()}
+      <button
+        type="button"
+        aria-label="並び替え"
+        onClick={(e) => e.stopPropagation()}
           {...mergeDragHandleProps(dragHandleProps)}
-        >
-          <Icon name="grip" className="h-3.5 w-3.5" />
-        </button>
+      >
+        <Icon name="grip" className="h-3.5 w-3.5" />
+      </button>
       )}
 
       <button
@@ -2321,7 +2370,7 @@ function TaskRowContent({
       {task.caseId ? (
         <CaseNameTag caseId={task.caseId} muted={task.done} />
       ) : task.project.trim() ? (
-        <ProjectNameTag name={task.project} muted={task.done} />
+      <ProjectNameTag name={task.project} muted={task.done} />
       ) : null}
       {isRangeTask(task) && (
         <span className="shrink-0 text-[10px] text-gray-400">{formatTaskPeriod(task)}</span>
@@ -2896,7 +2945,7 @@ function MobileCalendarWidget({
     const cellIso = getGridCellIso(year, month, cellIndex);
     const dayTasks = tasksByDate.get(cellIso) ?? [];
 
-    return (
+  return (
       <MobileCalendarDayCell
         key={`${year}-${month}-${cellIndex}-${cell.day}-${cell.inMonth}`}
         cell={cell}
@@ -2928,18 +2977,18 @@ function MobileCalendarWidget({
   const renderMonthHeader = (year: number, month: number, monthLabel: string) => (
     <div data-month-header className="relative mb-1 flex items-center justify-between px-2">
       <span className="text-[16px] font-semibold text-gray-900">{monthLabel}</span>
-      <button
-        type="button"
+        <button
+          type="button"
         onClick={goToday}
         aria-label="今日へ"
         className="relative z-10 rounded-lg px-2 py-0.5 text-[13px] font-medium text-[#007AFF] hover:bg-blue-50"
       >
         今日
-      </button>
+        </button>
       <span className="pointer-events-none absolute right-12 top-1/2 -translate-y-1/2 select-none text-[4.5rem] font-bold leading-none text-gray-100">
         {month + 1}
       </span>
-    </div>
+      </div>
   );
 
   const renderDayGrid = (year: number, month: number, grid: CalendarCell[]) => (
@@ -3019,8 +3068,8 @@ function MobileCalendarWidget({
                   }
                 >
                   {renderDayGrid(year, month, grid)}
-                </div>
-              </div>
+          </div>
+      </div>
             </div>
           );
         })}
@@ -3099,7 +3148,7 @@ function DailyMemoEditor({
     return () => window.removeEventListener("pagehide", onPageHide);
   }, [flush]);
 
-  return (
+          return (
     <article className="rounded-md border border-black/[0.06] bg-[#fafafa]/80 px-3 py-2.5">
       <textarea
         ref={textareaRef}
@@ -3137,8 +3186,8 @@ function MobileMemoModal({
       aria-modal="true"
       aria-label="メモ"
     >
-      <button
-        type="button"
+            <button
+              type="button"
         className="absolute inset-0 bg-white/55 backdrop-blur-[1px]"
         aria-label="メモを閉じる"
         onClick={onClose}
@@ -3156,8 +3205,8 @@ function MobileMemoModal({
             className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-50"
           >
             <Icon name="x" className="h-5 w-5" />
-          </button>
-        </div>
+            </button>
+      </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <DailyMemoBoard memos={memos} viewDateISO={viewDateISO} onSave={onSave} />
         </div>
@@ -3587,6 +3636,7 @@ function AddTaskModalForm({
   onSubmit: (data: {
     title: string;
     date: string;
+    dateEnd?: string;
     project: string;
     caseId?: string;
   }) => void;
@@ -3609,6 +3659,8 @@ function AddTaskModalForm({
   }, [ongoingCases, defaultProject]);
   const [caseId, setCaseId] = useState(defaultCaseId ?? "");
   const [date, setDate] = useState(defaultDate ?? todayISO());
+  const [dateEnd, setDateEnd] = useState(defaultDate ?? todayISO());
+  const [useRange, setUseRange] = useState(false);
 
   useEffect(() => {
     if (defaultProject) {
@@ -3633,11 +3685,17 @@ function AddTaskModalForm({
 
   const submit = () => {
     if (!title.trim()) return;
+    const end =
+      useRange && dateEnd && dateEnd !== date ? dateEnd : undefined;
+    const payload = {
+      title: title.trim(),
+      date,
+      dateEnd: end,
+    };
     if (underProjectDirect) {
       if (!project) return;
       onSubmit({
-        title: title.trim(),
-        date,
+        ...payload,
         project,
         caseId: undefined,
       });
@@ -3645,8 +3703,7 @@ function AddTaskModalForm({
       const linked = caseId ? ongoingCases.find((c) => c.id === caseId) : undefined;
       if (caseId && !linked) return;
       onSubmit({
-        title: title.trim(),
-        date,
+        ...payload,
         project: linked?.project ?? "",
         caseId: caseId || undefined,
       });
@@ -3689,9 +3746,9 @@ function AddTaskModalForm({
             {casePool.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title}
-              </option>
-            ))}
-          </select>
+                </option>
+              ))}
+            </select>
           <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-gray-700">
             <input
               type="checkbox"
@@ -3718,17 +3775,54 @@ function AddTaskModalForm({
               ))}
             </select>
           )}
-        </label>
-        <label className="mb-6 block">
-          <span className="mb-2 block text-[12px] font-medium text-gray-400">期限</span>
+          </label>
+        {!useRange && (
+          <label className="mb-3 block">
+            <span className="mb-2 block text-[12px] font-medium text-gray-400">期限</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+            />
+          </label>
+        )}
+        <label className="mb-3 flex items-center gap-2 text-[13px] text-gray-700">
           <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+            type="checkbox"
+            checked={useRange}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setUseRange(checked);
+              if (checked && !dateEnd) {
+                setDateEnd(date);
+              }
+            }}
+            className="rounded border-gray-300"
           />
+          実施期間を選択
         </label>
-        <div className="flex justify-end gap-2">
+        {useRange && (
+          <label className="mb-6 block">
+            <span className="mb-2 block text-[12px] font-medium text-gray-400">実施期間</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="min-w-0 flex-1 rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+              />
+              <span className="shrink-0 text-[13px] text-gray-400">～</span>
+              <input
+                type="date"
+                value={dateEnd || date}
+                onChange={(e) => setDateEnd(e.target.value)}
+                className="min-w-0 flex-1 rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+              />
+            </div>
+          </label>
+        )}
+        <div className={`flex justify-end gap-2 ${useRange ? "" : "mt-2"}`}>
           <button type="button" onClick={onClose} className="rounded-2xl px-5 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50">キャンセル</button>
           <button type="button" onClick={submit} className="rounded-2xl bg-blue-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-blue-500/25 hover:bg-blue-600">追加する</button>
         </div>
@@ -3752,6 +3846,7 @@ function AddTaskModal({
   onSubmit: (data: {
     title: string;
     date: string;
+    dateEnd?: string;
     project: string;
     caseId?: string;
   }) => void;
@@ -3891,12 +3986,12 @@ export default function Home() {
     if (lastView) setViewDateISO(lastView);
   }, [reload]);
 
-  const viewDateTasks = useMemo(
-    () => tasks.filter((t) => !isRangeTask(t) && t.date === viewDateISO),
+  const topViewTasks = useMemo(
+    () => tasks.filter((t) => isTopSectionTask(t, viewDateISO)),
     [tasks, viewDateISO],
   );
-  const activeTasks = useMemo(() => viewDateTasks.filter((t) => !t.done), [viewDateTasks]);
-  const completedTasks = useMemo(() => viewDateTasks.filter((t) => t.done), [viewDateTasks]);
+  const activeTasks = useMemo(() => topViewTasks.filter((t) => !t.done), [topViewTasks]);
+  const completedTasks = useMemo(() => topViewTasks.filter((t) => t.done), [topViewTasks]);
 
   const ongoingCases = useMemo(
     () => cases.filter((c) => !c.done),
@@ -3949,12 +4044,16 @@ export default function Home() {
     return sortTasksActiveFirst(list);
   }, [tasks, viewDateISO, activeProject, isAllProjects, caseById]);
 
-  const upcomingRangeTasks = useMemo(() => {
-    let list = tasks.filter((t) => isActiveRangeTask(t, viewDateISO));
+  const ongoingRangeTasks = useMemo(() => {
+    let list = tasks.filter((t) => isOngoingRangeTask(t, viewDateISO));
     if (!isAllProjects) {
       list = list.filter((t) => taskBelongsToProject(t, activeProject, caseById));
     }
-    return list;
+    const active = list
+      .filter((t) => !t.done)
+      .sort((a, b) => (a.dateEnd ?? "").localeCompare(b.dateEnd ?? ""));
+    const done = list.filter((t) => t.done);
+    return [...active, ...done];
   }, [tasks, viewDateISO, activeProject, isAllProjects, caseById]);
 
   const completedCasesCount = useMemo(
@@ -3971,14 +4070,14 @@ export default function Home() {
   }, []);
 
   const displayedTasks = useMemo(() => {
-    let list = viewDateTasks;
+    let list = topViewTasks;
     if (!isAllProjects) {
       list = list.filter((t) => taskBelongsToProject(t, activeProject, caseById));
     }
     const active = list.filter((t) => !t.done);
     const done = list.filter((t) => t.done);
     return [...active, ...done];
-  }, [viewDateTasks, activeProject, isAllProjects, caseById]);
+  }, [topViewTasks, activeProject, isAllProjects, caseById]);
 
   const goToDate = useCallback((iso: string) => {
     setViewDateISO(iso);
@@ -4008,7 +4107,7 @@ export default function Home() {
       if (!over || active.id === over.id) return;
 
       replaceTasks((prev) => {
-        let visible = prev.filter((t) => !isRangeTask(t) && t.date === viewDateISO);
+        let visible = prev.filter((t) => isTopSectionTask(t, viewDateISO));
         if (!isAllProjects) {
           visible = visible.filter((t) => taskBelongsToProject(t, activeProject, caseById));
         }
@@ -4024,7 +4123,7 @@ export default function Home() {
       if (!over || active.id === over.id) return;
 
       replaceTasks((prev) => {
-        let visible = prev.filter((t) => isActiveRangeTask(t, viewDateISO));
+        let visible = prev.filter((t) => isOngoingRangeTask(t, viewDateISO));
         if (!isAllProjects) {
           visible = visible.filter((t) => taskBelongsToProject(t, activeProject, caseById));
         }
@@ -4067,11 +4166,31 @@ export default function Home() {
   }, [addProject]);
 
   const addTask = useCallback(
-    (data: { title: string; date: string; project: string; caseId?: string }) => {
+    (data: {
+      title: string;
+      date: string;
+      dateEnd?: string;
+      project: string;
+      caseId?: string;
+    }) => {
+      const draft: Task = normalizeTask({
+        id: "",
+        title: data.title,
+        time: "",
+        date: data.date,
+        dateEnd: data.dateEnd,
+        done: false,
+        project: data.project,
+        caseId: data.caseId,
+        sortOrder: 0,
+      });
       persistAddTask({
         title: data.title,
-        time: formatTaskTimeLabel(data.date),
+        time: isRangeTask(draft)
+          ? formatRangeTaskDeadline(draft)
+          : formatTaskTimeLabel(data.date),
         date: data.date,
+        dateEnd: draft.dateEnd,
         project: data.project,
         caseId: data.caseId,
       });
@@ -4103,7 +4222,7 @@ export default function Home() {
             dateEnd: data.dateEnd,
           };
           if (isRangeTask(next)) {
-            next.time = `～${formatMonthDay(next.dateEnd!)}`;
+            next.time = formatRangeTaskDeadline(next);
           } else {
             next.time =
               data.date === todayISO()
@@ -4200,12 +4319,12 @@ export default function Home() {
             ? handleUpcomingTaskDragEnd
             : () => {}
       }
-      onToggle={toggleTask}
-      onDelete={deleteTask}
-      onOpen={setSelectedTask}
-      showOriginalDeadline={options?.showOriginalDeadline}
+              onToggle={toggleTask}
+              onDelete={deleteTask}
+              onOpen={setSelectedTask}
+              showOriginalDeadline={options?.showOriginalDeadline}
       sortable={dragScope === "today" || dragScope === "upcoming"}
-    />
+            />
   );
 
   const showHomeCaseGrid = mobileTab === "home";
@@ -4222,7 +4341,7 @@ export default function Home() {
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#007AFF] text-[11px] font-bold text-white shadow-sm">行</div>
               <span className="truncate text-[13px] font-semibold tracking-tight text-gray-900">行間</span>
-            </div>
+          </div>
             <RefreshButton iconClassName="h-4 w-4" className="shrink-0 p-1.5 hover:bg-black/[0.04]" onRefresh={handleRefresh} />
           </div>
 
@@ -4326,9 +4445,9 @@ export default function Home() {
                   projects={projectNames}
                   cases={cases}
                   onSelect={setActiveProject}
-                />
-              ) : (
-                <>
+              />
+            ) : (
+              <>
                   {viewingCase ? (
                     <CaseDetailSection
                       item={viewingCase}
@@ -4359,6 +4478,7 @@ export default function Home() {
                         completedTaskCount={completedTasks.length}
                         displayedTasks={displayedTasks}
                         incompleteOtherTasks={incompleteOtherTasks}
+                        ongoingRangeTasks={ongoingRangeTasks}
                         renderTaskList={renderTaskList}
                         onAddTask={openTaskModalForView}
                       />
@@ -4415,33 +4535,11 @@ export default function Home() {
                 completedTaskCount={completedTasks.length}
                 displayedTasks={displayedTasks}
                 incompleteOtherTasks={incompleteOtherTasks}
+                ongoingRangeTasks={ongoingRangeTasks}
                 renderTaskList={renderTaskList}
                 onAddTask={openTaskModalForView}
                 className={!isAllProjects ? "order-3 lg:order-3" : "order-2 lg:order-3"}
               />
-            )}
-
-            {showTasks && upcomingRangeTasks.length > 0 && (
-              <section className="order-4 mb-4 lg:order-4">
-                <div className="mb-2 flex items-center justify-between gap-4">
-                  <div className="flex min-w-0 items-baseline gap-3">
-                    <h3 className="shrink-0 text-[17px] font-semibold tracking-tight text-gray-900">近日中対応タスク</h3>
-                    <span className="text-[13px] text-gray-400">
-                      未完了 {upcomingRangeTasks.filter((t) => !t.done).length}件
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={openTaskModalForView}
-                    className="shrink-0 text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
-                  >
-                    ＋ タスクを追加
-                  </button>
-                </div>
-                <Card className="overflow-hidden p-1.5">
-                  {renderTaskList(upcomingRangeTasks, "upcoming")}
-                </Card>
-              </section>
             )}
 
             {isAllProjects && (
@@ -4496,10 +4594,10 @@ export default function Home() {
               </section>
             )}
 
-            </div>
+                </div>
 
-              </>
-            )}
+                    </>
+                  )}
 
             {!casesListOpen && mobileTab === "more" && (
               <section className="space-y-4">
@@ -4676,13 +4774,13 @@ export default function Home() {
         title="案件を編集"
       >
         {selectedCase && (
-        <CaseDetailEditor
-          key={selectedCase.id}
-          item={selectedCase}
-          onSave={updateCase}
-          onClose={() => setSelectedCase(null)}
+          <CaseDetailEditor
+            key={selectedCase.id}
+            item={selectedCase}
+            onSave={updateCase}
+            onClose={() => setSelectedCase(null)}
           layout="modal"
-        />
+          />
         )}
       </DetailOverlay>
 

@@ -1,10 +1,10 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
-import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { createClient, resetBrowserClient } from "@/lib/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 function LoginForm() {
   const router = useRouter();
@@ -13,12 +13,14 @@ function LoginForm() {
   const authReason = searchParams.get("reason");
   const authDetail = searchParams.get("detail");
   const [checking, setChecking] = useState(true);
+  const [existingSession, setExistingSession] = useState<Session | null>(null);
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formMessage, setFormMessage] = useState<string | null>(null);
+  const signingInRef = useRef(false);
 
   const errorMessage = (() => {
     if (!authError) return null;
@@ -36,29 +38,52 @@ function LoginForm() {
 
   useEffect(() => {
     const supabase = createClient();
-    let redirected = false;
-    const goHomeIfSignedIn = (hasUser: boolean) => {
+
+    const finishCheck = (session: Session | null) => {
+      setExistingSession(session);
       setChecking(false);
-      if (hasUser && !redirected) {
-        redirected = true;
-        router.replace("/");
-      }
     };
+
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      finishCheck(session);
+    });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => {
-        goHomeIfSignedIn(!!session?.user);
-      },
-    );
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (signingInRef.current && session?.user) {
+        window.location.href = "/";
+        return;
+      }
+      setExistingSession(session);
+      setChecking(false);
+    });
 
     const fallback = window.setTimeout(() => setChecking(false), 5000);
     return () => {
       window.clearTimeout(fallback);
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, []);
+
+  const handleSignOut = async () => {
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut({ scope: "global" });
+      resetBrowserClient();
+      setExistingSession(null);
+      router.refresh();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const redirectAfterAuth = () => {
+    signingInRef.current = true;
+    window.location.href = "/";
+  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +101,7 @@ function LoginForm() {
 
     try {
       if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: trimmedEmail,
           password,
         });
@@ -88,7 +113,11 @@ function LoginForm() {
           );
           return;
         }
-        router.replace("/");
+        if (!data.session) {
+          setFormError("ログインに成功しましたが、セッションを取得できませんでした。もう一度お試しください。");
+          return;
+        }
+        redirectAfterAuth();
         return;
       }
 
@@ -101,7 +130,7 @@ function LoginForm() {
         return;
       }
       if (data.session) {
-        router.replace("/");
+        redirectAfterAuth();
         return;
       }
       setFormMessage(
@@ -132,6 +161,22 @@ function LoginForm() {
             タスク・案件管理
           </p>
         </div>
+        {existingSession?.user && (
+          <div className="mb-4 space-y-3 rounded-xl bg-amber-50 px-3 py-3 text-[13px] text-amber-900">
+            <p className="leading-relaxed">
+              <span className="font-medium">{existingSession.user.email}</span>
+              {" "}でログイン中です。別のアカウント（メールログインなど）を使う場合は、一度ログアウトしてください。
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              disabled={submitting}
+              className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-[13px] font-medium text-amber-900 transition-colors hover:bg-amber-100/60 disabled:opacity-60"
+            >
+              ログアウトして別アカウントでログイン
+            </button>
+          </div>
+        )}
         {errorMessage && (
           <div className="mb-4 space-y-2 rounded-xl bg-red-50 px-3 py-2 text-[13px] text-red-600">
             <p className="text-center font-medium">ログインに失敗しました</p>

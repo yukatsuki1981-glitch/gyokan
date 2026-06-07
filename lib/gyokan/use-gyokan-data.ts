@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, resetBrowserClient } from "@/lib/supabase/client";
 import { ALL_PROJECTS_LABEL, DEFAULT_PROJECT_ACCENT } from "./constants";
 import { buildProjectMaps, newUuid } from "./mappers";
 import { buildCaseById, enrichTaskWithCase } from "./task-case";
@@ -446,7 +446,8 @@ export function useGyokanData() {
   }, [getSupabase]);
 
   const signOut = useCallback(async () => {
-    await getSupabase().auth.signOut();
+    await getSupabase().auth.signOut({ scope: "global" });
+    resetBrowserClient();
     window.location.href = "/login";
   }, [getSupabase]);
 
@@ -489,6 +490,7 @@ export function useGyokanData() {
       title: string;
       time: string;
       date: string;
+      dateEnd?: string;
       project: string;
       caseId?: string;
     }) => {
@@ -502,6 +504,7 @@ export function useGyokanData() {
         title: data.title,
         time: data.time,
         date: data.date,
+        dateEnd: data.dateEnd,
         done: false,
         project,
         caseId: data.caseId,
