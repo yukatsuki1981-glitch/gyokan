@@ -1,10 +1,12 @@
+import { getConfiguredSiteUrl } from "@/lib/site-url";
+
 /**
  * OAuth callback must use a browser-reachable host.
  * `next dev --hostname 0.0.0.0` still serves on localhost; 0.0.0.0 breaks redirects.
  */
 export function getAuthRedirectOrigin() {
   if (typeof window === "undefined") {
-    return process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+    return getConfiguredSiteUrl();
   }
 
   const { hostname, port, protocol } = window.location;
@@ -22,8 +24,5 @@ export function getAuthCallbackUrl() {
 
 /** Server Actions / Route Handlers (no window). */
 export function getServerAuthCallbackUrl() {
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ??
-    "http://localhost:3000";
-  return `${base}/auth/callback`;
+  return `${getConfiguredSiteUrl()}/auth/callback`;
 }

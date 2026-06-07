@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { PRODUCTION_SITE_URL } from "@/lib/site-url";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,8 +14,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? PRODUCTION_SITE_URL,
+  ),
   title: "行間",
   description: "行間 — タスク・案件管理",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "行間",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
