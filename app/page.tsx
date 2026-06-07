@@ -2681,11 +2681,13 @@ function MobileCalendarWidget({
   selectedDate,
   onSelectDate,
   peekMode,
+  peekResetSignal = 0,
 }: {
   tasks: Task[];
   selectedDate: string;
   onSelectDate: (iso: string) => void;
   peekMode: boolean;
+  peekResetSignal?: number;
 }) {
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
   const [peekEngaged, setPeekEngaged] = useState(!peekMode);
@@ -2706,11 +2708,12 @@ function MobileCalendarWidget({
   const MONTH_PANEL_Y_PAD = 16;
   const PEEK_WRAP_H = PEEK_HEADER_H + PEEK_GRID_H + MONTH_PANEL_Y_PAD;
   const SWIPE_MONTH_THRESHOLD_PX = 8;
+  const TAP_SLOP_PX = 10;
 
-  const [calendarAnchorISO] = useState(() => {
+  const calendarAnchorISO = useMemo(() => {
     const d = new Date(selectedDate + "T12:00:00");
     return isoDate(new Date(d.getFullYear(), d.getMonth(), 1));
-  });
+  }, [selectedDate.slice(0, 7)]);
 
   const months = useMemo(() => buildMonthRange(calendarAnchorISO, 12, 12), [calendarAnchorISO]);
   const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
@@ -2848,6 +2851,12 @@ function MobileCalendarWidget({
     }
   }, [peekMode, selectedDate]);
 
+  useEffect(() => {
+    if (!peekMode || peekResetSignal <= 0) return;
+    setPeekEngaged(false);
+    lastScrolledMonthRef.current = null;
+  }, [peekMode, peekResetSignal]);
+
   const handleDaySelect = (cellIso: string) => {
     if (peekSuppressClickRef.current) return;
     if (peekMode) {
@@ -2885,7 +2894,7 @@ function MobileCalendarWidget({
 
       if (Math.abs(dx) <= 2 && Math.abs(dy) <= 2) return;
 
-      if (Math.abs(dx) >= Math.abs(dy)) {
+      if (Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) >= TAP_SLOP_PX) {
         didDrag = true;
         gestureDeltaXRef.current = dx;
         peekSuppressClickRef.current = true;
@@ -2896,7 +2905,7 @@ function MobileCalendarWidget({
       if (!tracking) return;
       tracking = false;
 
-      if (didDrag) {
+      if (didDrag && Math.abs(gestureDeltaXRef.current) >= SWIPE_MONTH_THRESHOLD_PX) {
         snapToGestureMonth("smooth");
         window.setTimeout(() => {
           peekSuppressClickRef.current = false;
@@ -3937,6 +3946,7 @@ export default function Home() {
   const [memoSheetOpen, setMemoSheetOpen] = useState(false);
   const [activeProject, setActiveProject] = useState<string>(ALL_PROJECTS_LABEL);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
+  const [calendarPeekReset, setCalendarPeekReset] = useState(0);
   const [casesListOpen, setCasesListOpen] = useState(false);
   const viewDateInitialized = useRef(false);
 
@@ -4496,6 +4506,7 @@ export default function Home() {
                   selectedDate={viewDateISO}
                   onSelectDate={goToDate}
                   peekMode
+                  peekResetSignal={calendarPeekReset}
                 />
               </section>
             )}
@@ -4710,6 +4721,9 @@ export default function Home() {
                   setMemoSheetOpen(false);
                   setCasesListOpen(false);
                   setMobileTab(tab.id);
+                  if (tab.id === "home") {
+                    setCalendarPeekReset((n) => n + 1);
+                  }
                 }
               }}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-all duration-200 ${
