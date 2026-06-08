@@ -55,6 +55,14 @@ export type DbDailyMemo = {
   created_at: string;
 };
 
+export type DbDailyDiary = {
+  id: string;
+  user_id: string;
+  diary_date: string;
+  body: string;
+  created_at: string;
+};
+
 export type DbUserPreferences = {
   user_id: string;
   last_view_date: string | null;
@@ -105,6 +113,13 @@ export type AppDailyMemo = {
   createdAt: string;
 };
 
+export type AppDailyDiary = {
+  id: string;
+  date: string;
+  body: string;
+  createdAt: string;
+};
+
 export type AppProject = {
   id: string;
   name: string;
@@ -118,5 +133,6 @@ export type GyokanData = {
   cases: AppCase[];
   memos: AppMemo[];
   dailyMemos: AppDailyMemo[];
+  dailyDiaries: AppDailyDiary[];
   lastViewDate: string | null;
 };

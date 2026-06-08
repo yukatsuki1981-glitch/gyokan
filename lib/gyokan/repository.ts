@@ -4,10 +4,12 @@ import {
   buildProjectMaps,
   mapCaseToDb,
   mapDbCase,
+  mapDbDailyDiary,
   mapDbDailyMemo,
   mapDbMemo,
   mapDbProject,
   mapDbTask,
+  mapDailyDiaryToDb,
   mapDailyMemoToDb,
   mapMemoToDb,
   mapProjectToDb,
@@ -31,11 +33,13 @@ import {
 import { enrichTaskWithCase } from "./task-case";
 import type {
   AppCase,
+  AppDailyDiary,
   AppDailyMemo,
   AppMemo,
   AppProject,
   AppTask,
   DbCase,
+  DbDailyDiary,
   DbDailyMemo,
   DbMemo,
   DbProject,
@@ -100,6 +104,26 @@ async function fetchDailyMemoRows(
     throw res.error;
   }
   return (res.data as DbDailyMemo[] | null) ?? [];
+}
+
+async function fetchDailyDiaryRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DbDailyDiary[]> {
+  const res = await supabase
+    .from("daily_diaries")
+    .select("*")
+    .eq("user_id", userId)
+    .order("diary_date")
+    .order("created_at");
+  if (res.error) {
+    if (isMissingTableError(res.error)) {
+      console.warn("daily_diaries unavailable (run migration if needed):", res.error.message);
+      return [];
+    }
+    throw res.error;
+  }
+  return (res.data as DbDailyDiary[] | null) ?? [];
 }
 
 async function fetchProjectMemoRows(
@@ -234,6 +258,7 @@ export async function fetchGyokanData(
     taskRows,
     memoRows,
     dailyMemoRows,
+    dailyDiaryRows,
     lastViewDate,
   ] = await Promise.all([
     fetchProjectRows(supabase, userId),
@@ -241,6 +266,7 @@ export async function fetchGyokanData(
     fetchTaskRows(supabase, userId),
     fetchProjectMemoRows(supabase, userId),
     fetchDailyMemoRows(supabase, userId),
+    fetchDailyDiaryRows(supabase, userId),
     fetchLastViewDate(supabase, userId),
   ]);
 
@@ -268,6 +294,7 @@ export async function fetchGyokanData(
     cases,
     memos: memoRows.map((r) => mapDbMemo(r, idToName)),
     dailyMemos: dailyMemoRows.map(mapDbDailyMemo),
+    dailyDiaries: dailyDiaryRows.map(mapDbDailyDiary),
     lastViewDate,
   };
 }
@@ -524,6 +551,27 @@ export async function upsertDailyMemo(
 
 export async function deleteDailyMemoDb(supabase: SupabaseClient, id: string) {
   const { error } = await supabase.from("daily_memos").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function upsertDailyDiary(
+  supabase: SupabaseClient,
+  diary: AppDailyDiary,
+  userId: string,
+) {
+  const row = mapDailyDiaryToDb(diary, userId);
+  const { error } = await supabase.from("daily_diaries").upsert(row);
+  if (error) {
+    if (isMissingTableError(error)) {
+      console.warn("daily_diaries unavailable, diary not saved to server:", error.message);
+      return;
+    }
+    throw error;
+  }
+}
+
+export async function deleteDailyDiaryDb(supabase: SupabaseClient, id: string) {
+  const { error } = await supabase.from("daily_diaries").delete().eq("id", id);
   if (error) throw error;
 }
 

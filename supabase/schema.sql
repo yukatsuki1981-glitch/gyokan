@@ -96,6 +96,20 @@ create table if not exists public.daily_memos (
 create index if not exists daily_memos_user_id_idx on public.daily_memos (user_id);
 create index if not exists daily_memos_user_date_idx on public.daily_memos (user_id, memo_date);
 
+-- ─── Daily diaries ───────────────────────────────────────────────────────────
+
+create table if not exists public.daily_diaries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  diary_date date not null,
+  body text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists daily_diaries_user_id_idx on public.daily_diaries (user_id);
+create index if not exists daily_diaries_user_date_idx on public.daily_diaries (user_id, diary_date);
+
 -- ─── User preferences (calendar last view date, etc.) ────────────────────────
 
 create table if not exists public.user_preferences (
@@ -141,6 +155,11 @@ create trigger daily_memos_set_updated_at
   before update on public.daily_memos
   for each row execute function public.set_updated_at();
 
+drop trigger if exists daily_diaries_set_updated_at on public.daily_diaries;
+create trigger daily_diaries_set_updated_at
+  before update on public.daily_diaries
+  for each row execute function public.set_updated_at();
+
 drop trigger if exists user_preferences_set_updated_at on public.user_preferences;
 create trigger user_preferences_set_updated_at
   before update on public.user_preferences
@@ -153,6 +172,7 @@ alter table public.tasks enable row level security;
 alter table public.cases enable row level security;
 alter table public.project_memos enable row level security;
 alter table public.daily_memos enable row level security;
+alter table public.daily_diaries enable row level security;
 alter table public.user_preferences enable row level security;
 
 -- projects
@@ -203,6 +223,16 @@ create policy "daily_memos_insert_own" on public.daily_memos
 create policy "daily_memos_update_own" on public.daily_memos
   for update using (auth.uid() = user_id);
 create policy "daily_memos_delete_own" on public.daily_memos
+  for delete using (auth.uid() = user_id);
+
+-- daily_diaries
+create policy "daily_diaries_select_own" on public.daily_diaries
+  for select using (auth.uid() = user_id);
+create policy "daily_diaries_insert_own" on public.daily_diaries
+  for insert with check (auth.uid() = user_id);
+create policy "daily_diaries_update_own" on public.daily_diaries
+  for update using (auth.uid() = user_id);
+create policy "daily_diaries_delete_own" on public.daily_diaries
   for delete using (auth.uid() = user_id);
 
 -- user_preferences

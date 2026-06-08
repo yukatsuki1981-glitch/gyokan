@@ -11,6 +11,7 @@ import { parseCaseDeadlineInput } from "./date-format";
 import {
   assignSortOrders,
   deleteMemoDb,
+  deleteDailyDiaryDb,
   deleteDailyMemoDb,
   deleteTaskDb,
   fetchGyokanData,
@@ -19,6 +20,7 @@ import {
   updateProjectColor,
   upsertCase,
   upsertCasesBatch,
+  upsertDailyDiary,
   upsertDailyMemo,
   upsertMemo,
   upsertProject,
@@ -40,15 +42,33 @@ import {
   type TaskDraftFields,
 } from "./drafts";
 import {
+  consolidateDailyDiariesByDate,
   consolidateDailyMemosByDate,
+  dequeuePendingDailyDiary,
   dequeuePendingDailyMemo,
+  mergeDailyDiariesWithPending,
   mergeDailyMemosWithPending,
+  queuePendingDailyDiary,
   queuePendingDailyMemo,
+  readPendingDailyDiaries,
   readPendingDailyMemos,
 } from "./local-cache";
-import type { AppCase, AppDailyMemo, AppMemo, AppProject, AppTask } from "./types";
+import type {
+  AppCase,
+  AppDailyDiary,
+  AppDailyMemo,
+  AppMemo,
+  AppProject,
+  AppTask,
+} from "./types";
 
-export type { AppCase as CaseItem, AppDailyMemo as DailyMemo, AppMemo as ProjectMemo, AppTask as Task } from "./types";
+export type {
+  AppCase as CaseItem,
+  AppDailyDiary as DailyDiary,
+  AppDailyMemo as DailyMemo,
+  AppMemo as ProjectMemo,
+  AppTask as Task,
+} from "./types";
 
 function formatLoadError(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -100,6 +120,7 @@ export function useGyokanData() {
   const [cases, setCases] = useState<AppCase[]>([]);
   const [memos, setMemos] = useState<AppMemo[]>([]);
   const [dailyMemos, setDailyMemos] = useState<AppDailyMemo[]>([]);
+  const [dailyDiaries, setDailyDiaries] = useState<AppDailyDiary[]>([]);
   const [lastViewDate, setLastViewDate] = useState<string | null>(null);
 
   const nameToIdRef = useRef<Record<string, string>>({});
@@ -206,6 +227,21 @@ export function useGyokanData() {
     }
   }, [getSupabase]);
 
+  const flushPendingDailyDiaries = useCallback(async () => {
+    const uid = userIdRef.current;
+    if (!uid) return;
+    const pending = readPendingDailyDiaries();
+    if (pending.length === 0) return;
+    for (const diary of pending) {
+      try {
+        await upsertDailyDiary(getSupabase(), diary, uid);
+        dequeuePendingDailyDiary(diary.id);
+      } catch (err) {
+        console.error("Failed to flush pending daily diary", err);
+      }
+    }
+  }, [getSupabase]);
+
   const syncConsolidatedDailyMemos = useCallback(async (
     before: AppDailyMemo[],
     after: AppDailyMemo[],
@@ -228,6 +264,28 @@ export function useGyokanData() {
     }
   }, [getSupabase]);
 
+  const syncConsolidatedDailyDiaries = useCallback(async (
+    before: AppDailyDiary[],
+    after: AppDailyDiary[],
+  ) => {
+    const uid = userIdRef.current;
+    if (!uid) return;
+    const keepIds = new Set(after.map((d) => d.id));
+    const supabase = getSupabase();
+    for (const diary of after) {
+      const previous = before.find((d) => d.id === diary.id);
+      if (!previous || previous.body !== diary.body) {
+        await upsertDailyDiary(supabase, diary, uid);
+      }
+    }
+    for (const diary of before) {
+      if (!keepIds.has(diary.id)) {
+        await deleteDailyDiaryDb(supabase, diary.id);
+        dequeuePendingDailyDiary(diary.id);
+      }
+    }
+  }, [getSupabase]);
+
   const loadData = useCallback(async (uid: string, options?: { silent?: boolean }) => {
     const silent = options?.silent ?? initialLoadDoneRef.current;
     if (!silent) {
@@ -246,6 +304,9 @@ export function useGyokanData() {
       const mergedDailyMemos = mergeDailyMemosWithPending(data.dailyMemos);
       const consolidatedDailyMemos = consolidateDailyMemosByDate(mergedDailyMemos);
       setDailyMemos(consolidatedDailyMemos);
+      const mergedDailyDiaries = mergeDailyDiariesWithPending(data.dailyDiaries);
+      const consolidatedDailyDiaries = consolidateDailyDiariesByDate(mergedDailyDiaries);
+      setDailyDiaries(consolidatedDailyDiaries);
       setLastViewDate(data.lastViewDate);
       setLoadError(null);
       setDataReady(true);
@@ -253,8 +314,12 @@ export function useGyokanData() {
       if (consolidatedDailyMemos.length < mergedDailyMemos.length) {
         void syncConsolidatedDailyMemos(mergedDailyMemos, consolidatedDailyMemos);
       }
+      if (consolidatedDailyDiaries.length < mergedDailyDiaries.length) {
+        void syncConsolidatedDailyDiaries(mergedDailyDiaries, consolidatedDailyDiaries);
+      }
       void flushPendingDrafts(data.cases, data.tasks, data.memos);
       void flushPendingDailyMemos();
+      void flushPendingDailyDiaries();
       return data.lastViewDate;
     } catch (err) {
       const message = formatLoadError(err);
@@ -514,10 +579,10 @@ export function useGyokanData() {
     );
     setTasks((prev) => {
       const next = assignSortOrders([task, ...prev]);
-      void persistTasks(next);
+      void persistTask(task);
       return next;
     });
-  }, [persistTasks]);
+  }, [persistTask]);
 
   const updateTask = useCallback((
     id: string,
@@ -721,6 +786,80 @@ export function useGyokanData() {
     void deleteDailyMemoDb(getSupabase(), id);
   }, [getSupabase]);
 
+  const persistDailyDiary = useCallback(async (diary: AppDailyDiary): Promise<boolean> => {
+    const uid = userIdRef.current;
+    if (!uid) return false;
+    try {
+      await upsertDailyDiary(getSupabase(), diary, uid);
+      dequeuePendingDailyDiary(diary.id);
+      return true;
+    } catch (err) {
+      console.error("Failed to save daily diary", err);
+      return false;
+    }
+  }, [getSupabase]);
+
+  const saveDailyDiary = useCallback(async (date: string, body: string): Promise<boolean> => {
+    const uid = userIdRef.current;
+    if (!uid) return false;
+
+    const supabase = getSupabase();
+    let diaryToPersist: AppDailyDiary | null = null;
+    let diariesToDelete: string[] = [];
+    let skipped = false;
+
+    setDailyDiaries((prev) => {
+      const sameDay = prev
+        .filter((d) => d.date === date)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const primary = sameDay[0];
+
+      if (primary) {
+        if (!body.trim()) {
+          diariesToDelete = sameDay.map((d) => d.id);
+          return prev.filter((d) => d.date !== date);
+        }
+
+        diaryToPersist = { ...primary, body };
+        diariesToDelete = sameDay.slice(1).map((d) => d.id);
+        return [...prev.filter((d) => d.date !== date), diaryToPersist];
+      }
+
+      if (!body.trim()) {
+        skipped = true;
+        return prev;
+      }
+
+      diaryToPersist = {
+        id: newUuid(),
+        date,
+        body,
+        createdAt: new Date().toISOString(),
+      };
+      return [...prev, diaryToPersist];
+    });
+
+    if (skipped) return true;
+
+    try {
+      for (const id of diariesToDelete) {
+        await deleteDailyDiaryDb(supabase, id);
+        dequeuePendingDailyDiary(id);
+      }
+      if (!diaryToPersist) return true;
+      return persistDailyDiary(diaryToPersist);
+    } catch (err) {
+      console.error("Failed to save daily diary", err);
+      if (diaryToPersist) queuePendingDailyDiary(diaryToPersist);
+      return false;
+    }
+  }, [getSupabase, persistDailyDiary]);
+
+  const deleteDailyDiary = useCallback((id: string) => {
+    setDailyDiaries((prev) => prev.filter((d) => d.id !== id));
+    void deleteDailyDiaryDb(getSupabase(), id);
+  }, [getSupabase]);
+
   return {
     user,
     authReady,
@@ -736,6 +875,7 @@ export function useGyokanData() {
     cases,
     memos,
     dailyMemos,
+    dailyDiaries,
     lastViewDate,
     setProjectColor,
     addProject,
@@ -756,6 +896,8 @@ export function useGyokanData() {
     deleteProjectMemo,
     saveDailyMemo,
     deleteDailyMemo,
+    saveDailyDiary,
+    deleteDailyDiary,
     reload: () => {
       const uid = userIdRef.current;
       if (uid) return loadData(uid, { silent: true });

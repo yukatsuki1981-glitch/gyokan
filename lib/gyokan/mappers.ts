@@ -1,10 +1,12 @@
 import type {
   AppCase,
+  AppDailyDiary,
   AppDailyMemo,
   AppMemo,
   AppProject,
   AppTask,
   DbCase,
+  DbDailyDiary,
   DbDailyMemo,
   DbMemo,
   DbProject,
@@ -111,6 +113,15 @@ export function mapDbDailyMemo(row: DbDailyMemo): AppDailyMemo {
   };
 }
 
+export function mapDbDailyDiary(row: DbDailyDiary): AppDailyDiary {
+  return {
+    id: row.id,
+    date: row.diary_date,
+    body: row.body,
+    createdAt: row.created_at,
+  };
+}
+
 export function mapTaskToDb(
   task: AppTask,
   userId: string,
@@ -180,6 +191,15 @@ export function mapDailyMemoToDb(memo: AppDailyMemo, userId: string) {
     user_id: userId,
     memo_date: memo.date,
     body: memo.body,
+  };
+}
+
+export function mapDailyDiaryToDb(diary: AppDailyDiary, userId: string) {
+  return {
+    id: diary.id,
+    user_id: userId,
+    diary_date: diary.date,
+    body: diary.body,
   };
 }
 

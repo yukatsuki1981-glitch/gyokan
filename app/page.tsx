@@ -22,7 +22,7 @@ import {
 import {
   caseSelectLabel,
   pickDefaultCaseId,
-  taskBelongsToProject,
+  taskVisibleInView,
 } from "@/lib/gyokan/task-case";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
 import { useRouter } from "next/navigation";
@@ -101,6 +101,13 @@ type ProjectMemo = {
 };
 
 type DailyMemo = {
+  id: string;
+  date: string;
+  body: string;
+  createdAt: string;
+};
+
+type DailyDiary = {
   id: string;
   date: string;
   body: string;
@@ -851,6 +858,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: string; className?: strin
     bookmarkFill: <svg {...p} fill="currentColor"><path d="M6 4h12v16l-6-4-6 4z" stroke="none" /></svg>,
     message: <svg {...p}><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 1 1 16 0z" /></svg>,
     memo: <svg {...p}><path d="M8 4h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="M12 11h4M12 15h4M8 11h.01M8 15h.01" /></svg>,
+    diary: <svg {...p}><path d="M6 4h9l3 3v13a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="M15 4v4h4M8 13h8M8 17h6" /></svg>,
     bell: <svg {...p}><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2" /><path d="M10 20a2 2 0 0 0 4 0" /></svg>,
     refresh: (
       <svg {...p}>
@@ -3091,10 +3099,12 @@ function DailyMemoEditor({
   date,
   body: serverBody,
   onSave,
+  placeholder = "メモを書き込む…",
 }: {
   date: string;
   body: string;
   onSave: (date: string, body: string) => Promise<boolean>;
+  placeholder?: string;
 }) {
   const [body, setBody] = useState(serverBody);
   const dateRef = useRef(date);
@@ -3165,9 +3175,191 @@ function DailyMemoEditor({
         onChange={(e) => setBody(e.target.value)}
         rows={1}
         className="w-full resize-none overflow-hidden bg-transparent text-[12px] leading-relaxed text-gray-800 outline-none placeholder:text-gray-300"
-        placeholder="メモを書き込む…"
+        placeholder={placeholder}
       />
     </article>
+  );
+}
+
+function DiaryAllList({
+  entries,
+  onSelectDate,
+  onBack,
+}: {
+  entries: DailyDiary[];
+  onSelectDate: (date: string) => void;
+  onBack: () => void;
+}) {
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-900">全ての日記</h3>
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD]"
+        >
+          戻る
+        </button>
+      </div>
+      {entries.length === 0 ? (
+        <p className="text-[12px] text-gray-400">まだ日記がありません</p>
+      ) : (
+        <ul className="max-h-[320px] space-y-2 overflow-y-auto">
+          {entries.map((entry) => (
+            <li key={entry.id}>
+              <button
+                type="button"
+                onClick={() => onSelectDate(entry.date)}
+                className="w-full rounded-xl border border-black/[0.06] bg-[#fafafa]/80 px-3 py-2.5 text-left transition-colors hover:bg-white"
+              >
+                <p className="mb-1 text-[12px] font-semibold text-gray-700">
+                  {formatDateJa(entry.date)}
+                </p>
+                <p className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-600">
+                  {entry.body.trim() || "（空）"}
+                </p>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function DailyDiaryBoard({
+  diaries,
+  viewDateISO,
+  onSave,
+}: {
+  diaries: DailyDiary[];
+  viewDateISO: string;
+  onSave: (date: string, body: string) => Promise<boolean>;
+}) {
+  const [writeDate, setWriteDate] = useState(viewDateISO);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    setWriteDate(viewDateISO);
+  }, [viewDateISO]);
+
+  const dayDiary = useMemo(() => {
+    const sameDay = diaries
+      .filter((d) => d.date === writeDate)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    if (sameDay.length === 0) return null;
+    return {
+      id: sameDay[0].id,
+      date: writeDate,
+      body: sameDay
+        .map((d) => d.body.trim())
+        .filter(Boolean)
+        .join("\n"),
+      createdAt: sameDay[0].createdAt,
+    };
+  }, [diaries, writeDate]);
+
+  const entriesWithBody = useMemo(
+    () =>
+      diaries
+        .filter((d) => d.body.trim())
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [diaries],
+  );
+
+  if (showAll) {
+    return (
+      <DiaryAllList
+        entries={entriesWithBody}
+        onSelectDate={(date) => {
+          setWriteDate(date);
+          setShowAll(false);
+        }}
+        onBack={() => setShowAll(false)}
+      />
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="mb-3 text-sm font-semibold text-gray-900">日記</h3>
+      <label className="mb-3 block">
+        <input
+          type="date"
+          value={writeDate}
+          onChange={(e) => setWriteDate(e.target.value)}
+          className="w-full rounded-md border border-gray-100 bg-gray-50/60 px-3 py-2 text-[13px] outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
+        />
+      </label>
+      <DailyMemoEditor
+        key={writeDate}
+        date={writeDate}
+        body={dayDiary?.body ?? ""}
+        onSave={onSave}
+        placeholder="日記を書き込む…"
+      />
+      <button
+        type="button"
+        onClick={() => setShowAll(true)}
+        className="mt-3 text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD]"
+      >
+        全ての日記を見る
+      </button>
+    </div>
+  );
+}
+
+function MobileDiaryModal({
+  onClose,
+  diaries,
+  viewDateISO,
+  onSave,
+}: {
+  onClose: () => void;
+  diaries: DailyDiary[];
+  viewDateISO: string;
+  onSave: (date: string, body: string) => Promise<boolean>;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="日記"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-white/55 backdrop-blur-[1px]"
+        aria-label="日記を閉じる"
+        onClick={onClose}
+      />
+      <div
+        className="relative flex h-[84vh] w-[84vw] max-h-[84dvh] flex-col overflow-hidden rounded-3xl bg-white shadow-[0_24px_80px_rgba(0,0,0,0.15)] ring-1 ring-black/[0.06]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-4 py-3">
+          <h2 className="text-[17px] font-semibold text-gray-900">日記</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-50"
+          >
+            <Icon name="x" className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <DailyDiaryBoard diaries={diaries} viewDateISO={viewDateISO} onSave={onSave} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -3914,6 +4106,7 @@ export default function Home() {
     cases,
     memos,
     dailyMemos,
+    dailyDiaries,
     setProjectColor,
     addProject,
     replaceProjects,
@@ -3930,6 +4123,7 @@ export default function Home() {
     saveProjectMemo,
     deleteProjectMemo,
     saveDailyMemo,
+    saveDailyDiary,
   } = useGyokanData();
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -3944,6 +4138,7 @@ export default function Home() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("home");
   const [memoSheetOpen, setMemoSheetOpen] = useState(false);
+  const [diarySheetOpen, setDiarySheetOpen] = useState(false);
   const [activeProject, setActiveProject] = useState<string>(ALL_PROJECTS_LABEL);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
   const [calendarPeekReset, setCalendarPeekReset] = useState(0);
@@ -4049,7 +4244,7 @@ export default function Home() {
       (t) => !t.done && !isRangeTask(t) && t.date < viewDateISO,
     );
     if (!isAllProjects) {
-      list = list.filter((t) => taskBelongsToProject(t, activeProject, caseById));
+      list = list.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
     }
     return sortTasksActiveFirst(list);
   }, [tasks, viewDateISO, activeProject, isAllProjects, caseById]);
@@ -4057,7 +4252,7 @@ export default function Home() {
   const ongoingRangeTasks = useMemo(() => {
     let list = tasks.filter((t) => isOngoingRangeTask(t, viewDateISO));
     if (!isAllProjects) {
-      list = list.filter((t) => taskBelongsToProject(t, activeProject, caseById));
+      list = list.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
     }
     const active = list
       .filter((t) => !t.done)
@@ -4082,7 +4277,7 @@ export default function Home() {
   const displayedTasks = useMemo(() => {
     let list = topViewTasks;
     if (!isAllProjects) {
-      list = list.filter((t) => taskBelongsToProject(t, activeProject, caseById));
+      list = list.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
     }
     const active = list.filter((t) => !t.done);
     const done = list.filter((t) => t.done);
@@ -4119,7 +4314,7 @@ export default function Home() {
       replaceTasks((prev) => {
         let visible = prev.filter((t) => isTopSectionTask(t, viewDateISO));
         if (!isAllProjects) {
-          visible = visible.filter((t) => taskBelongsToProject(t, activeProject, caseById));
+          visible = visible.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
         }
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
@@ -4135,7 +4330,7 @@ export default function Home() {
       replaceTasks((prev) => {
         let visible = prev.filter((t) => isOngoingRangeTask(t, viewDateISO));
         if (!isAllProjects) {
-          visible = visible.filter((t) => taskBelongsToProject(t, activeProject, caseById));
+          visible = visible.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
         }
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
@@ -4411,6 +4606,18 @@ export default function Home() {
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
                   {!isAllProjects && <ProjectColorHeaderLink project={activeProject} />}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMemoSheetOpen(false);
+                    setDiarySheetOpen(true);
+                  }}
+                  className={`shrink-0 rounded-xl px-2 py-1.5 text-[12px] font-medium transition-colors ${
+                    diarySheetOpen ? "bg-blue-50 text-blue-500" : "text-gray-500 hover:bg-white"
+                  }`}
+                >
+                  日記
+                </button>
                 <RefreshButton className="shrink-0" onRefresh={handleRefresh} />
               </div>
 
@@ -4670,6 +4877,13 @@ export default function Home() {
               onSave={saveDailyMemo}
             />
           </Card>
+          <Card className="mb-4 p-4">
+            <DailyDiaryBoard
+              diaries={dailyDiaries}
+              viewDateISO={viewDateISO}
+              onSave={saveDailyDiary}
+            />
+          </Card>
           <Card className="p-6">
             <h3 className="mb-5 text-sm font-semibold text-gray-900">今月の状況</h3>
             <MonthlyStats
@@ -4692,6 +4906,15 @@ export default function Home() {
         />
       )}
 
+      {diarySheetOpen && (
+        <MobileDiaryModal
+          onClose={() => setDiarySheetOpen(false)}
+          diaries={dailyDiaries}
+          viewDateISO={viewDateISO}
+          onSave={saveDailyDiary}
+        />
+      )}
+
       {/* Mobile Tab Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-black/[0.06] bg-white/80 backdrop-blur-2xl lg:hidden">
         <div className="mx-auto flex max-w-lg justify-around px-1" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
@@ -4708,17 +4931,21 @@ export default function Home() {
               onClick={() => {
                 if (tab.id === "cases") {
                   setMemoSheetOpen(false);
+                  setDiarySheetOpen(false);
                   openCasesList();
                 } else if (tab.id === "projects") {
                   setMemoSheetOpen(false);
+                  setDiarySheetOpen(false);
                   setCasesListOpen(false);
                   setActiveProject(ALL_PROJECTS_LABEL);
                   setMobileTab("projects");
                 } else if (tab.id === "memo") {
                   setCasesListOpen(false);
+                  setDiarySheetOpen(false);
                   setMemoSheetOpen(true);
                 } else {
                   setMemoSheetOpen(false);
+                  setDiarySheetOpen(false);
                   setCasesListOpen(false);
                   setMobileTab(tab.id);
                   if (tab.id === "home") {
@@ -4742,19 +4969,6 @@ export default function Home() {
           ))}
         </div>
       </nav>
-
-      {/* FAB */}
-      <button
-        type="button"
-        onClick={openTaskModalForView}
-        className={`fixed z-50 flex h-14 w-14 items-center justify-center rounded-full bg-blue-500 text-white shadow-lg shadow-blue-500/35 transition-all duration-200 hover:scale-105 hover:bg-blue-600 active:scale-95 lg:hidden ${
-          memoSheetOpen || mobileTab === "more" || casesListOpen ? "hidden" : ""
-        }`}
-        style={{ right: "1.25rem", bottom: "calc(5.25rem + env(safe-area-inset-bottom))" }}
-        aria-label="タスクを追加"
-      >
-        <Icon name="plus" className="h-6 w-6" />
-      </button>
 
       <AddTaskModal
         open={taskModalOpen}

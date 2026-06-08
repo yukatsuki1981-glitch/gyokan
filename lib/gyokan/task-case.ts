@@ -18,6 +18,10 @@ export function enrichTaskWithCase(
   return { ...task, project: linked.project };
 }
 
+export function isUnassignedTask(task: AppTask) {
+  return !task.caseId && !task.project.trim();
+}
+
 export function taskBelongsToProject(
   task: AppTask,
   project: string,
@@ -27,6 +31,17 @@ export function taskBelongsToProject(
     return caseById[task.caseId]?.project === project;
   }
   return task.project === project;
+}
+
+/** Unassigned tasks (no project / case) are always visible in any view. */
+export function taskVisibleInView(
+  task: AppTask,
+  project: string,
+  isAllProjects: boolean,
+  caseById: Record<string, AppCase>,
+): boolean {
+  if (isAllProjects || isUnassignedTask(task)) return true;
+  return taskBelongsToProject(task, project, caseById);
 }
 
 export function caseSelectLabel(item: AppCase) {
