@@ -28,6 +28,7 @@ import {
   normalizeTaskRow,
   sortByOrder,
   toLegacyProjectInsert,
+  buildTaskUpsertAttempts,
   toLegacyTaskUpsert,
 } from "./schema-compat";
 import { enrichTaskWithCase } from "./task-case";
@@ -398,20 +399,22 @@ async function upsertTaskRow(
   supabase: SupabaseClient,
   row: ReturnType<typeof mapTaskToDb>,
 ) {
-  let { error } = await supabase.from("tasks").upsert(row);
-  if (
-    error &&
-    (isMissingColumnError(error, "task_date") ||
-      isMissingColumnError(error, "time_label"))
-  ) {
-    ({ error } = await supabase.from("tasks").upsert(toLegacyTaskUpsert(row)));
+  const attempts = buildTaskUpsertAttempts(row);
+  let lastError: { message?: string; code?: string } | null = null;
+
+  for (const payload of attempts) {
+    const { error } = await supabase.from("tasks").upsert(payload);
+    if (!error) return;
+    lastError = error;
+    const retryable =
+      isSchemaMismatchError(error) ||
+      isMissingColumnError(error, "") ||
+      (error.message?.toLowerCase().includes("null value") ?? false) ||
+      (error.message?.toLowerCase().includes("not-null") ?? false);
+    if (!retryable) break;
   }
-  if (error && row.case_id != null && isMissingColumnError(error, "case_id")) {
-    const legacyRow = toLegacyTaskUpsert(row);
-    delete legacyRow.case_id;
-    ({ error } = await supabase.from("tasks").upsert(legacyRow));
-  }
-  if (error) throw error;
+
+  if (lastError) throw lastError;
 }
 
 export async function upsertTask(

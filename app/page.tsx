@@ -17,6 +17,7 @@ import { useAutosaveForm } from "@/lib/gyokan/use-autosave-form";
 import {
   parseCaseCreatedAt,
   sortCasesByProjectOrder,
+  sortCaseDetailTasks,
   sortTasksInCase,
 } from "@/lib/gyokan/case-order";
 import {
@@ -1144,15 +1145,75 @@ function DetailField({
 const fieldInputClass =
   "w-full rounded-xl border border-black/[0.08] bg-black/[0.02] px-3 py-2.5 text-[14px] text-gray-900 outline-none transition-colors focus:border-[#007AFF] focus:ring-2 focus:ring-[#007AFF]/10";
 
+function getDiaryBodyForDate(diaries: DailyDiary[], date: string) {
+  const sameDay = diaries
+    .filter((d) => d.date === date)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  if (sameDay.length === 0) return "";
+  return sameDay
+    .map((d) => d.body.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function CaseDetailTaskStack({
+  tasks,
+  onToggleTask,
+  onOpenTask,
+}: {
+  tasks: Task[];
+  onToggleTask?: (id: string) => void;
+  onOpenTask?: (task: Task) => void;
+}) {
+  if (tasks.length === 0) return null;
+
+  return (
+    <div className="mt-2 flex w-full flex-col gap-1">
+      {tasks.map((task) => (
+        <div
+          key={task.id}
+          onClick={() => onOpenTask?.(task)}
+          className={`group flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-1 transition-all duration-200 ${
+            task.done
+              ? "border-black/[0.04] bg-black/[0.02] opacity-75"
+              : "border-black/[0.06] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:bg-white"
+          }`}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleTask?.(task.id);
+            }}
+            aria-label={task.done ? "未完了に戻す" : "完了にする"}
+            className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
+              task.done
+                ? "border-[#007AFF] bg-[#007AFF] text-white"
+                : "border-gray-300 bg-white hover:border-[#007AFF]"
+            }`}
+          >
+            {task.done && <Icon name="check" className="h-2 w-2" />}
+          </button>
+          <p
+            className={`min-w-0 flex-1 truncate text-[11px] font-medium ${
+              task.done ? "text-gray-400 line-through" : "text-gray-800"
+            }`}
+          >
+            {task.title}
+          </p>
+          <span className="shrink-0 text-[9px] text-gray-400">{formatTaskPeriod(task)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CaseDetailEditor({
   item,
   onSave,
   onClose,
   layout = "modal",
-  caseTasks,
   onAddTask,
-  onToggleTask,
-  onOpenTask,
 }: {
   item: CaseItem;
   onSave: (
@@ -1168,10 +1229,7 @@ function CaseDetailEditor({
   ) => void | boolean | Promise<void | boolean>;
   onClose?: () => void;
   layout?: "modal" | "page";
-  caseTasks?: Task[];
   onAddTask?: () => void;
-  onToggleTask?: (id: string) => void;
-  onOpenTask?: (task: Task) => void;
 }) {
   const { projectOptions } = useProjectColors();
   const itemIdRef = useRef(item.id);
@@ -1187,8 +1245,6 @@ function CaseDetailEditor({
 
   const [title, setTitle] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.title ?? item.title);
   const [project, setProject] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.project ?? item.project);
-  const [goal, setGoal] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.goal ?? item.goal);
-  const [status, setStatus] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.status ?? item.status);
   const [deadline, setDeadline] = useState(
     () => readDraft<CaseDraftFields>("case", item.id)?.deadline ?? formatCaseDeadlineForInput(item.deadline),
   );
@@ -1200,19 +1256,17 @@ function CaseDetailEditor({
     const next = draft ?? loadCaseFields(item);
     setTitle(next.title);
     setProject(next.project);
-    setGoal(next.goal);
-    setStatus(next.status);
     setDeadline(next.deadline);
   }, [item, loadCaseFields]);
 
   const formValues = useMemo((): CaseDraftFields => ({
     title,
-      project,
-    goal,
-      status,
-    statusTone: STATUS_OPTIONS.find((s) => s.label === status)?.tone ?? item.statusTone,
+    project,
+    goal: item.goal,
+    status: item.status,
+    statusTone: item.statusTone,
     deadline,
-  }), [title, project, goal, status, deadline, item.statusTone]);
+  }), [title, project, deadline, item.goal, item.status, item.statusTone]);
 
   const formBaseline = useMemo(() => loadCaseFields(item), [item, loadCaseFields]);
 
@@ -1266,13 +1320,6 @@ function CaseDetailEditor({
           ))}
         </select>
       </DetailField>
-      <DetailField label="ステータス">
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className={fieldInputClass}>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s.label} value={s.label}>{s.label}</option>
-          ))}
-        </select>
-      </DetailField>
       <DetailField label="期限">
         <input
           type="date"
@@ -1281,61 +1328,15 @@ function CaseDetailEditor({
           className={fieldInputClass}
         />
       </DetailField>
-      <DetailField label="目標">
-        <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={3} className={`${fieldInputClass} resize-none`} />
-      </DetailField>
-      {layout === "page" && (
-        <div className="mt-1">
-          {caseTasks && caseTasks.length > 0 && (
-            <div className="mb-3 space-y-1.5">
-              {caseTasks.map((task) => (
-                <div
-                  key={task.id}
-                  onClick={() => onOpenTask?.(task)}
-                  className={`group flex cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 py-1.5 transition-all duration-200 ${
-                    task.done
-                      ? "border-black/[0.05] bg-black/[0.02] opacity-70"
-                      : "border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleTask?.(task.id);
-                    }}
-                    aria-label={task.done ? "未完了に戻す" : "完了にする"}
-                    className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
-                      task.done
-                        ? "border-[#007AFF] bg-[#007AFF] text-white"
-                        : "border-gray-300 bg-white hover:border-[#007AFF]"
-                    }`}
-                  >
-                    {task.done && <Icon name="check" className="h-2.5 w-2.5" />}
-                  </button>
-                  <p
-                    className={`min-w-0 flex-1 truncate text-[12px] font-medium ${
-                      task.done ? "text-gray-400 line-through" : "text-gray-900"
-                    }`}
-                  >
-                    {task.title}
-                  </p>
-                  <span className="shrink-0 text-[10px] text-gray-400">{formatTaskPeriod(task)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {onAddTask && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={onAddTask}
-                className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
-              >
-                ＋ タスクを追加
-              </button>
-            </div>
-          )}
+      {layout === "page" && onAddTask && (
+        <div className="mt-1 flex justify-end">
+          <button
+            type="button"
+            onClick={onAddTask}
+            className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
+          >
+            ＋ タスクを追加
+          </button>
         </div>
       )}
       <div className={`flex gap-2 ${layout === "page" ? "mt-5 justify-end" : "mt-5 justify-end"}`}>
@@ -1363,7 +1364,7 @@ function TaskDetailEditor({
     id: string,
     data: {
       title: string;
-      caseId: string;
+      caseId?: string;
       date: string;
       dateEnd?: string;
       project?: string;
@@ -1443,7 +1444,7 @@ function TaskDetailEditor({
           : undefined;
       return onSave(item.id, {
         title: values.title.trim(),
-        caseId: direct ? "" : values.caseId,
+        caseId: direct ? undefined : (values.caseId || undefined),
         date: values.date,
       dateEnd: end,
         project: direct ? projectName : values.caseId ? undefined : "",
@@ -1816,12 +1817,15 @@ function CaseDetailSection({
           <p className="truncate text-[17px] font-semibold text-gray-900">{item.title}</p>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-gray-400">
             <ProjectNameTag name={item.project} />
-            {item.done ? (
-              <span>完了</span>
-            ) : (
-              <StatusBadge label={item.status} tone={item.statusTone} />
-            )}
+            {item.done && <span>完了</span>}
           </div>
+          {caseTasks && caseTasks.length > 0 && (
+            <CaseDetailTaskStack
+              tasks={caseTasks}
+              onToggleTask={onToggleTask}
+              onOpenTask={onOpenTask}
+            />
+          )}
         </div>
         <button
           type="button"
@@ -1842,10 +1846,7 @@ function CaseDetailSection({
           item={item}
           onSave={onSave}
           layout="page"
-          caseTasks={caseTasks}
           onAddTask={onAddTask}
-          onToggleTask={onToggleTask}
-          onOpenTask={onOpenTask}
         />
       </Card>
     </section>
@@ -3181,13 +3182,156 @@ function DailyMemoEditor({
   );
 }
 
+function DiaryNotebookPage({
+  date,
+  body,
+  onSave,
+  variant,
+}: {
+  date: string;
+  body: string;
+  onSave: (date: string, body: string) => Promise<boolean>;
+  variant: "single" | "left" | "right";
+}) {
+  const rounded =
+    variant === "left"
+      ? "rounded-l-md rounded-r-none"
+      : variant === "right"
+        ? "rounded-r-md rounded-l-none border-l-0"
+        : "rounded-md";
+
+  return (
+    <div
+      className={`flex min-h-[360px] flex-1 flex-col border border-black/[0.1] bg-[#faf8f5] p-4 shadow-inner ${rounded}`}
+    >
+      <p className="mb-3 border-b border-black/[0.08] pb-2 text-[12px] font-medium text-gray-600">
+        {formatDateJa(date)}
+      </p>
+      <DailyMemoEditor
+        key={date}
+        date={date}
+        body={body}
+        onSave={onSave}
+        placeholder="日記を書き込む…"
+      />
+    </div>
+  );
+}
+
+function DiarySpreadModal({
+  focusDate,
+  diaries,
+  onClose,
+  onSave,
+}: {
+  focusDate: string;
+  diaries: DailyDiary[];
+  onClose: () => void;
+  onSave: (date: string, body: string) => Promise<boolean>;
+}) {
+  const [spreadStart, setSpreadStart] = useState(focusDate);
+  const [pageStep, setPageStep] = useState(1);
+  const rightDate = shiftISODate(spreadStart, 1);
+
+  useEffect(() => {
+    setSpreadStart(focusDate);
+  }, [focusDate]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setPageStep(mq.matches ? 2 : 1);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="日記を開く"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-white/55 backdrop-blur-[1px]"
+        aria-label="日記を閉じる"
+        onClick={onClose}
+      />
+      <div
+        className="relative flex max-h-[88dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-[#f3f1ec] shadow-[0_24px_80px_rgba(0,0,0,0.15)] ring-1 ring-black/[0.08]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-black/[0.08] bg-[#faf8f5] px-4 py-3">
+          <h2 className="text-[16px] font-semibold text-gray-900">日記</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-black/[0.04]"
+          >
+            <Icon name="x" className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="lg:hidden">
+            <DiaryNotebookPage
+              date={spreadStart}
+              body={getDiaryBodyForDate(diaries, spreadStart)}
+              onSave={onSave}
+              variant="single"
+            />
+          </div>
+          <div className="hidden lg:flex lg:items-stretch">
+            <DiaryNotebookPage
+              date={spreadStart}
+              body={getDiaryBodyForDate(diaries, spreadStart)}
+              onSave={onSave}
+              variant="left"
+            />
+            <div className="w-3 shrink-0 bg-gradient-to-r from-black/[0.06] via-black/[0.12] to-black/[0.06]" />
+            <DiaryNotebookPage
+              date={rightDate}
+              body={getDiaryBodyForDate(diaries, rightDate)}
+              onSave={onSave}
+              variant="right"
+            />
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center justify-between border-t border-black/[0.08] bg-[#faf8f5] px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() => setSpreadStart((d) => shiftISODate(d, -pageStep))}
+            className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD]"
+          >
+            ← 前のページ
+          </button>
+          <button
+            type="button"
+            onClick={() => setSpreadStart((d) => shiftISODate(d, pageStep))}
+            className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD]"
+          >
+            次のページ →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DiaryAllList({
   entries,
-  onSelectDate,
+  onOpenSpread,
   onBack,
 }: {
   entries: DailyDiary[];
-  onSelectDate: (date: string) => void;
+  onOpenSpread: (date: string) => void;
   onBack: () => void;
 }) {
   return (
@@ -3210,7 +3354,7 @@ function DiaryAllList({
             <li key={entry.id}>
               <button
                 type="button"
-                onClick={() => onSelectDate(entry.date)}
+                onClick={() => onOpenSpread(entry.date)}
                 className="w-full rounded-xl border border-black/[0.06] bg-[#fafafa]/80 px-3 py-2.5 text-left transition-colors hover:bg-white"
               >
                 <p className="mb-1 text-[12px] font-semibold text-gray-700">
@@ -3232,10 +3376,12 @@ function DailyDiaryBoard({
   diaries,
   viewDateISO,
   onSave,
+  onOpenSpread,
 }: {
   diaries: DailyDiary[];
   viewDateISO: string;
   onSave: (date: string, body: string) => Promise<boolean>;
+  onOpenSpread?: (date: string) => void;
 }) {
   const [writeDate, setWriteDate] = useState(viewDateISO);
   const [showAll, setShowAll] = useState(false);
@@ -3272,8 +3418,8 @@ function DailyDiaryBoard({
     return (
       <DiaryAllList
         entries={entriesWithBody}
-        onSelectDate={(date) => {
-          setWriteDate(date);
+        onOpenSpread={(date) => {
+          onOpenSpread?.(date);
           setShowAll(false);
         }}
         onBack={() => setShowAll(false)}
@@ -3315,11 +3461,13 @@ function MobileDiaryModal({
   diaries,
   viewDateISO,
   onSave,
+  onOpenSpread,
 }: {
   onClose: () => void;
   diaries: DailyDiary[];
   viewDateISO: string;
   onSave: (date: string, body: string) => Promise<boolean>;
+  onOpenSpread?: (date: string) => void;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -3356,7 +3504,12 @@ function MobileDiaryModal({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <DailyDiaryBoard diaries={diaries} viewDateISO={viewDateISO} onSave={onSave} />
+          <DailyDiaryBoard
+            diaries={diaries}
+            viewDateISO={viewDateISO}
+            onSave={onSave}
+            onOpenSpread={onOpenSpread}
+          />
         </div>
       </div>
     </div>
@@ -4139,6 +4292,7 @@ export default function Home() {
   const [mobileTab, setMobileTab] = useState<MobileTab>("home");
   const [memoSheetOpen, setMemoSheetOpen] = useState(false);
   const [diarySheetOpen, setDiarySheetOpen] = useState(false);
+  const [diarySpreadDate, setDiarySpreadDate] = useState<string | null>(null);
   const [activeProject, setActiveProject] = useState<string>(ALL_PROJECTS_LABEL);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
   const [calendarPeekReset, setCalendarPeekReset] = useState(0);
@@ -4153,7 +4307,7 @@ export default function Home() {
 
   const viewingCaseTasks = useMemo(() => {
     if (!viewingCaseId) return [];
-    return sortTasksInCase(tasks.filter((t) => t.caseId === viewingCaseId));
+    return sortCaseDetailTasks(tasks.filter((t) => t.caseId === viewingCaseId));
   }, [tasks, viewingCaseId]);
 
   useEffect(() => {
@@ -4408,7 +4562,7 @@ export default function Home() {
       id: string,
       data: {
         title: string;
-        caseId: string;
+        caseId?: string;
         date: string;
         dateEnd?: string;
         project?: string;
@@ -4606,18 +4760,6 @@ export default function Home() {
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
                   {!isAllProjects && <ProjectColorHeaderLink project={activeProject} />}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMemoSheetOpen(false);
-                    setDiarySheetOpen(true);
-                  }}
-                  className={`shrink-0 rounded-xl px-2 py-1.5 text-[12px] font-medium transition-colors ${
-                    diarySheetOpen ? "bg-blue-50 text-blue-500" : "text-gray-500 hover:bg-white"
-                  }`}
-                >
-                  日記
-                </button>
                 <RefreshButton className="shrink-0" onRefresh={handleRefresh} />
               </div>
 
@@ -4882,6 +5024,7 @@ export default function Home() {
               diaries={dailyDiaries}
               viewDateISO={viewDateISO}
               onSave={saveDailyDiary}
+              onOpenSpread={setDiarySpreadDate}
             />
           </Card>
           <Card className="p-6">
@@ -4912,6 +5055,16 @@ export default function Home() {
           diaries={dailyDiaries}
           viewDateISO={viewDateISO}
           onSave={saveDailyDiary}
+          onOpenSpread={setDiarySpreadDate}
+        />
+      )}
+
+      {diarySpreadDate && (
+        <DiarySpreadModal
+          focusDate={diarySpreadDate}
+          diaries={dailyDiaries}
+          onClose={() => setDiarySpreadDate(null)}
+          onSave={saveDailyDiary}
         />
       )}
 
@@ -4923,6 +5076,7 @@ export default function Home() {
             { id: "projects" as const, label: "プロジェクト", icon: "folder" },
             { id: "cases" as const, label: "案件", icon: "cases" },
             { id: "memo" as const, label: "メモ", icon: "memo" },
+            { id: "diary" as const, label: "日記", icon: "diary" },
             { id: "more" as const, label: "その他", icon: "more" },
           ]).map((tab) => (
             <button
@@ -4943,6 +5097,10 @@ export default function Home() {
                   setCasesListOpen(false);
                   setDiarySheetOpen(false);
                   setMemoSheetOpen(true);
+                } else if (tab.id === "diary") {
+                  setCasesListOpen(false);
+                  setMemoSheetOpen(false);
+                  setDiarySheetOpen(true);
                 } else {
                   setMemoSheetOpen(false);
                   setDiarySheetOpen(false);
@@ -4958,13 +5116,15 @@ export default function Home() {
                   ? casesListOpen
                   : tab.id === "memo"
                     ? memoSheetOpen
-                    : mobileTab === tab.id)
+                    : tab.id === "diary"
+                      ? diarySheetOpen
+                      : mobileTab === tab.id)
                   ? "text-blue-500"
                   : "text-gray-400"
               }`}
             >
               <Icon name={tab.icon} className="h-5 w-5" />
-              <span className="text-[10px] font-medium">{tab.label}</span>
+              <span className="text-[9px] font-medium">{tab.label}</span>
             </button>
           ))}
         </div>

@@ -6,7 +6,11 @@ import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { createClient, resetBrowserClient } from "@/lib/supabase/client";
 import { ALL_PROJECTS_LABEL, DEFAULT_PROJECT_ACCENT } from "./constants";
 import { buildProjectMaps, newUuid } from "./mappers";
-import { buildCaseById, enrichTaskWithCase } from "./task-case";
+import {
+  buildCaseById,
+  enrichTaskWithCase,
+  normalizeTaskForStorage,
+} from "./task-case";
 import { parseCaseDeadlineInput } from "./date-format";
 import {
   assignSortOrders,
@@ -387,10 +391,13 @@ export function useGyokanData() {
   const persistTask = useCallback(async (task: AppTask): Promise<boolean> => {
     const uid = userIdRef.current;
     if (!uid) return false;
+    const normalized = normalizeTaskForStorage(
+      enrichTaskWithCase(task, buildCaseById(casesRef.current)),
+    );
     try {
       await upsertTask(
         getSupabase(),
-        task,
+        normalized,
         uid,
         nameToIdRef.current,
         buildCaseById(casesRef.current),
@@ -560,22 +567,25 @@ export function useGyokanData() {
       caseId?: string;
     }) => {
     const caseById = buildCaseById(casesRef.current);
-    const linked = data.caseId ? caseById[data.caseId] : undefined;
-    const project = linked?.project ?? data.project ?? "";
+    const caseId = data.caseId?.trim() || undefined;
+    const linked = caseId ? caseById[caseId] : undefined;
+    const project = (linked?.project ?? data.project ?? "").trim();
 
-    const task = enrichTaskWithCase(
-      {
-        id: newUuid(),
-        title: data.title,
-        time: data.time,
-        date: data.date,
-        dateEnd: data.dateEnd,
-        done: false,
-        project,
-        caseId: data.caseId,
-        sortOrder: 0,
-      },
-      caseById,
+    const task = normalizeTaskForStorage(
+      enrichTaskWithCase(
+        {
+          id: newUuid(),
+          title: data.title.trim(),
+          time: data.time,
+          date: data.date,
+          dateEnd: data.dateEnd,
+          done: false,
+          project,
+          caseId,
+          sortOrder: 0,
+        },
+        caseById,
+      ),
     );
     setTasks((prev) => {
       const next = assignSortOrders([task, ...prev]);
@@ -586,7 +596,7 @@ export function useGyokanData() {
 
   const updateTask = useCallback((
     id: string,
-    patch: Partial<AppTask> & { title: string; caseId: string; date: string; dateEnd?: string },
+    patch: Partial<AppTask> & { title: string; caseId?: string; date: string; dateEnd?: string },
   ) => {
     setTasks((prev) => {
       const next = prev.map((t) => {

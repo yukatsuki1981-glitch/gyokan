@@ -100,7 +100,7 @@ export function mergeTasksWithDrafts(
       {
         ...item,
         title: draft.title,
-        caseId: draft.caseId || item.caseId,
+        caseId: (draft.caseId || item.caseId) || undefined,
         date: draft.date,
         dateEnd,
       },

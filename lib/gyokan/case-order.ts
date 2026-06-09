@@ -36,3 +36,14 @@ export function sortTasksInCase<T extends { done: boolean; sortOrder: number }>(
   const byInput = (a: T, b: T) => a.sortOrder - b.sortOrder;
   return [...active.sort(byInput), ...done.sort(byInput)];
 }
+
+/** Case detail header: active on top; completed oldest at bottom. */
+export function sortCaseDetailTasks<
+  T extends { done: boolean; sortOrder: number; date: string },
+>(list: T[]): T[] {
+  const active = list.filter((t) => !t.done).sort((a, b) => a.sortOrder - b.sortOrder);
+  const done = list
+    .filter((t) => t.done)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.date.localeCompare(b.date));
+  return [...active, ...done];
+}

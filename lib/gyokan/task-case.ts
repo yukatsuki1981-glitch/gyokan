@@ -8,14 +8,21 @@ export function buildCaseById(cases: AppCase[]): Record<string, AppCase> {
   return byId;
 }
 
+export function normalizeTaskForStorage(task: AppTask): AppTask {
+  const caseId = task.caseId?.trim() || undefined;
+  const project = task.project?.trim() ?? "";
+  return { ...task, caseId, project };
+}
+
 export function enrichTaskWithCase(
   task: AppTask,
   caseById: Record<string, AppCase>,
 ): AppTask {
-  if (!task.caseId) return task;
-  const linked = caseById[task.caseId];
-  if (!linked) return task;
-  return { ...task, project: linked.project };
+  const normalized = normalizeTaskForStorage(task);
+  if (!normalized.caseId) return normalized;
+  const linked = caseById[normalized.caseId];
+  if (!linked) return normalized;
+  return { ...normalized, project: linked.project };
 }
 
 export function isUnassignedTask(task: AppTask) {

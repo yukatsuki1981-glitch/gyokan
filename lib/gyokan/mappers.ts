@@ -128,20 +128,27 @@ export function mapTaskToDb(
   nameToId: Record<string, string>,
   caseById: Record<string, AppCase> = {},
 ) {
+  const normalized = {
+    ...task,
+    caseId: task.caseId?.trim() || undefined,
+    project: task.project?.trim() ?? "",
+  };
   const projectName =
-    (task.caseId && caseById[task.caseId]?.project) || task.project;
+    (normalized.caseId && caseById[normalized.caseId]?.project) ||
+    normalized.project;
+  const projectId = projectName ? (nameToId[projectName] ?? null) : null;
   return {
-    id: task.id,
+    id: normalized.id,
     user_id: userId,
-    project_id: nameToId[projectName] ?? null,
-    case_id: task.caseId ?? null,
-    title: task.title,
-    time_label: task.time,
-    task_date: task.date,
-    date_end: task.dateEnd ?? null,
-    done: task.done,
-    starred: task.starred ?? false,
-    sort_order: task.sortOrder,
+    project_id: projectId,
+    case_id: normalized.caseId ?? null,
+    title: normalized.title,
+    time_label: normalized.time,
+    task_date: normalized.date,
+    date_end: normalized.dateEnd ?? null,
+    done: normalized.done,
+    starred: normalized.starred ?? false,
+    sort_order: normalized.sortOrder,
   };
 }
 

@@ -130,6 +130,55 @@ export function toLegacyProjectInsert(row: {
   };
 }
 
+export type TaskUpsertRow = {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  case_id?: string | null;
+  title: string;
+  time_label: string;
+  task_date: string;
+  date_end: string | null;
+  done: boolean;
+  starred?: boolean;
+  sort_order: number;
+};
+
+export function buildTaskUpsertAttempts(row: TaskUpsertRow): Row[] {
+  const modern: Row = { ...row };
+  const withDateAlias: Row = {
+    ...modern,
+    date: row.task_date,
+    time: row.time_label,
+  };
+  const legacy = toLegacyTaskUpsert(row);
+  const attempts: Row[] = [modern, withDateAlias, legacy];
+
+  if (row.project_id == null) {
+    const { project_id: _p, ...modernNoProject } = modern;
+    attempts.push(modernNoProject);
+    const legacyNoProject = { ...legacy };
+    delete legacyNoProject.project_id;
+    attempts.push(legacyNoProject);
+  }
+
+  if (row.case_id == null) {
+    const { case_id: _c, ...modernNoCase } = modern;
+    attempts.push(modernNoCase);
+    const legacyNoCase = { ...legacy };
+    delete legacyNoCase.case_id;
+    attempts.push(legacyNoCase);
+  }
+
+  const seen = new Set<string>();
+  return attempts.filter((payload) => {
+    const key = JSON.stringify(payload);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function toLegacyTaskUpsert(row: {
   id: string;
   user_id: string;
