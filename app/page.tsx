@@ -1245,9 +1245,6 @@ function CaseDetailEditor({
 
   const [title, setTitle] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.title ?? item.title);
   const [project, setProject] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.project ?? item.project);
-  const [deadline, setDeadline] = useState(
-    () => readDraft<CaseDraftFields>("case", item.id)?.deadline ?? formatCaseDeadlineForInput(item.deadline),
-  );
 
   useEffect(() => {
     if (item.id === itemIdRef.current) return;
@@ -1256,7 +1253,6 @@ function CaseDetailEditor({
     const next = draft ?? loadCaseFields(item);
     setTitle(next.title);
     setProject(next.project);
-    setDeadline(next.deadline);
   }, [item, loadCaseFields]);
 
   const formValues = useMemo((): CaseDraftFields => ({
@@ -1265,8 +1261,8 @@ function CaseDetailEditor({
     goal: item.goal,
     status: item.status,
     statusTone: item.statusTone,
-    deadline,
-  }), [title, project, deadline, item.goal, item.status, item.statusTone]);
+    deadline: formatCaseDeadlineForInput(item.deadline),
+  }), [title, project, item.goal, item.status, item.statusTone, item.deadline]);
 
   const formBaseline = useMemo(() => loadCaseFields(item), [item, loadCaseFields]);
 
@@ -1319,14 +1315,6 @@ function CaseDetailEditor({
             <option key={p} value={p}>{p}</option>
           ))}
         </select>
-      </DetailField>
-      <DetailField label="期限">
-        <input
-          type="date"
-          value={deadline}
-          onChange={(e) => setDeadline(e.target.value)}
-          className={fieldInputClass}
-        />
       </DetailField>
       {layout === "page" && onAddTask && (
         <div className="mt-1 flex justify-end">
@@ -3349,7 +3337,7 @@ function DiaryAllList({
       {entries.length === 0 ? (
         <p className="text-[12px] text-gray-400">まだ日記がありません</p>
       ) : (
-        <ul className="max-h-[320px] space-y-2 overflow-y-auto">
+        <ul className="max-h-[min(60vh,520px)] space-y-2 overflow-y-auto">
           {entries.map((entry) => (
             <li key={entry.id}>
               <button
@@ -3372,19 +3360,70 @@ function DiaryAllList({
   );
 }
 
+function DiaryListModal({
+  onClose,
+  diaries,
+  onOpenSpread,
+}: {
+  onClose: () => void;
+  diaries: DailyDiary[];
+  onOpenSpread: (date: string) => void;
+}) {
+  const entriesWithBody = useMemo(
+    () =>
+      diaries
+        .filter((d) => d.body.trim())
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [diaries],
+  );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="全ての日記"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-white/55 backdrop-blur-[1px]"
+        aria-label="一覧を閉じる"
+        onClick={onClose}
+      />
+      <div
+        className="relative flex h-[84vh] w-full max-h-[84dvh] max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-[0_24px_80px_rgba(0,0,0,0.15)] ring-1 ring-black/[0.06] lg:max-w-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <DiaryAllList
+            entries={entriesWithBody}
+            onOpenSpread={onOpenSpread}
+            onBack={onClose}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DailyDiaryBoard({
   diaries,
   viewDateISO,
   onSave,
-  onOpenSpread,
+  onOpenList,
 }: {
   diaries: DailyDiary[];
   viewDateISO: string;
   onSave: (date: string, body: string) => Promise<boolean>;
-  onOpenSpread?: (date: string) => void;
+  onOpenList?: () => void;
 }) {
   const [writeDate, setWriteDate] = useState(viewDateISO);
-  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     setWriteDate(viewDateISO);
@@ -3406,27 +3445,6 @@ function DailyDiaryBoard({
     };
   }, [diaries, writeDate]);
 
-  const entriesWithBody = useMemo(
-    () =>
-      diaries
-        .filter((d) => d.body.trim())
-        .sort((a, b) => b.date.localeCompare(a.date)),
-    [diaries],
-  );
-
-  if (showAll) {
-    return (
-      <DiaryAllList
-        entries={entriesWithBody}
-        onOpenSpread={(date) => {
-          onOpenSpread?.(date);
-          setShowAll(false);
-        }}
-        onBack={() => setShowAll(false)}
-      />
-    );
-  }
-
   return (
     <div>
       <h3 className="mb-3 text-sm font-semibold text-gray-900">日記</h3>
@@ -3447,7 +3465,7 @@ function DailyDiaryBoard({
       />
       <button
         type="button"
-        onClick={() => setShowAll(true)}
+        onClick={() => onOpenList?.()}
         className="mt-3 text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD]"
       >
         全ての日記を見る
@@ -3461,13 +3479,13 @@ function MobileDiaryModal({
   diaries,
   viewDateISO,
   onSave,
-  onOpenSpread,
+  onOpenList,
 }: {
   onClose: () => void;
   diaries: DailyDiary[];
   viewDateISO: string;
   onSave: (date: string, body: string) => Promise<boolean>;
-  onOpenSpread?: (date: string) => void;
+  onOpenList?: () => void;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -3508,7 +3526,7 @@ function MobileDiaryModal({
             diaries={diaries}
             viewDateISO={viewDateISO}
             onSave={onSave}
-            onOpenSpread={onOpenSpread}
+            onOpenList={onOpenList}
           />
         </div>
       </div>
@@ -4292,7 +4310,13 @@ export default function Home() {
   const [mobileTab, setMobileTab] = useState<MobileTab>("home");
   const [memoSheetOpen, setMemoSheetOpen] = useState(false);
   const [diarySheetOpen, setDiarySheetOpen] = useState(false);
+  const [diaryListOpen, setDiaryListOpen] = useState(false);
   const [diarySpreadDate, setDiarySpreadDate] = useState<string | null>(null);
+
+  const openDiarySpread = useCallback((date: string) => {
+    setDiaryListOpen(false);
+    setDiarySpreadDate(date);
+  }, []);
   const [activeProject, setActiveProject] = useState<string>(ALL_PROJECTS_LABEL);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
   const [calendarPeekReset, setCalendarPeekReset] = useState(0);
@@ -5024,7 +5048,7 @@ export default function Home() {
               diaries={dailyDiaries}
               viewDateISO={viewDateISO}
               onSave={saveDailyDiary}
-              onOpenSpread={setDiarySpreadDate}
+              onOpenList={() => setDiaryListOpen(true)}
             />
           </Card>
           <Card className="p-6">
@@ -5055,7 +5079,15 @@ export default function Home() {
           diaries={dailyDiaries}
           viewDateISO={viewDateISO}
           onSave={saveDailyDiary}
-          onOpenSpread={setDiarySpreadDate}
+          onOpenList={() => setDiaryListOpen(true)}
+        />
+      )}
+
+      {diaryListOpen && (
+        <DiaryListModal
+          onClose={() => setDiaryListOpen(false)}
+          diaries={dailyDiaries}
+          onOpenSpread={openDiarySpread}
         />
       )}
 
