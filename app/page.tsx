@@ -1156,6 +1156,16 @@ function getDiaryBodyForDate(diaries: DailyDiary[], date: string) {
     .join("\n");
 }
 
+function getFilledDiaryDates(diaries: DailyDiary[]) {
+  const dates = new Set<string>();
+  for (const d of diaries) {
+    if (getDiaryBodyForDate(diaries, d.date).trim()) {
+      dates.add(d.date);
+    }
+  }
+  return [...dates].sort();
+}
+
 function CaseDetailTaskStack({
   tasks,
   onToggleTask,
@@ -1245,6 +1255,7 @@ function CaseDetailEditor({
 
   const [title, setTitle] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.title ?? item.title);
   const [project, setProject] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.project ?? item.project);
+  const [memo, setMemo] = useState(() => readDraft<CaseDraftFields>("case", item.id)?.goal ?? item.goal);
 
   useEffect(() => {
     if (item.id === itemIdRef.current) return;
@@ -1253,16 +1264,17 @@ function CaseDetailEditor({
     const next = draft ?? loadCaseFields(item);
     setTitle(next.title);
     setProject(next.project);
+    setMemo(next.goal);
   }, [item, loadCaseFields]);
 
   const formValues = useMemo((): CaseDraftFields => ({
     title,
     project,
-    goal: item.goal,
+    goal: memo,
     status: item.status,
     statusTone: item.statusTone,
     deadline: formatCaseDeadlineForInput(item.deadline),
-  }), [title, project, item.goal, item.status, item.statusTone, item.deadline]);
+  }), [title, project, memo, item.status, item.statusTone, item.deadline]);
 
   const formBaseline = useMemo(() => loadCaseFields(item), [item, loadCaseFields]);
 
@@ -1315,6 +1327,15 @@ function CaseDetailEditor({
             <option key={p} value={p}>{p}</option>
           ))}
         </select>
+      </DetailField>
+      <DetailField label="メモ">
+        <textarea
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          rows={4}
+          placeholder="メモを入力"
+          className={`${fieldInputClass} resize-none`}
+        />
       </DetailField>
       {layout === "page" && onAddTask && (
         <div className="mt-1 flex justify-end">
@@ -3217,13 +3238,14 @@ function DiarySpreadModal({
   onClose: () => void;
   onSave: (date: string, body: string) => Promise<boolean>;
 }) {
-  const [spreadStart, setSpreadStart] = useState(focusDate);
+  const filledDates = useMemo(() => getFilledDiaryDates(diaries), [diaries]);
+  const [spreadIndex, setSpreadIndex] = useState(0);
   const [pageStep, setPageStep] = useState(1);
-  const rightDate = shiftISODate(spreadStart, 1);
 
   useEffect(() => {
-    setSpreadStart(focusDate);
-  }, [focusDate]);
+    const idx = filledDates.indexOf(focusDate);
+    setSpreadIndex(idx >= 0 ? idx : 0);
+  }, [focusDate, filledDates]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
@@ -3232,6 +3254,11 @@ function DiarySpreadModal({
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
+
+  const leftDate = filledDates[spreadIndex];
+  const rightDate = pageStep === 2 ? filledDates[spreadIndex + 1] : undefined;
+  const canGoPrev = spreadIndex > 0;
+  const canGoNext = spreadIndex + pageStep < filledDates.length;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -3268,46 +3295,64 @@ function DiarySpreadModal({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="lg:hidden">
-            <DiaryNotebookPage
-              date={spreadStart}
-              body={getDiaryBodyForDate(diaries, spreadStart)}
-              onSave={onSave}
-              variant="single"
-            />
-          </div>
-          <div className="hidden lg:flex lg:items-stretch">
-            <DiaryNotebookPage
-              date={spreadStart}
-              body={getDiaryBodyForDate(diaries, spreadStart)}
-              onSave={onSave}
-              variant="left"
-            />
-            <div className="w-3 shrink-0 bg-gradient-to-r from-black/[0.06] via-black/[0.12] to-black/[0.06]" />
-            <DiaryNotebookPage
-              date={rightDate}
-              body={getDiaryBodyForDate(diaries, rightDate)}
-              onSave={onSave}
-              variant="right"
-            />
-          </div>
+          {filledDates.length === 0 ? (
+            <p className="py-12 text-center text-[13px] text-gray-400">まだ日記がありません</p>
+          ) : (
+            <>
+              <div className="lg:hidden">
+                {leftDate && (
+                  <DiaryNotebookPage
+                    date={leftDate}
+                    body={getDiaryBodyForDate(diaries, leftDate)}
+                    onSave={onSave}
+                    variant="single"
+                  />
+                )}
+              </div>
+              <div className="hidden lg:flex lg:items-stretch">
+                {leftDate && (
+                  <DiaryNotebookPage
+                    date={leftDate}
+                    body={getDiaryBodyForDate(diaries, leftDate)}
+                    onSave={onSave}
+                    variant={rightDate ? "left" : "single"}
+                  />
+                )}
+                {rightDate && (
+                  <>
+                    <div className="w-3 shrink-0 bg-gradient-to-r from-black/[0.06] via-black/[0.12] to-black/[0.06]" />
+                    <DiaryNotebookPage
+                      date={rightDate}
+                      body={getDiaryBodyForDate(diaries, rightDate)}
+                      onSave={onSave}
+                      variant="right"
+                    />
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
+        {filledDates.length > 0 && (
         <div className="flex shrink-0 items-center justify-between border-t border-black/[0.08] bg-[#faf8f5] px-4 py-2.5">
           <button
             type="button"
-            onClick={() => setSpreadStart((d) => shiftISODate(d, -pageStep))}
-            className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD]"
+            disabled={!canGoPrev}
+            onClick={() => setSpreadIndex((i) => Math.max(0, i - pageStep))}
+            className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD] disabled:pointer-events-none disabled:opacity-30"
           >
             ← 前のページ
           </button>
           <button
             type="button"
-            onClick={() => setSpreadStart((d) => shiftISODate(d, pageStep))}
-            className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD]"
+            disabled={!canGoNext}
+            onClick={() => setSpreadIndex((i) => Math.min(filledDates.length - 1, i + pageStep))}
+            className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD] disabled:pointer-events-none disabled:opacity-30"
           >
             次のページ →
           </button>
         </div>
+        )}
       </div>
     </div>
   );
@@ -3349,7 +3394,7 @@ function DiaryAllList({
                   {formatDateJa(entry.date)}
                 </p>
                 <p className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-600">
-                  {entry.body.trim() || "（空）"}
+                  {entry.body.trim()}
                 </p>
               </button>
             </li>
