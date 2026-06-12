@@ -604,7 +604,7 @@ function ProjectNameTag({ name, muted }: { name: string; muted?: boolean }) {
       className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium"
       style={
         muted
-          ? { backgroundColor: "rgba(156, 163, 175, 0.35)", color: "rgb(229, 231, 235)" }
+          ? { backgroundColor: "#f3f4f6", color: "#9ca3af" }
           : { backgroundColor: color.bg, color: color.text }
       }
       title={name}
