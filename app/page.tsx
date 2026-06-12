@@ -2252,7 +2252,7 @@ function TodayTasksSection({
     <section className={`mb-4 ${className}`}>
       <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-hidden">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-          <h3 className="min-w-0 truncate text-[15px] font-semibold tracking-tight text-gray-900">
+          <h3 className="min-w-0 truncate text-[17px] font-semibold tracking-tight text-gray-900">
             {taskSectionLabel(viewDateISO)}
           </h3>
           <span className="shrink-0 whitespace-nowrap text-[11px] text-gray-400">
