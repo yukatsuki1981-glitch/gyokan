@@ -2250,57 +2250,59 @@ function TodayTasksSection({
 }) {
   return (
     <section className={`mb-4 ${className}`}>
-      <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-hidden">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-          <h3 className="min-w-0 truncate text-[15px] font-semibold tracking-tight text-gray-900">
-            {taskSectionLabel(viewDateISO)}
-          </h3>
-          <span className="shrink-0 whitespace-nowrap text-[11px] text-gray-400">
-            未完了{activeTaskCount}件·完了{completedTaskCount}件
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={onAddTask}
-          className="shrink-0 whitespace-nowrap text-[11px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF] sm:text-[13px]"
-        >
-          ＋タスク追加
-        </button>
-      </div>
-
-      <Card className="overflow-hidden p-1.5">
-        {displayedTasks.length === 0 &&
-        incompleteOtherTasks.length === 0 &&
-        ongoingRangeTasks.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <p className="text-[12px] text-gray-400">タスクがありません</p>
+      <div className="rounded-2xl bg-[#F7F7F8] px-4 py-4 lg:px-5 lg:py-5">
+        <div className="mb-3 flex flex-nowrap items-center justify-between gap-2 overflow-hidden">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+            <h3 className="min-w-0 truncate text-[15px] font-semibold tracking-tight text-gray-900">
+              {taskSectionLabel(viewDateISO)}
+            </h3>
+            <span className="shrink-0 whitespace-nowrap text-[11px] text-gray-400">
+              未完了{activeTaskCount}件·完了{completedTaskCount}件
+            </span>
           </div>
-        ) : (
-          <>
-            {displayedTasks.length > 0 && renderTaskList(displayedTasks, "today")}
-            {incompleteOtherTasks.length > 0 && (
-              <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
-                <div className="mb-1.5 flex items-center justify-between px-1">
-                  <span className="text-[11px] font-medium text-gray-400">未完了のタスク</span>
-                  <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
+          <button
+            type="button"
+            onClick={onAddTask}
+            className="shrink-0 whitespace-nowrap text-[11px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF] sm:text-[13px]"
+          >
+            ＋タスク追加
+          </button>
+        </div>
+
+        <Card className="overflow-hidden p-4 lg:p-5">
+          {displayedTasks.length === 0 &&
+          incompleteOtherTasks.length === 0 &&
+          ongoingRangeTasks.length === 0 ? (
+            <div className="px-1 py-6 text-center">
+              <p className="text-[12px] text-gray-400">タスクがありません</p>
+            </div>
+          ) : (
+            <>
+              {displayedTasks.length > 0 && renderTaskList(displayedTasks, "today")}
+              {incompleteOtherTasks.length > 0 && (
+                <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
+                  <div className="mb-1.5 flex items-center justify-between px-1">
+                    <span className="text-[11px] font-medium text-gray-400">未完了のタスク</span>
+                    <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
+                  </div>
+                  {renderTaskList(incompleteOtherTasks, "range", { showOriginalDeadline: true })}
                 </div>
-                {renderTaskList(incompleteOtherTasks, "range", { showOriginalDeadline: true })}
-              </div>
-            )}
-            {ongoingRangeTasks.length > 0 && (
-              <div
-                className={
-                  displayedTasks.length > 0 || incompleteOtherTasks.length > 0
-                    ? "mt-2 border-t border-black/[0.04] pt-2"
-                    : ""
-                }
-              >
-                {renderTaskList(ongoingRangeTasks, "upcoming")}
-              </div>
-            )}
-          </>
-        )}
-      </Card>
+              )}
+              {ongoingRangeTasks.length > 0 && (
+                <div
+                  className={
+                    displayedTasks.length > 0 || incompleteOtherTasks.length > 0
+                      ? "mt-2 border-t border-black/[0.04] pt-2"
+                      : ""
+                  }
+                >
+                  {renderTaskList(ongoingRangeTasks, "upcoming")}
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+      </div>
     </section>
   );
 }
@@ -4959,13 +4961,17 @@ export default function Home() {
                 ongoingRangeTasks={ongoingRangeTasks}
                 renderTaskList={renderTaskList}
                 onAddTask={openTaskModalForView}
-                className={!isAllProjects ? "order-3 lg:order-3" : "order-2 lg:order-3"}
+                className={
+                  !isAllProjects
+                    ? "order-3 lg:order-3"
+                    : "order-2 lg:order-3"
+                }
               />
             )}
 
             {isAllProjects && (
               <section
-                className={`order-3 mb-3 lg:order-1 lg:mb-4 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
+                className={`order-3 mt-7 mb-3 lg:order-1 lg:mb-8 lg:mt-0 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
               >
                 <div className="mb-2 flex items-center justify-between gap-4">
                   <div className="flex min-w-0 items-baseline gap-3">
