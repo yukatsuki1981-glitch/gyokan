@@ -168,14 +168,6 @@ function taskSectionLabel(viewDate: string) {
   return `${formatMonthDay(viewDate)}のタスク`;
 }
 
-const CASE_HOME_VISIBLE = 8;
-
-function getCaseGridDisplay(cases: CaseItem[]) {
-  const visible = cases.slice(0, CASE_HOME_VISIBLE);
-  const hiddenCount = Math.max(0, cases.length - CASE_HOME_VISIBLE);
-  return { visible, hiddenCount };
-}
-
 const PROJECT_OPTIONS_FALLBACK = [...DEFAULT_PROJECT_NAMES];
 const STATUS_OPTIONS: { label: string; tone: CaseItem["statusTone"] }[] = [
   { label: "売却活動中", tone: "blue" },
@@ -1666,24 +1658,6 @@ function CaseCard({
   );
 }
 
-function OverflowCaseTile({
-  count,
-  onClick,
-}: {
-  count: number;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-full min-h-[32px] cursor-pointer items-center justify-center rounded-xl border border-dashed border-black/[0.12] bg-black/[0.02] px-2 py-1.5 text-[11px] font-medium leading-tight text-gray-500 transition-all duration-200 hover:border-[#007AFF]/40 hover:bg-[#007AFF]/5 hover:text-[#007AFF]"
-    >
-      他{count}件すべてを見る
-    </button>
-  );
-}
-
 function CasesListSection({
   cases,
   onToggle,
@@ -1700,6 +1674,7 @@ function CasesListSection({
   onDragEnd: (event: DragEndEvent) => void;
 }) {
   const ongoing = cases.filter((c) => !c.done);
+  const completed = cases.filter((c) => c.done);
 
   return (
     <section>
@@ -1714,7 +1689,9 @@ function CasesListSection({
         </button>
         <div>
           <h2 className="text-[17px] font-semibold text-gray-900">案件一覧</h2>
-          <p className="text-[13px] text-gray-400">進行中 {ongoing.length}件</p>
+          <p className="text-[13px] text-gray-400">
+            全{cases.length}件（進行中 {ongoing.length}件 · 完了 {completed.length}件）
+          </p>
         </div>
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
@@ -1722,6 +1699,15 @@ function CasesListSection({
           <div className="grid grid-cols-3 gap-2">
             {ongoing.map((c) => (
               <SortableCaseCard
+                key={c.id}
+                item={c}
+                onToggle={onToggle}
+                onOpen={onOpen}
+                showProjectTag
+              />
+            ))}
+            {completed.map((c) => (
+              <CaseCard
                 key={c.id}
                 item={c}
                 onToggle={onToggle}
@@ -4426,9 +4412,19 @@ export default function Home() {
     [cases],
   );
 
+  const orderedCases = useMemo(
+    () => sortCasesByProjectOrder(cases, projects),
+    [cases, projects],
+  );
+
   const orderedOngoingCases = useMemo(
-    () => sortCasesByProjectOrder(ongoingCases, projects),
-    [ongoingCases, projects],
+    () => orderedCases.filter((c) => !c.done),
+    [orderedCases],
+  );
+
+  const orderedCompletedCases = useMemo(
+    () => orderedCases.filter((c) => c.done),
+    [orderedCases],
   );
 
   const caseById = useMemo(() => {
@@ -4487,10 +4483,6 @@ export default function Home() {
   const completedCasesCount = useMemo(
     () => cases.filter((c) => c.done).length,
     [cases],
-  );
-  const caseGridDisplay = useMemo(
-    () => getCaseGridDisplay(orderedOngoingCases),
-    [orderedOngoingCases],
   );
   const openCasesList = useCallback(() => {
     setCasesListOpen(true);
@@ -4860,7 +4852,7 @@ export default function Home() {
 
             {casesListOpen ? (
               <CasesListSection
-                cases={orderedOngoingCases}
+                cases={orderedCases}
                 onToggle={toggleCase}
                 onOpen={setSelectedCase}
                 onBack={() => setCasesListOpen(false)}
@@ -4977,9 +4969,9 @@ export default function Home() {
               >
                 <div className="mb-2 flex items-center justify-between gap-4">
                   <div className="flex min-w-0 items-baseline gap-3">
-                    <h3 className="shrink-0 text-[17px] font-semibold text-gray-900">進行中の案件</h3>
+                    <h3 className="shrink-0 text-[17px] font-semibold text-gray-900">案件</h3>
                     <span className="text-[13px] text-gray-400">
-                      {ongoingCases.length}件のアクティブ案件
+                      全{cases.length}件（進行中 {ongoingCases.length}件 · 完了 {completedCasesCount}件）
                     </span>
                   </div>
                   <div className="flex shrink-0 items-center">
@@ -4998,11 +4990,11 @@ export default function Home() {
                   onDragEnd={handleCaseDragEnd}
                 >
                   <SortableContext
-                    items={caseGridDisplay.visible.map((c) => c.id)}
+                    items={orderedOngoingCases.map((c) => c.id)}
                     strategy={rectSortingStrategy}
                   >
-                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-3 lg:grid-rows-3">
-                      {caseGridDisplay.visible.map((c) => (
+                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
+                      {orderedOngoingCases.map((c) => (
                         <SortableCaseCard
                           key={c.id}
                           item={c}
@@ -5011,12 +5003,15 @@ export default function Home() {
                           showProjectTag
                         />
                       ))}
-                      {caseGridDisplay.hiddenCount > 0 && (
-                        <OverflowCaseTile
-                          count={caseGridDisplay.hiddenCount}
-                          onClick={openCasesList}
+                      {orderedCompletedCases.map((c) => (
+                        <CaseCard
+                          key={c.id}
+                          item={c}
+                          onToggle={toggleCase}
+                          onOpen={setSelectedCase}
+                          showProjectTag
                         />
-                      )}
+                      ))}
                     </div>
                   </SortableContext>
                 </DndContext>
