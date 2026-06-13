@@ -5379,7 +5379,12 @@ export default function Home() {
   }
 
   if (!user) {
-    return null;
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--gyokan-bg)] px-6">
+        <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
+        <p className="text-[13px] text-gray-400">ログイン画面へ移動しています…</p>
+      </div>
+    );
   }
 
   const renderTaskList = (

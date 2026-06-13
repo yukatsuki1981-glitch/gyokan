@@ -81,12 +81,17 @@ export function DisplaySettingsProvider({
   );
 }
 
+const FALLBACK: DisplaySettingsContextValue = {
+  ...DEFAULT_DISPLAY_SETTINGS,
+  updateSettings: () => {},
+  setShowProjects: () => {},
+  setShowCases: () => {},
+  setProjectLabel: () => {},
+  setCaseLabel: () => {},
+};
+
 export function useDisplaySettings() {
-  const ctx = useContext(DisplaySettingsContext);
-  if (!ctx) {
-    throw new Error("useDisplaySettings must be used within DisplaySettingsProvider");
-  }
-  return ctx;
+  return useContext(DisplaySettingsContext) ?? FALLBACK;
 }
 
 export function SettingsToggle({

@@ -106,6 +106,25 @@ const themeBootstrapScript = `
 })();
 `;
 
+const chunkRecoveryScript = `
+(function () {
+  var reloaded = false;
+  function maybeReload(reason) {
+    if (reloaded) return;
+    if (!reason || !/chunk|Loading chunk|dynamically imported module/i.test(String(reason))) return;
+    reloaded = true;
+    window.location.reload();
+  }
+  window.addEventListener("error", function (event) {
+    maybeReload(event && event.message);
+  });
+  window.addEventListener("unhandledrejection", function (event) {
+    var reason = event && event.reason;
+    maybeReload(reason && reason.message ? reason.message : reason);
+  });
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -120,6 +139,7 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+        <script dangerouslySetInnerHTML={{ __html: chunkRecoveryScript }} />
       </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

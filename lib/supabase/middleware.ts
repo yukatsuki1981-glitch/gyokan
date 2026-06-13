@@ -31,7 +31,16 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  try {
+    await Promise.race([
+      supabase.auth.getUser(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("auth timeout")), 4000);
+      }),
+    ]);
+  } catch {
+    /* Continue without blocking the page if auth refresh is slow or unavailable. */
+  }
 
   return supabaseResponse;
 }
