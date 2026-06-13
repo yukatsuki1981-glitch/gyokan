@@ -8,44 +8,46 @@
   overflow: hidden;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .theme-decoration,
-  .theme-decoration *,
-  .themed-task-check,
-  .themed-task-check * {
-    animation: none !important;
-    transition: none !important;
-  }
-
-  .theme-deco-fall {
-    opacity: 0.55 !important;
-    top: 12% !important;
-  }
-
-  .theme-deco-snow {
-    opacity: 0.45 !important;
-    top: 8% !important;
-  }
-
-  .theme-deco-star {
-    opacity: 0.55 !important;
-  }
-
-  .theme-deco-marine__waves {
-    opacity: 0.35 !important;
-  }
+.theme-deco-scatter {
+  position: absolute;
+  pointer-events: none;
 }
 
 /* ─── Marine ─── */
+
+.theme-deco-marine__wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at top left, rgba(125, 211, 224, 0.12), transparent 42%),
+    radial-gradient(ellipse at top right, rgba(46, 143, 163, 0.1), transparent 40%);
+}
+
+.theme-deco-marine__cloud {
+  position: absolute;
+  width: min(28vw, 140px);
+  height: auto;
+  opacity: 0.55;
+}
+
+.theme-deco-marine__cloud--tl {
+  top: 0.5rem;
+  left: 0.5rem;
+}
+
+.theme-deco-marine__cloud--tr {
+  top: 1rem;
+  right: 0.75rem;
+  transform: scaleX(-1);
+}
 
 .theme-deco-marine__waves {
   position: absolute;
   bottom: 0;
   left: 0;
-  width: 200%;
-  height: 72px;
-  opacity: 0.35;
-  animation: marine-wave-drift 20s linear infinite;
+  width: 100%;
+  height: min(18vh, 120px);
+  opacity: 0.72;
 }
 
 .theme-deco-marine__waves svg {
@@ -53,207 +55,307 @@
   height: 100%;
 }
 
-.theme-deco-marine__starfish {
+.theme-deco-marine__icon {
   position: absolute;
-  right: 1.25rem;
-  bottom: 1.5rem;
+  opacity: 0.55;
+}
+
+.theme-deco-marine__shell {
+  right: 4.5rem;
+  bottom: 5.5rem;
   width: 28px;
   height: 28px;
-  opacity: 0.28;
-  color: #2e8fa3;
 }
 
-@keyframes marine-wave-drift {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+.theme-deco-marine__starfish {
+  right: 1.25rem;
+  bottom: 4.5rem;
+  width: 26px;
+  height: 26px;
 }
 
-/* ─── Sakura / Momiji falling ─── */
+.theme-deco-marine__yacht {
+  right: 2rem;
+  bottom: 1.25rem;
+  width: 36px;
+  height: 28px;
+}
 
-.theme-deco-fall {
+/* ─── Sakura ─── */
+
+.theme-deco-sakura__wash {
   position: absolute;
-  top: -8%;
-  width: 18px;
-  height: 18px;
-  opacity: 0;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at top, rgba(245, 190, 205, 0.14), transparent 55%),
+    radial-gradient(ellipse at bottom right, rgba(240, 170, 190, 0.08), transparent 45%);
 }
 
-.theme-deco-fall--sakura-a {
-  animation-name: sakura-fall-a;
+.theme-deco-sakura__branch {
+  position: absolute;
+  width: min(34vw, 150px);
+  height: auto;
+  opacity: 0.62;
 }
 
-.theme-deco-fall--sakura-b {
-  animation-name: sakura-fall-b;
+.theme-deco-sakura__branch--tl {
+  top: 0;
+  left: 0;
 }
 
-.theme-deco-fall--sakura-1 {
-  left: 18%;
-  animation-name: sakura-fall-a;
-  animation-duration: 14s;
-  animation-delay: 0s;
+.theme-deco-sakura__branch--tr {
+  top: 0;
+  right: 0;
+  transform: scaleX(-1);
 }
 
-.theme-deco-fall--sakura-2 {
-  left: 62%;
-  animation-name: sakura-fall-b;
-  animation-duration: 16s;
-  animation-delay: 6s;
+.theme-deco-sakura__branch--bl {
+  bottom: 0;
+  left: 0;
+  transform: scaleY(-1);
+  opacity: 0.45;
 }
 
-.theme-deco-fall--sakura-3 {
-  left: 82%;
-  animation-name: sakura-fall-a;
-  animation-duration: 15s;
-  animation-delay: 11s;
-}
-
-.theme-deco-fall--momiji-1 {
-  left: 25%;
-  animation-name: momiji-fall-a;
-  animation-duration: 11s;
-  animation-delay: 2s;
-}
-
-.theme-deco-fall--momiji-2 {
-  left: 55%;
-  animation-name: momiji-fall-b;
-  animation-duration: 10s;
-  animation-delay: 8s;
-}
-
-.theme-deco-fall--momiji-3 {
-  left: 78%;
-  animation-name: momiji-fall-a;
-  animation-duration: 12s;
-  animation-delay: 13s;
-}
-
-@keyframes sakura-fall-a {
-  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
-  8% { opacity: 0.75; }
-  92% { opacity: 0.5; }
-  100% { transform: translate(24px, 110vh) rotate(300deg); opacity: 0; }
-}
-
-@keyframes sakura-fall-b {
-  0% { transform: translate(0, 0) rotate(20deg); opacity: 0; }
-  8% { opacity: 0.7; }
-  92% { opacity: 0.45; }
-  100% { transform: translate(-18px, 110vh) rotate(420deg); opacity: 0; }
-}
-
-@keyframes momiji-fall-a {
-  0% { transform: translate(0, 0) rotate(-15deg); opacity: 0; }
-  6% { opacity: 0.7; }
-  100% { transform: translate(20px, 110vh) rotate(260deg); opacity: 0; }
-}
-
-@keyframes momiji-fall-b {
-  0% { transform: translate(0, 0) rotate(10deg); opacity: 0; }
-  6% { opacity: 0.65; }
-  100% { transform: translate(-22px, 110vh) rotate(320deg); opacity: 0; }
+.theme-deco-sakura__branch--br {
+  bottom: 0;
+  right: 0;
+  transform: scale(-1, -1);
+  opacity: 0.42;
 }
 
 /* ─── Sunset ─── */
+
+.theme-deco-sunset__wash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at top, rgba(224, 138, 71, 0.06), transparent 50%);
+}
 
 .theme-deco-sunset__band {
   position: absolute;
   bottom: 0;
   left: 0;
   width: 100%;
-  height: 80px;
-  opacity: 0.45;
-  background: linear-gradient(90deg, #e08a47, #c2542e, #6b4a8a);
-  animation: sunset-hue 30s ease-in-out infinite alternate;
+  height: min(28vh, 180px);
+  opacity: 0.72;
+  background: linear-gradient(
+    to top,
+    rgba(45, 35, 70, 0.42) 0%,
+    rgba(107, 74, 138, 0.38) 22%,
+    rgba(194, 84, 46, 0.34) 48%,
+    rgba(224, 138, 71, 0.28) 72%,
+    transparent 100%
+  );
+}
+
+.theme-deco-sunset__horizon {
+  position: absolute;
+  bottom: min(12vh, 72px);
+  left: 0;
+  width: 100%;
+  height: min(14vh, 100px);
+  opacity: 0.85;
 }
 
 .theme-deco-sunset__bird {
   position: absolute;
-  top: 72%;
-  width: 18px;
+  width: 22px;
   height: 8px;
-  opacity: 0.25;
-  color: #8a5f45;
-  animation: sunset-bird 28s ease-in-out infinite;
+  opacity: 0.45;
 }
 
-.theme-deco-sunset__bird--a { left: 12%; animation-delay: 0s; }
-.theme-deco-sunset__bird--b { left: 78%; animation-delay: 9s; animation-direction: reverse; }
-
-@keyframes sunset-hue {
-  from { filter: hue-rotate(0deg) saturate(1); }
-  to { filter: hue-rotate(12deg) saturate(1.08); }
+.theme-deco-sunset__bird--a {
+  top: 8%;
+  left: 10%;
 }
 
-@keyframes sunset-bird {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(36px); }
+.theme-deco-sunset__bird--b {
+  top: 12%;
+  right: 14%;
 }
 
-/* ─── Snow ─── */
+.theme-deco-sunset__bird--c {
+  top: 6%;
+  right: 38%;
+  transform: scale(0.85);
+}
 
-.theme-deco-snow {
+/* ─── Momiji ─── */
+
+.theme-deco-momiji__wash {
   position: absolute;
-  top: -4px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.5);
-  animation: snow-fall linear infinite;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at top left, rgba(212, 136, 58, 0.1), transparent 45%),
+    radial-gradient(ellipse at bottom right, rgba(201, 104, 63, 0.08), transparent 42%);
 }
 
-@keyframes snow-fall {
-  0% { transform: translate(0, 0); opacity: 0; }
-  10% { opacity: var(--snow-opacity, 0.45); }
-  90% { opacity: var(--snow-opacity, 0.35); }
-  100% { transform: translate(var(--snow-drift, 12px), 105vh); opacity: 0; }
+.theme-deco-momiji__branch {
+  position: absolute;
+  width: min(32vw, 140px);
+  height: auto;
+  opacity: 0.58;
+}
+
+.theme-deco-momiji__branch--tl {
+  top: 0;
+  left: 0;
+}
+
+.theme-deco-momiji__branch--tr {
+  top: 0;
+  right: 0;
+  transform: scaleX(-1);
+}
+
+.theme-deco-momiji__branch--bl {
+  bottom: 0;
+  left: 0;
+  transform: scaleY(-1);
+  opacity: 0.48;
+}
+
+.theme-deco-momiji__branch--br {
+  bottom: 0;
+  right: 0;
+  transform: scale(-1, -1);
+  opacity: 0.45;
+}
+
+/* ─── Yukigeshiki ─── */
+
+.theme-deco-yuki__mist {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(220, 235, 248, 0.22) 0%, transparent 28%);
+}
+
+.theme-deco-yuki__mountains {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: min(16vh, 100px);
+  opacity: 0.8;
+}
+
+.theme-deco-yuki__flake {
+  position: absolute;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 1px rgba(180, 205, 225, 0.5);
+}
+
+.theme-deco-yuki__flake--crystal {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.65)' stroke-width='1.2'%3E%3Cpath d='M12 2v20M2 12h20M5 5l14 14M19 5L5 19'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
 }
 
 /* ─── Kami ─── */
 
+.theme-deco-kami__wash {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    145deg,
+    rgba(247, 242, 230, 0.18) 0%,
+    transparent 40%,
+    rgba(232, 220, 200, 0.12) 100%
+  );
+}
+
 .theme-deco-kami__texture {
   position: absolute;
   inset: 0;
-  opacity: 0.08;
+  opacity: 0.1;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
   background-size: 180px 180px;
 }
 
-.theme-deco-kami__vignette {
+.theme-deco-kami__pattern {
   position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at top left, rgba(74, 61, 42, 0.12), transparent 42%),
-    radial-gradient(ellipse at top right, rgba(74, 61, 42, 0.1), transparent 42%),
-    radial-gradient(ellipse at bottom left, rgba(74, 61, 42, 0.1), transparent 42%),
-    radial-gradient(ellipse at bottom right, rgba(74, 61, 42, 0.12), transparent 42%);
+  width: min(22vw, 88px);
+  height: min(22vw, 88px);
+  opacity: 0.7;
+}
+
+.theme-deco-kami__pattern--tl {
+  top: 0.5rem;
+  left: 0.5rem;
+}
+
+.theme-deco-kami__pattern--br {
+  bottom: 0.5rem;
+  right: 0.5rem;
+}
+
+.theme-deco-kami__brush {
+  position: absolute;
+  width: min(20vw, 72px);
+  height: min(20vw, 72px);
+  opacity: 0.65;
+}
+
+.theme-deco-kami__brush--tr {
+  top: 0.75rem;
+  right: 0.75rem;
+}
+
+.theme-deco-kami__brush--bl {
+  bottom: 1rem;
+  left: 0.75rem;
 }
 
 /* ─── Yofukashi ─── */
 
-.theme-deco-star {
+.theme-deco-yofukashi__wash {
   position: absolute;
-  width: 3px;
-  height: 3px;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at top, rgba(60, 50, 120, 0.22), transparent 55%),
+    linear-gradient(to bottom, rgba(24, 28, 56, 0.18) 0%, transparent 35%);
+}
+
+.theme-deco-yofukashi__star {
+  position: absolute;
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.85);
-  animation: star-twinkle ease-in-out infinite;
 }
 
 .theme-deco-yofukashi__moon {
   position: absolute;
-  top: 1.25rem;
-  right: 1.25rem;
-  width: 22px;
-  height: 22px;
+  top: 1rem;
+  right: 1rem;
+  width: 28px;
+  height: 28px;
   border-radius: 9999px;
-  box-shadow: inset -6px -2px 0 0 rgba(182, 168, 224, 0.35);
-  opacity: 0.35;
+  background: radial-gradient(circle at 35% 35%, rgba(255, 248, 220, 0.5), rgba(220, 210, 240, 0.15));
+  box-shadow: inset -7px -2px 0 0 rgba(200, 190, 230, 0.45);
+  opacity: 0.55;
 }
 
-@keyframes star-twinkle {
-  0%, 100% { opacity: 0.2; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.15); }
+.theme-deco-yofukashi__buildings {
+  position: absolute;
+  opacity: 0.75;
+}
+
+.theme-deco-yofukashi__buildings--br {
+  right: 0;
+  bottom: 0;
+  width: min(36vw, 140px);
+  height: auto;
+}
+
+.theme-deco-yofukashi__buildings--bl {
+  left: 0;
+  bottom: 0;
+  width: min(28vw, 110px);
+  height: auto;
+  opacity: 0.55;
 }
 
 /* ─── Furikaeri ─── */
@@ -261,21 +363,50 @@
 .theme-deco-furikaeri__vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 52%, rgba(58, 48, 36, 0.22) 100%);
+  background: radial-gradient(ellipse at center, transparent 48%, rgba(58, 48, 36, 0.28) 100%);
 }
 
 .theme-deco-furikaeri__grain {
   position: absolute;
   inset: 0;
-  opacity: 0.06;
+  opacity: 0.07;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   background-size: 160px 160px;
-  animation: furikaeri-grain 4s steps(2) infinite;
 }
 
-@keyframes furikaeri-grain {
-  0%, 100% { opacity: 0.05; }
-  50% { opacity: 0.08; }
+.theme-deco-furikaeri__frame {
+  position: absolute;
+  opacity: 0.55;
+}
+
+.theme-deco-furikaeri__frame--tl {
+  top: 0.75rem;
+  left: 0.75rem;
+  width: min(20vw, 72px);
+  height: auto;
+}
+
+.theme-deco-furikaeri__frame--br {
+  bottom: 0.75rem;
+  right: 0.75rem;
+  width: min(22vw, 80px);
+  height: auto;
+}
+
+.theme-deco-furikaeri__frame--tr {
+  top: 1rem;
+  right: 1rem;
+  width: min(18vw, 64px);
+  height: auto;
+  opacity: 0.42;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .themed-task-check,
+  .themed-task-check * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* ─── Themed task checks (paid themes) ─── */
