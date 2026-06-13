@@ -1570,6 +1570,9 @@ function TaskDetailEditor({
 
 /* ─── Case Card ─── */
 
+const TASK_DRAG_HANDLE_CLASS =
+  "drag-handle flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-gray-400 hover:text-gray-600 active:cursor-grabbing";
+
 function mergeDragHandleProps(props?: Record<string, unknown>) {
   const fromProps = (props ?? {}) as {
     className?: string;
@@ -1579,8 +1582,7 @@ function mergeDragHandleProps(props?: Record<string, unknown>) {
   const { className, style, ...rest } = fromProps;
   return {
     ...rest,
-    className:
-      `drag-handle flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-gray-400 hover:text-gray-600 active:cursor-grabbing ${className ?? ""}`.trim(),
+    className: `${TASK_DRAG_HANDLE_CLASS} ${className ?? ""}`.trim(),
     style: { touchAction: "none", ...style },
   };
 }
@@ -1590,6 +1592,7 @@ function CaseCard({
   onToggle,
   onOpen,
   showProjectTag = false,
+  layout = "default",
   sortable = false,
   dragHandleProps,
   isDragging = false,
@@ -1598,53 +1601,81 @@ function CaseCard({
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
   showProjectTag?: boolean;
+  layout?: "default" | "grouped";
   sortable?: boolean;
   dragHandleProps?: Record<string, unknown>;
   isDragging?: boolean;
 }) {
   const projectLabel = item.project;
-  return (
-    <article
-      onClick={() => onOpen(item)}
-      className={`group flex cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 py-1.5 transition-all duration-300 ${
-        isDragging
-          ? "z-50 scale-[1.04] border-blue-200/60 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.12)] ring-1 ring-blue-200/40"
-          : "border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
-      } ${
-        item.done ? "opacity-60" : ""
-      } ${sortable ? "select-none" : ""}`}
+  const caseName = item.title.trim() || "（無題）";
+  const cardShellClass = `group cursor-pointer rounded-xl border px-2.5 py-1.5 transition-all duration-300 ${
+    isDragging
+      ? "z-50 scale-[1.04] border-blue-200/60 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.12)] ring-1 ring-blue-200/40"
+      : "border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
+  } ${item.done ? "opacity-60" : ""} ${sortable ? "select-none" : ""}`;
+
+  const toggleButton = (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(item.id);
+      }}
+      aria-label={item.done ? "進行中に戻す" : "完了にする"}
+      className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-all duration-200 ${
+        item.done
+          ? "border-[var(--gyokan-accent2)] bg-[var(--gyokan-accent2)] text-white"
+          : "border-gray-300 bg-white hover:border-[var(--gyokan-accent2)]"
+      }`}
     >
-      {sortable && (
-        <button
-          type="button"
-          aria-label="並び替え"
-          onClick={(e) => e.stopPropagation()}
-          {...mergeDragHandleProps(dragHandleProps)}
+      {item.done && <Icon name="check" className="h-2.5 w-2.5" />}
+    </button>
+  );
+
+  const gripButton = sortable ? (
+    <button
+      type="button"
+      aria-label="並び替え"
+      onClick={(e) => e.stopPropagation()}
+      {...mergeDragHandleProps(dragHandleProps)}
+    >
+      <Icon name="grip" className="h-3.5 w-3.5" />
+    </button>
+  ) : null;
+
+  if (layout === "grouped") {
+    return (
+      <article onClick={() => onOpen(item)} className={`${cardShellClass} flex flex-col gap-1`}>
+        <div className="flex items-center gap-1.5">
+          {gripButton}
+          {toggleButton}
+          {item.done && (
+            <span className="ml-auto shrink-0 text-[10px] font-medium text-gray-400">完了</span>
+          )}
+        </div>
+        <h4
+          className={`line-clamp-2 text-[11px] font-medium leading-snug ${
+            item.done ? "text-gray-400 line-through" : "text-gray-900"
+          }`}
+          title={caseName}
         >
-          <Icon name="grip" className="h-3.5 w-3.5" />
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle(item.id);
-        }}
-        aria-label={item.done ? "進行中に戻す" : "完了にする"}
-        className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-all duration-200 ${
-          item.done
-            ? "border-[var(--gyokan-accent2)] bg-[var(--gyokan-accent2)] text-white"
-            : "border-gray-300 bg-white hover:border-[var(--gyokan-accent2)]"
-        }`}
-      >
-        {item.done && <Icon name="check" className="h-2.5 w-2.5" />}
-      </button>
+          {caseName}
+        </h4>
+      </article>
+    );
+  }
+
+  return (
+    <article onClick={() => onOpen(item)} className={`${cardShellClass} flex items-center gap-1.5`}>
+      {gripButton}
+      {toggleButton}
       <h4
         className={`min-w-0 flex-1 truncate text-[12px] font-medium ${
           item.done ? "text-gray-400 line-through" : "text-gray-900"
         }`}
+        title={caseName}
       >
-        {item.title}
+        {caseName}
       </h4>
       {item.done ? (
         <span className="shrink-0 text-[10px] font-medium text-gray-400">完了</span>
@@ -1726,11 +1757,13 @@ function SortableCaseCard({
   onToggle,
   onOpen,
   showProjectTag,
+  layout = "default",
 }: {
   item: CaseItem;
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
   showProjectTag?: boolean;
+  layout?: "default" | "grouped";
 }) {
   const {
     attributes,
@@ -1756,6 +1789,7 @@ function SortableCaseCard({
         onToggle={onToggle}
         onOpen={onOpen}
         showProjectTag={showProjectTag}
+        layout={layout}
         sortable
         isDragging={isDragging}
         dragHandleProps={{ ...attributes, ...listeners }}
@@ -1764,7 +1798,7 @@ function SortableCaseCard({
   );
 }
 
-const HOME_CASE_COL_MIN = 148;
+const HOME_CASE_COL_MIN = 136;
 
 function groupCasesByProjectOrder(
   cases: CaseItem[],
@@ -1834,9 +1868,16 @@ function ProjectCaseGroup({
               item={c}
               onToggle={onToggle}
               onOpen={onOpen}
+              layout="grouped"
             />
           ) : (
-            <CaseCard key={c.id} item={c} onToggle={onToggle} onOpen={onOpen} />
+            <CaseCard
+              key={c.id}
+              item={c}
+              onToggle={onToggle}
+              onOpen={onOpen}
+              layout="grouped"
+            />
           ),
         )}
       </div>
@@ -2481,16 +2522,21 @@ function TaskRowContent({
             : "cursor-pointer border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
       } ${sortable ? "select-none" : ""}`}
     >
-      {sortable && (
       <button
         type="button"
         aria-label="並び替え"
+        aria-hidden={!sortable}
+        tabIndex={sortable ? 0 : -1}
         onClick={(e) => e.stopPropagation()}
-          {...mergeDragHandleProps(dragHandleProps)}
+        {...(sortable
+          ? mergeDragHandleProps(dragHandleProps)
+          : {
+              className: TASK_DRAG_HANDLE_CLASS,
+              style: { touchAction: "none" },
+            })}
       >
-        <Icon name="grip" className="h-3.5 w-3.5" />
+        <Icon name="grip" className="h-3.5 w-3.5 shrink-0" />
       </button>
-      )}
 
       <ThemedTaskCheckbox
         done={task.done}
@@ -4785,7 +4831,29 @@ export default function Home() {
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
     },
-    [activeProject, isAllProjects, viewDateISO, reorderTasksInList, replaceTasks],
+    [activeProject, isAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
+  );
+
+  const handleRangeTaskDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      replaceTasks((prev) => {
+        let visible = prev.filter(
+          (t) => !t.done && !isRangeTask(t) && t.date < viewDateISO,
+        );
+        if (viewDateISO > todayISO()) {
+          visible = [];
+        }
+        if (!isAllProjects) {
+          visible = visible.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
+        }
+        visible = sortTasksActiveFirst(visible);
+        return reorderTasksInList(prev, visible, active.id, over.id);
+      });
+    },
+    [activeProject, isAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
   );
 
   const handleCaseDragEnd = useCallback((event: DragEndEvent) => {
@@ -4972,14 +5040,14 @@ export default function Home() {
           ? handleTaskDragEnd
           : dragScope === "upcoming"
             ? handleUpcomingTaskDragEnd
-            : () => {}
+            : handleRangeTaskDragEnd
       }
-              onToggle={toggleTask}
-              onDelete={deleteTask}
-              onOpen={setSelectedTask}
-              showOriginalDeadline={options?.showOriginalDeadline}
-      sortable={dragScope === "today" || dragScope === "upcoming"}
-            />
+      onToggle={toggleTask}
+      onDelete={deleteTask}
+      onOpen={setSelectedTask}
+      showOriginalDeadline={options?.showOriginalDeadline}
+      sortable
+    />
   );
 
   const showHomeCaseGrid = mobileTab === "home";
