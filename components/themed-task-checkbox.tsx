@@ -101,19 +101,15 @@ export function ThemedTaskCheckbox({ done, size = "md", className = "", ...props
     );
   }
 
-  const paidDoneBg =
-    themeId === "kami"
-      ? "bg-[#f7f2e6]"
-      : themeId === "sunset" || themeId === "furikaeri"
-        ? ""
-        : "bg-[var(--gyokan-accent2)]";
+  const doneTone =
+    done && themeId !== "kami" ? "text-white" : done && themeId === "kami" ? "text-[#4a3d2a]" : "";
 
   return (
     <button
       type="button"
       {...props}
       data-anim={animPulse ? "1" : undefined}
-      className={`themed-task-check themed-task-check--${themeId} ${dim} shrink-0 ${done ? `is-done ${paidDoneBg}` : ""} ${className}`}
+      className={`themed-task-check themed-task-check--${themeId} ${dim} shrink-0 ${done ? `is-done ${doneTone}` : ""} ${className}`}
     >
       <span className="themed-task-check__burst" aria-hidden />
       <span className="themed-task-check__petal-pop" aria-hidden>

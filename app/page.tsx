@@ -1580,7 +1580,7 @@ function mergeDragHandleProps(props?: Record<string, unknown>) {
   return {
     ...rest,
     className:
-      `drag-handle cursor-grab text-gray-300 hover:text-gray-500 active:cursor-grabbing ${className ?? ""}`.trim(),
+      `drag-handle flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-gray-400 hover:text-gray-600 active:cursor-grabbing ${className ?? ""}`.trim(),
     style: { touchAction: "none", ...style },
   };
 }
@@ -1744,6 +1744,7 @@ function SortableCaseCard({
   return (
     <div
       ref={setNodeRef}
+      className="min-w-0"
       style={{
         transform: CSS.Transform.toString(transform),
         transition: isDragging ? undefined : transition,
@@ -1760,6 +1761,150 @@ function SortableCaseCard({
         dragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
+  );
+}
+
+const HOME_CASE_COL_MIN = 148;
+
+function groupCasesByProjectOrder(
+  cases: CaseItem[],
+  projectOrder: string[],
+): { project: string; cases: CaseItem[] }[] {
+  const map = new Map<string, CaseItem[]>();
+  for (const c of cases) {
+    const list = map.get(c.project) ?? [];
+    list.push(c);
+    map.set(c.project, list);
+  }
+  const groups: { project: string; cases: CaseItem[] }[] = [];
+  const seen = new Set<string>();
+  for (const name of projectOrder) {
+    const list = map.get(name);
+    if (list?.length) {
+      groups.push({ project: name, cases: list });
+      seen.add(name);
+    }
+  }
+  for (const [project, list] of map) {
+    if (!seen.has(project)) groups.push({ project, cases: list });
+  }
+  return groups;
+}
+
+function ProjectCaseGroup({
+  project,
+  cases,
+  onToggle,
+  onOpen,
+  sortable = false,
+}: {
+  project: string;
+  cases: CaseItem[];
+  onToggle: (id: string) => void;
+  onOpen: (item: CaseItem) => void;
+  sortable?: boolean;
+}) {
+  const { colors } = useProjectColors();
+  const { bg } = tagColor(project, colors);
+  const cols = Math.min(Math.max(cases.length, 1), 4);
+  const groupWidth = cols * HOME_CASE_COL_MIN + (cols - 1) * 4;
+
+  return (
+    <div
+      className="max-w-full shrink-0 rounded-xl border border-black/[0.06] p-1.5"
+      style={{
+        backgroundColor: bg,
+        width: `min(100%, ${groupWidth}px)`,
+      }}
+    >
+      <p
+        className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
+        title={project}
+      >
+        {project}
+      </p>
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      >
+        {cases.map((c) =>
+          sortable ? (
+            <SortableCaseCard
+              key={c.id}
+              item={c}
+              onToggle={onToggle}
+              onOpen={onOpen}
+            />
+          ) : (
+            <CaseCard key={c.id} item={c} onToggle={onToggle} onOpen={onOpen} />
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HomeCasesByProjectGrid({
+  ongoingCases,
+  completedCases,
+  projectOrder,
+  onToggle,
+  onOpen,
+  sensors,
+  onDragEnd,
+}: {
+  ongoingCases: CaseItem[];
+  completedCases: CaseItem[];
+  projectOrder: string[];
+  onToggle: (id: string) => void;
+  onOpen: (item: CaseItem) => void;
+  sensors: ReturnType<typeof useSensors>;
+  onDragEnd: (event: DragEndEvent) => void;
+}) {
+  const ongoingGroups = useMemo(
+    () => groupCasesByProjectOrder(ongoingCases, projectOrder),
+    [ongoingCases, projectOrder],
+  );
+  const completedGroups = useMemo(
+    () => groupCasesByProjectOrder(completedCases, projectOrder),
+    [completedCases, projectOrder],
+  );
+
+  return (
+    <>
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
+        <SortableContext
+          items={ongoingCases.map((c) => c.id)}
+          strategy={rectSortingStrategy}
+        >
+          <div className="flex flex-wrap items-start gap-2">
+            {ongoingGroups.map((g) => (
+              <ProjectCaseGroup
+                key={g.project}
+                project={g.project}
+                cases={g.cases}
+                onToggle={onToggle}
+                onOpen={onOpen}
+                sortable
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+      {completedGroups.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-start gap-2 border-t border-black/[0.04] pt-2">
+          {completedGroups.map((g) => (
+            <ProjectCaseGroup
+              key={`done-${g.project}`}
+              project={g.project}
+              cases={g.cases}
+              onToggle={onToggle}
+              onOpen={onOpen}
+            />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -4874,11 +5019,6 @@ export default function Home() {
           </button>
 
           <div className="mt-auto space-y-2 border-t border-black/[0.06] pt-4">
-            {user.email && (
-              <p className="mb-1 truncate px-1 text-[10px] text-gray-400" title={user.email}>
-                {user.email}
-              </p>
-            )}
             <div className="flex gap-1.5">
               <button
                 type="button"
@@ -5071,9 +5211,9 @@ export default function Home() {
 
             {isAllProjects && (
               <section
-                className={`order-3 mt-3.5 mb-3 lg:order-1 lg:mb-4 lg:mt-0 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
+                className={`order-3 mt-3 mb-2 lg:order-1 lg:mb-3 lg:mt-0 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
               >
-                <div className="mb-2 flex items-center justify-between gap-4">
+                <div className="mb-1.5 flex items-center justify-between gap-4">
                   <div className="flex min-w-0 items-baseline gap-3">
                     <h3 className="shrink-0 text-[17px] font-semibold text-gray-900">進行中の案件</h3>
                     <span className="text-[13px] text-gray-400">
@@ -5090,37 +5230,15 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
-                <DndContext
+                <HomeCasesByProjectGrid
+                  ongoingCases={orderedOngoingCases}
+                  completedCases={orderedCompletedCases}
+                  projectOrder={projectNames}
+                  onToggle={toggleCase}
+                  onOpen={setSelectedCase}
                   sensors={sensors}
-                  collisionDetection={closestCorners}
                   onDragEnd={handleCaseDragEnd}
-                >
-                  <SortableContext
-                    items={orderedOngoingCases.map((c) => c.id)}
-                    strategy={rectSortingStrategy}
-                  >
-                    <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
-                      {orderedOngoingCases.map((c) => (
-                        <SortableCaseCard
-                          key={c.id}
-                          item={c}
-                          onToggle={toggleCase}
-                          onOpen={setSelectedCase}
-                          showProjectTag
-                        />
-                      ))}
-                      {orderedCompletedCases.map((c) => (
-                        <CaseCard
-                          key={c.id}
-                          item={c}
-                          onToggle={toggleCase}
-                          onOpen={setSelectedCase}
-                          showProjectTag
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
+                />
               </section>
             )}
 

@@ -255,9 +255,15 @@
 /* ─── Themed task checks (paid themes) ─── */
 
 .themed-task-check {
-  border-color: #d1d5db;
-  background: #fff;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid color-mix(in srgb, var(--gyokan-accent2) 50%, #9ca3af);
+  background: var(--gyokan-surface, #fff);
   border-radius: 9999px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .themed-task-check:hover:not(.is-done) {
@@ -266,9 +272,9 @@
 
 .themed-task-check.is-done {
   border-color: transparent;
-  background: transparent;
   overflow: visible;
   border-radius: 9999px;
+  box-shadow: none;
 }
 
 .themed-task-check--marine.is-done,
@@ -379,6 +385,11 @@
   0% { transform: scale(1); filter: brightness(1); }
   50% { transform: scale(1.18); filter: brightness(1.6); }
   100% { transform: scale(1); filter: brightness(1); }
+}
+
+.themed-task-check--kami.is-done {
+  background: #f7f2e6;
+  border-color: #c4b896;
 }
 
 .themed-task-check--furikaeri.is-done {
