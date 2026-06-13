@@ -30,6 +30,11 @@ import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-p
 import { ThemePickerModal } from "@/components/theme-picker";
 import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
 import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
+import {
+  DisplaySettingsProvider,
+  SettingsToggle,
+  useDisplaySettings,
+} from "@/components/display-settings-provider";
 import { isGyokanPaidMember } from "@/lib/gyokan/membership";
 import {
   appTitleMark,
@@ -37,6 +42,13 @@ import {
   readAppTitle,
   writeAppTitle,
 } from "@/lib/gyokan/app-title";
+import {
+  DEFAULT_CASE_LABEL,
+  DEFAULT_DISPLAY_SETTINGS,
+  DEFAULT_PROJECT_LABEL,
+  readDisplaySettings,
+  writeDisplaySettings,
+} from "@/lib/gyokan/display-settings";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -131,7 +143,7 @@ type SidebarProject = {
   name: string;
 };
 
-type MobileTab = "home" | "projects" | "memo" | "more";
+type MobileTab = "home" | "projects" | "memo" | "diary" | "more";
 
 /* ─── Constants ─── */
 
@@ -1227,6 +1239,9 @@ function CaseDetailEditor({
   onClose,
   layout = "modal",
   onAddTask,
+  caseTasks,
+  onToggleTask,
+  onOpenTask,
 }: {
   item: CaseItem;
   onSave: (
@@ -1243,8 +1258,12 @@ function CaseDetailEditor({
   onClose?: () => void;
   layout?: "modal" | "page";
   onAddTask?: () => void;
+  caseTasks?: Task[];
+  onToggleTask?: (id: string) => void;
+  onOpenTask?: (task: Task) => void;
 }) {
   const { projectOptions } = useProjectColors();
+  const { showProjects, projectLabel, caseLabel } = useDisplaySettings();
   const itemIdRef = useRef(item.id);
 
   const loadCaseFields = useCallback((source: CaseItem): CaseDraftFields => ({
@@ -1321,16 +1340,18 @@ function CaseDetailEditor({
           )}
         </>
       )}
-      <DetailField label="案件名">
+      <DetailField label={`${caseLabel}名`}>
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={fieldInputClass} />
       </DetailField>
-      <DetailField label="プロジェクト">
-        <select value={project} onChange={(e) => setProject(e.target.value)} className={fieldInputClass}>
-          {projectOptions.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-      </DetailField>
+      {showProjects && (
+        <DetailField label={projectLabel}>
+          <select value={project} onChange={(e) => setProject(e.target.value)} className={fieldInputClass}>
+            {projectOptions.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+        </DetailField>
+      )}
       <DetailField label="メモ">
         <textarea
           value={memo}
@@ -1340,6 +1361,15 @@ function CaseDetailEditor({
           className={`${fieldInputClass} resize-none`}
         />
       </DetailField>
+      {caseTasks && caseTasks.length > 0 && (
+        <DetailField label="タスク">
+          <CaseDetailTaskStack
+            tasks={caseTasks}
+            onToggleTask={onToggleTask}
+            onOpenTask={onOpenTask}
+          />
+        </DetailField>
+      )}
       {layout === "page" && onAddTask && (
         <div className="mt-1 flex justify-end">
           <button
@@ -1386,6 +1416,7 @@ function TaskDetailEditor({
 }) {
   const itemIdRef = useRef(item.id);
   const { ongoingCases, cases, projectOptions } = useProjectColors();
+  const { showProjects, showCases, projectLabel, caseLabel } = useDisplaySettings();
 
   const caseOptions = useMemo(() => {
     const list = [...ongoingCases];
@@ -1484,55 +1515,61 @@ function TaskDetailEditor({
       <DetailField label="タスク名">
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={fieldInputClass} />
       </DetailField>
-      <DetailField label="案件">
-        <select
-          value={caseId}
-          onChange={(e) => setCaseId(e.target.value)}
-          disabled={underProjectDirect}
-          className={`${fieldInputClass} mb-2 ${
-            underProjectDirect ? "cursor-not-allowed bg-gray-100 text-gray-400 opacity-60" : ""
-          }`}
-        >
-          {caseOptions.length === 0 ? (
-            <option value="">進行中の案件がありません</option>
-          ) : (
-            <>
-              <option value="">案件を選択</option>
-              {caseOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {caseSelectLabel(c)}
+      {(showCases || showProjects) && (
+        <DetailField label={showCases ? caseLabel : projectLabel}>
+          {showCases && (
+            <select
+              value={caseId}
+              onChange={(e) => setCaseId(e.target.value)}
+              disabled={underProjectDirect}
+              className={`${fieldInputClass} mb-2 ${
+                underProjectDirect ? "cursor-not-allowed bg-gray-100 text-gray-400 opacity-60" : ""
+              }`}
+            >
+              {caseOptions.length === 0 ? (
+                <option value="">進行中の{caseLabel}がありません</option>
+              ) : (
+                <>
+                  <option value="">{caseLabel}を選択</option>
+                  {caseOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {caseSelectLabel(c)}
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
+          )}
+          {showProjects && showCases && (
+            <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-gray-600">
+              <input
+                type="checkbox"
+                checked={underProjectDirect}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setUnderProjectDirect(checked);
+                  if (checked) setCaseId("");
+                }}
+                className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-200"
+              />
+              {projectLabel}直下
+            </label>
+          )}
+          {(underProjectDirect || (showProjects && !showCases)) && showProjects && (
+            <select
+              value={project}
+              onChange={(e) => setProject(e.target.value)}
+              className={fieldInputClass}
+            >
+              {projectOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
                 </option>
               ))}
-            </>
+            </select>
           )}
-        </select>
-        <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-gray-600">
-          <input
-            type="checkbox"
-            checked={underProjectDirect}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              setUnderProjectDirect(checked);
-              if (checked) setCaseId("");
-            }}
-            className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-200"
-          />
-          プロジェクト直下
-        </label>
-        {underProjectDirect && (
-          <select
-            value={project}
-            onChange={(e) => setProject(e.target.value)}
-            className={fieldInputClass}
-          >
-            {projectOptions.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        )}
-      </DetailField>
+        </DetailField>
+      )}
       {!useRange && (
         <DetailField label="期限">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={fieldInputClass} />
@@ -1917,19 +1954,22 @@ function HomeCaseProjectBlock({
   onOpen: (item: CaseItem) => void;
 }) {
   const { colors } = useProjectColors();
+  const { showProjects } = useDisplaySettings();
   const { bg } = tagColor(project, colors);
 
   return (
     <div
       className="min-w-0 rounded-xl border border-black/[0.06] p-1.5"
-      style={{ backgroundColor: bg }}
+      style={{ backgroundColor: showProjects ? bg : "rgba(255,255,255,0.55)" }}
     >
+      {showProjects && (
       <p
         className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
         title={project}
       >
         {project}
       </p>
+      )}
       <div className="grid w-full grid-cols-1 gap-1">
         {cases.map((caseItem) =>
           sortable ? (
@@ -1967,6 +2007,7 @@ function HomeCaseRowSegmentBlock({
   onOpen: (item: CaseItem) => void;
 }) {
   const { colors } = useProjectColors();
+  const { showProjects } = useDisplaySettings();
   const { bg } = tagColor(segment.project, colors);
   const span = segment.cases.length;
 
@@ -1974,11 +2015,11 @@ function HomeCaseRowSegmentBlock({
     <div
       className="min-w-0 rounded-xl border border-black/[0.06] p-1.5 max-lg:w-full"
       style={{
-        backgroundColor: bg,
+        backgroundColor: showProjects ? bg : "rgba(255,255,255,0.55)",
         gridColumn: span > 1 ? `span ${span}` : undefined,
       }}
     >
-      {segment.showProjectLabel ? (
+      {showProjects && segment.showProjectLabel ? (
         <p
           className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
           title={segment.project}
@@ -2165,6 +2206,7 @@ function CaseDetailSection({
   onOpenTask?: (task: Task) => void;
   className?: string;
 }) {
+  const { projectLabel } = useDisplaySettings();
   return (
     <section className={`mb-8 lg:mb-10 ${className}`}>
       <div className="mb-4 flex items-center gap-3">
@@ -2172,7 +2214,7 @@ function CaseDetailSection({
           type="button"
           onClick={onBack}
           className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-gray-500 hover:bg-black/[0.04]"
-          aria-label="プロジェクト詳細へ戻る"
+          aria-label={`${projectLabel}詳細へ戻る`}
         >
           <Icon name="chevronLeft" className="h-5 w-5" />
         </button>
@@ -2182,13 +2224,6 @@ function CaseDetailSection({
             <ProjectNameTag name={item.project} />
             {item.done && <span>完了</span>}
           </div>
-          {caseTasks && caseTasks.length > 0 && (
-            <CaseDetailTaskStack
-              tasks={caseTasks}
-              onToggleTask={onToggleTask}
-              onOpenTask={onOpenTask}
-            />
-          )}
         </div>
         <button
           type="button"
@@ -2210,6 +2245,9 @@ function CaseDetailSection({
           onSave={onSave}
           layout="page"
           onAddTask={onAddTask}
+          caseTasks={caseTasks}
+          onToggleTask={onToggleTask}
+          onOpenTask={onOpenTask}
         />
       </Card>
     </section>
@@ -2465,9 +2503,10 @@ function MobileProjectList({
   onDragEnd: (event: DragEndEvent) => void;
 }) {
   const { colors } = useProjectColors();
+  const { projectLabel } = useDisplaySettings();
   return (
     <section className="mb-4 lg:hidden">
-      <h3 className="mb-2 text-[17px] font-semibold tracking-tight text-gray-900">プロジェクト</h3>
+      <h3 className="mb-2 text-[17px] font-semibold tracking-tight text-gray-900">{projectLabel}</h3>
       <Card className="overflow-hidden p-0">
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
           <SortableContext items={projects.map((p) => p.id)} strategy={verticalListSortingStrategy}>
@@ -2515,10 +2554,12 @@ function ProjectDetailSection({
 }) {
   const [memoModalOpen, setMemoModalOpen] = useState(false);
   const [editingMemo, setEditingMemo] = useState<ProjectMemo | null>(null);
+  const { showCases, projectLabel, caseLabel } = useDisplaySettings();
 
   const projectCases = sortProjectCases(cases.filter((c) => c.project === project));
   const projectMemos = memos.filter((m) => m.project === project);
   const timeline = buildProjectTimeline(project, cases, memos);
+  const visibleTimeline = showCases ? timeline : timeline.filter((entry) => entry.kind === "memo");
   const active = projectCases.filter((c) => !c.done);
   const completed = projectCases.filter((c) => c.done);
 
@@ -2545,7 +2586,7 @@ function ProjectDetailSection({
             <button
               type="button"
               onClick={onBack}
-              aria-label="プロジェクト一覧へ戻る"
+              aria-label={`${projectLabel}一覧へ戻る`}
               className="-ml-1 shrink-0 rounded-xl p-1.5 text-gray-500 hover:bg-black/[0.04] lg:hidden"
             >
               <Icon name="chevronLeft" className="h-5 w-5" />
@@ -2555,36 +2596,44 @@ function ProjectDetailSection({
         </div>
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-gray-400">
-        <span>進行中 {active.length}件</span>
-        <span aria-hidden>·</span>
-        <span>完了 {completed.length}件</span>
+        {showCases && (
+          <>
+            <span>進行中 {active.length}件</span>
+            <span aria-hidden>·</span>
+            <span>完了 {completed.length}件</span>
+          </>
+        )}
         {projectMemos.length > 0 && (
           <>
-            <span aria-hidden>·</span>
+            {showCases && <span aria-hidden>·</span>}
             <span>メモ {projectMemos.length}件</span>
           </>
         )}
       </div>
+      {showCases && (
       <div className="mb-2 flex items-center justify-between gap-4">
-        <h4 className="shrink-0 text-[17px] font-semibold tracking-tight text-gray-900">案件一覧</h4>
+        <h4 className="shrink-0 text-[17px] font-semibold tracking-tight text-gray-900">{caseLabel}一覧</h4>
         {onAddCase && (
           <button
             type="button"
             onClick={onAddCase}
             className="shrink-0 text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
           >
-            ＋ 案件を追加
+            ＋ {caseLabel}を追加
           </button>
         )}
       </div>
+      )}
       <Card className="overflow-hidden p-2">
-        {timeline.length === 0 ? (
+        {visibleTimeline.length === 0 ? (
           <p className="px-2 py-6 text-center text-[13px] text-gray-400">
-            このプロジェクトに紐づく案件はありません
+            {showCases
+              ? `この${projectLabel}に紐づく${caseLabel}はありません`
+              : "メモはまだありません"}
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-2">
-            {timeline.map((entry) =>
+            {visibleTimeline.map((entry) =>
               entry.kind === "case" ? (
                 <DetailCaseCard
                   key={entry.caseItem.id}
@@ -2606,7 +2655,7 @@ function ProjectDetailSection({
           type="button"
           onClick={openNewMemo}
           className={`flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-3 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-[var(--gyokan-accent2)]/40 hover:bg-blue-50/40 hover:text-[var(--gyokan-accent2)] ${
-            timeline.length > 0 ? "mt-2" : ""
+            visibleTimeline.length > 0 ? "mt-2" : ""
           }`}
         >
           メモ
@@ -2748,6 +2797,7 @@ function TaskRowContent({
   isDragging?: boolean;
   dragHandleProps?: Record<string, unknown>;
 }) {
+  const { showProjects, showCases } = useDisplaySettings();
   return (
     <div
       onClick={() => onOpen(task)}
@@ -2792,9 +2842,9 @@ function TaskRowContent({
       >
         {task.title}
       </p>
-      {task.caseId ? (
+      {showCases && task.caseId ? (
         <CaseNameTag caseId={task.caseId} muted={task.done} />
-      ) : task.project.trim() ? (
+      ) : showProjects && task.project.trim() ? (
       <ProjectNameTag name={task.project} muted={task.done} />
       ) : null}
       {isRangeTask(task) && (
@@ -4104,20 +4154,21 @@ function AddProjectModalForm({
 }) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { projectLabel } = useDisplaySettings();
 
   const submit = () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("プロジェクト名を入力してください");
+      setError(`${projectLabel}名を入力してください`);
       return;
     }
     if (existingNames.includes(trimmed)) {
-      setError("同じ名前のプロジェクトが既にあります");
+      setError(`同じ名前の${projectLabel}が既にあります`);
       return;
     }
     const ok = onSubmit(trimmed);
     if (!ok) {
-      setError("プロジェクトを追加できませんでした");
+      setError(`${projectLabel}を追加できませんでした`);
       return;
     }
     onClose();
@@ -4135,13 +4186,13 @@ function AddProjectModalForm({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-6 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">プロジェクトを追加</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{projectLabel}を追加</h3>
           <button type="button" onClick={onClose} className="rounded-xl p-2 text-gray-400 hover:bg-gray-50">
             <Icon name="x" className="h-5 w-5" />
           </button>
         </div>
         <label className="mb-4 block">
-          <span className="mb-2 block text-[12px] font-medium text-gray-400">プロジェクト名</span>
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">{projectLabel}名</span>
           <input
             type="text"
             value={name}
@@ -4253,15 +4304,16 @@ function DesktopProjectSidebar({
   onAdd: () => void;
   onDragEnd: (event: DragEndEvent) => void;
 }) {
+  const { projectLabel } = useDisplaySettings();
   return (
     <>
       <div className="mb-1.5 flex items-center justify-between px-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Projects</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{projectLabel}</span>
         <button
           type="button"
           onClick={onAdd}
           className="flex h-5 w-5 items-center justify-center rounded-md text-gray-400 hover:bg-black/[0.04]"
-          aria-label="プロジェクトを追加"
+          aria-label={`${projectLabel}を追加`}
         >
           <Icon name="plus" className="h-3 w-3" />
         </button>
@@ -4314,6 +4366,7 @@ function AddCaseModalForm({
   defaultProject?: string;
 }) {
   const { projectOptions } = useProjectColors();
+  const { showProjects, projectLabel, caseLabel } = useDisplaySettings();
   const [title, setTitle] = useState("");
   const [project, setProject] = useState<string>(defaultProject ?? projectOptions[0] ?? "");
 
@@ -4341,13 +4394,13 @@ function AddCaseModalForm({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-6 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">案件を追加</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{caseLabel}を追加</h3>
           <button type="button" onClick={onClose} className="rounded-xl p-2 text-gray-400 hover:bg-gray-50">
             <Icon name="x" className="h-5 w-5" />
           </button>
         </div>
         <label className="mb-4 block">
-          <span className="mb-2 block text-[12px] font-medium text-gray-400">案件名</span>
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">{caseLabel}名</span>
           <input
             type="text"
             value={title}
@@ -4358,8 +4411,9 @@ function AddCaseModalForm({
             autoFocus
           />
         </label>
+        {showProjects && (
         <label className="mb-6 block">
-          <span className="mb-2 block text-[12px] font-medium text-gray-400">プロジェクト</span>
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">{projectLabel}</span>
           <select
             value={project}
             onChange={(e) => setProject(e.target.value)}
@@ -4372,6 +4426,8 @@ function AddCaseModalForm({
             ))}
           </select>
         </label>
+        )}
+        {!showProjects && <div className="mb-6" />}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-lg px-5 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50">
             キャンセル
@@ -4432,8 +4488,11 @@ function AddTaskModalForm({
   defaultDate?: string;
   defaultCaseId?: string;
 }) {
+  const { showProjects, showCases, projectLabel, caseLabel } = useDisplaySettings();
   const [title, setTitle] = useState("");
-  const [underProjectDirect, setUnderProjectDirect] = useState(false);
+  const [underProjectDirect, setUnderProjectDirect] = useState(
+    () => showProjects && !showCases,
+  );
   const [project, setProject] = useState(
     defaultProject ?? projectOptions[0] ?? "",
   );
@@ -4478,7 +4537,7 @@ function AddTaskModalForm({
       date,
       dateEnd: end,
     };
-    if (underProjectDirect) {
+    if (underProjectDirect || (showProjects && !showCases)) {
       if (!project) return;
       onSubmit({
         ...payload,
@@ -4516,8 +4575,12 @@ function AddTaskModalForm({
             autoFocus
           />
         </label>
+        {(showCases || showProjects) && (
         <label className="mb-4 block">
-          <span className="mb-2 block text-[12px] font-medium text-gray-400">案件（任意）</span>
+          <span className="mb-2 block text-[12px] font-medium text-gray-400">
+            {showCases ? `${caseLabel}（任意）` : projectLabel}
+          </span>
+          {showCases && (
           <select
             value={caseId}
             onChange={(e) => setCaseId(e.target.value)}
@@ -4528,13 +4591,15 @@ function AddTaskModalForm({
                 : "bg-gray-50/60"
             }`}
           >
-            <option value="">案件を選択</option>
+            <option value="">{caseLabel}を選択</option>
             {casePool.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title}
                 </option>
               ))}
             </select>
+          )}
+          {showProjects && showCases && (
           <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-gray-700">
             <input
               type="checkbox"
@@ -4546,9 +4611,10 @@ function AddTaskModalForm({
               }}
               className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-200"
             />
-            プロジェクト直下
+            {projectLabel}直下
           </label>
-          {underProjectDirect && (
+          )}
+          {(underProjectDirect || (showProjects && !showCases)) && showProjects && (
             <select
               value={project}
               onChange={(e) => setProject(e.target.value)}
@@ -4562,6 +4628,7 @@ function AddTaskModalForm({
             </select>
           )}
           </label>
+        )}
         {!useRange && (
           <label className="mb-3 block">
             <span className="mb-2 block text-[12px] font-medium text-gray-400">期限</span>
@@ -4706,6 +4773,17 @@ function AppSettingsPanel({
   onOpenTheme: () => void;
   onSignOut: () => void;
 }) {
+  const {
+    showProjects,
+    showCases,
+    projectLabel,
+    caseLabel,
+    setShowProjects,
+    setShowCases,
+    setProjectLabel,
+    setCaseLabel,
+  } = useDisplaySettings();
+
   return (
     <section className="space-y-4">
       {loadError && (
@@ -4730,6 +4808,42 @@ function AppSettingsPanel({
                 onChange={(e) => onAppTitleChange(e.target.value)}
                 maxLength={24}
                 placeholder={DEFAULT_APP_TITLE}
+                className="w-full rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[13px] font-medium text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
+              />
+            </label>
+          </li>
+          <li className="rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
+            <SettingsToggle
+              checked={showProjects}
+              onChange={setShowProjects}
+              label={`${projectLabel}の表示`}
+            />
+            <label className="mt-3 block">
+              <span className="gyokan-muted mb-2 block">{projectLabel}の名称</span>
+              <input
+                type="text"
+                value={projectLabel}
+                onChange={(e) => setProjectLabel(e.target.value)}
+                maxLength={16}
+                placeholder={DEFAULT_PROJECT_LABEL}
+                className="w-full rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[13px] font-medium text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
+              />
+            </label>
+          </li>
+          <li className="rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
+            <SettingsToggle
+              checked={showCases}
+              onChange={setShowCases}
+              label={`${caseLabel}の表示`}
+            />
+            <label className="mt-3 block">
+              <span className="gyokan-muted mb-2 block">{caseLabel}の名称</span>
+              <input
+                type="text"
+                value={caseLabel}
+                onChange={(e) => setCaseLabel(e.target.value)}
+                maxLength={16}
+                placeholder={DEFAULT_CASE_LABEL}
                 className="w-full rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[13px] font-medium text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
               />
             </label>
@@ -4820,11 +4934,23 @@ export default function Home() {
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
+  const [displaySettings, setDisplaySettings] = useState(DEFAULT_DISPLAY_SETTINGS);
 
   useEffect(() => {
     if (!user?.id) return;
     setAppTitle(readAppTitle(user.id));
+    setDisplaySettings(readDisplaySettings(user.id));
   }, [user?.id]);
+
+  const handleDisplaySettingsChange = useCallback(
+    (next: typeof DEFAULT_DISPLAY_SETTINGS) => {
+      setDisplaySettings(next);
+      writeDisplaySettings(next, user?.id);
+    },
+    [user?.id],
+  );
+
+  const { showProjects, showCases, projectLabel, caseLabel } = displaySettings;
 
   const handleAppTitleChange = useCallback(
     (title: string) => {
@@ -4850,6 +4976,7 @@ export default function Home() {
 
   const viewDateLabel = formatDateJa(viewDateISO);
   const isAllProjects = activeProject === ALL_PROJECTS_LABEL;
+  const effectiveAllProjects = isAllProjects || !showProjects;
   const viewingCase = viewingCaseId
     ? cases.find((c) => c.id === viewingCaseId) ?? null
     : null;
@@ -4858,6 +4985,11 @@ export default function Home() {
     if (!viewingCaseId) return [];
     return sortCaseDetailTasks(tasks.filter((t) => t.caseId === viewingCaseId));
   }, [tasks, viewingCaseId]);
+
+  const selectedCaseTasks = useMemo(() => {
+    if (!selectedCase) return [];
+    return sortCaseDetailTasks(tasks.filter((t) => t.caseId === selectedCase.id));
+  }, [tasks, selectedCase]);
 
   useEffect(() => {
     if (!authReady || !authChecked) return;
@@ -4869,6 +5001,20 @@ export default function Home() {
   useEffect(() => {
     setViewingCaseId(null);
   }, [activeProject, mobileTab]);
+
+  useEffect(() => {
+    if (!showProjects) {
+      setActiveProject(ALL_PROJECTS_LABEL);
+      if (mobileTab === "projects") setMobileTab("home");
+    }
+  }, [showProjects, mobileTab]);
+
+  useEffect(() => {
+    if (!showCases) {
+      setViewingCaseId(null);
+      setSelectedCase(null);
+    }
+  }, [showCases]);
 
   useEffect(() => {
     if (!dataReady || viewDateInitialized.current) return;
@@ -4956,23 +5102,23 @@ export default function Home() {
     let list = tasks.filter(
       (t) => !t.done && !isRangeTask(t) && t.date < viewDateISO,
     );
-    if (!isAllProjects) {
-      list = list.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
+    if (!effectiveAllProjects) {
+      list = list.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
     }
     return sortTasksActiveFirst(list);
-  }, [tasks, viewDateISO, activeProject, isAllProjects, caseById]);
+  }, [tasks, viewDateISO, activeProject, effectiveAllProjects, caseById]);
 
   const ongoingRangeTasks = useMemo(() => {
     let list = tasks.filter((t) => isOngoingRangeTask(t, viewDateISO));
-    if (!isAllProjects) {
-      list = list.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
+    if (!effectiveAllProjects) {
+      list = list.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
     }
     const active = list
       .filter((t) => !t.done)
       .sort((a, b) => (a.dateEnd ?? "").localeCompare(b.dateEnd ?? ""));
     const done = list.filter((t) => t.done);
     return [...active, ...done];
-  }, [tasks, viewDateISO, activeProject, isAllProjects, caseById]);
+  }, [tasks, viewDateISO, activeProject, effectiveAllProjects, caseById]);
 
   const completedCasesCount = useMemo(
     () => cases.filter((c) => c.done).length,
@@ -4981,13 +5127,13 @@ export default function Home() {
 
   const displayedTasks = useMemo(() => {
     let list = topViewTasks;
-    if (!isAllProjects) {
-      list = list.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
+    if (!effectiveAllProjects) {
+      list = list.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
     }
     const active = list.filter((t) => !t.done);
     const done = list.filter((t) => t.done);
     return [...active, ...done];
-  }, [topViewTasks, activeProject, isAllProjects, caseById]);
+  }, [topViewTasks, activeProject, effectiveAllProjects, caseById]);
 
   const goToDate = useCallback((iso: string) => {
     setViewDateISO(iso);
@@ -5018,13 +5164,13 @@ export default function Home() {
 
       replaceTasks((prev) => {
         let visible = prev.filter((t) => isTopSectionTask(t, viewDateISO));
-        if (!isAllProjects) {
-          visible = visible.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
+        if (!effectiveAllProjects) {
+          visible = visible.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
         }
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
     },
-    [activeProject, isAllProjects, viewDateISO, reorderTasksInList, replaceTasks],
+    [activeProject, effectiveAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
   );
 
   const handleUpcomingTaskDragEnd = useCallback(
@@ -5034,13 +5180,13 @@ export default function Home() {
 
       replaceTasks((prev) => {
         let visible = prev.filter((t) => isOngoingRangeTask(t, viewDateISO));
-        if (!isAllProjects) {
-          visible = visible.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
+        if (!effectiveAllProjects) {
+          visible = visible.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
         }
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
     },
-    [activeProject, isAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
+    [activeProject, effectiveAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
   );
 
   const handleRangeTaskDragEnd = useCallback(
@@ -5055,14 +5201,14 @@ export default function Home() {
         if (viewDateISO > todayISO()) {
           visible = [];
         }
-        if (!isAllProjects) {
-          visible = visible.filter((t) => taskVisibleInView(t, activeProject, isAllProjects, caseById));
+        if (!effectiveAllProjects) {
+          visible = visible.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
         }
         visible = sortTasksActiveFirst(visible);
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
     },
-    [activeProject, isAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
+    [activeProject, effectiveAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
   );
 
   const handleCaseDragEnd = useCallback((event: DragEndEvent) => {
@@ -5205,8 +5351,8 @@ export default function Home() {
   }, []);
 
   const openTaskModalForView = useCallback(() => {
-    openAddTaskModal(isAllProjects ? undefined : activeProject, viewDateISO);
-  }, [openAddTaskModal, isAllProjects, activeProject, viewDateISO]);
+    openAddTaskModal(effectiveAllProjects ? undefined : activeProject, viewDateISO);
+  }, [openAddTaskModal, effectiveAllProjects, activeProject, viewDateISO]);
 
   const openTaskModalForCase = useCallback(
     (caseItem: CaseItem) => {
@@ -5262,8 +5408,30 @@ export default function Home() {
   const showHomeCaseGrid = mobileTab === "home";
   const showTasks = mobileTab === "home";
 
+  const mobileTabs = useMemo(() => {
+    const tabs: {
+      id: MobileTab;
+      label: string;
+      icon: "home" | "folder" | "memo" | "diary" | "settings";
+    }[] = [{ id: "home", label: "ホーム", icon: "home" }];
+    if (showProjects) {
+      tabs.push({ id: "projects", label: projectLabel, icon: "folder" });
+    }
+    tabs.push(
+      { id: "memo", label: "メモ", icon: "memo" },
+      { id: "diary", label: "日記", icon: "diary" },
+      { id: "more", label: "設定", icon: "settings" },
+    );
+    return tabs;
+  }, [showProjects, projectLabel]);
+
   return (
     <GyokanThemeProvider isPaidMember={isPaidMember}>
+    <DisplaySettingsProvider
+      userId={user?.id}
+      settings={displaySettings}
+      onSettingsChange={handleDisplaySettingsChange}
+    >
     <ProjectColorsContext.Provider value={projectColorsValue}>
     <div className="gyokan-app relative min-h-screen text-[var(--gyokan-text)] antialiased">
       <div
@@ -5275,7 +5443,7 @@ export default function Home() {
       <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
       <div className="mx-auto flex min-h-screen max-w-[1480px]">
         {/* Left Sidebar */}
-        <aside className="gyokan-panel sticky top-0 hidden h-screen w-[168px] shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col">
+        <aside className={`gyokan-panel sticky top-0 hidden h-screen shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col ${showProjects ? "w-[168px]" : "w-[132px]"}`}>
           <div className="mb-6 flex items-center justify-between gap-2 px-1">
             <button
               type="button"
@@ -5293,6 +5461,7 @@ export default function Home() {
             <RefreshButton iconClassName="h-4 w-4" className="shrink-0 p-1.5 hover:bg-black/[0.04]" onRefresh={handleRefresh} />
           </div>
 
+          {showProjects && (
           <DesktopProjectSidebar
             projects={projects}
             activeProject={activeProject}
@@ -5302,11 +5471,14 @@ export default function Home() {
             onAdd={() => setProjectModalOpen(true)}
             onDragEnd={handleProjectDragEnd}
           />
+          )}
 
+          {showProjects && (
           <button type="button" className="mt-3 flex w-full items-center gap-2 rounded-lg border border-black/[0.05] px-2 py-2 text-[11px] text-gray-500 transition-all duration-200 hover:bg-black/[0.02]">
             <Icon name="folder" className="h-3.5 w-3.5 text-gray-400" />
             完了済み
           </button>
+          )}
 
           <div className="mt-auto border-t border-black/[0.06] pt-4">
             <button
@@ -5341,7 +5513,7 @@ export default function Home() {
                 <button type="button" className="shrink-0 rounded-xl p-2 text-gray-500 hover:bg-white"><Icon name="menu" className="h-5 w-5" /></button>
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
-                  {!isAllProjects && <ProjectColorHeaderLink project={activeProject} />}
+                  {!isAllProjects && showProjects && <ProjectColorHeaderLink project={activeProject} />}
                 </div>
                 <RefreshButton className="shrink-0" onRefresh={handleRefresh} />
               </div>
@@ -5366,12 +5538,12 @@ export default function Home() {
                   </button>
                 </div>
                 <span className="text-[15px] font-semibold text-gray-900">{viewDateLabel}</span>
-                {!isAllProjects && <ProjectColorHeaderLink project={activeProject} />}
+                {!isAllProjects && showProjects && <ProjectColorHeaderLink project={activeProject} />}
                 <RefreshButton iconClassName="h-4 w-4" className="ml-auto rounded-lg p-1.5" onRefresh={handleRefresh} />
               </div>
             </header>
 
-            {mobileTab === "projects" ? (
+            {showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
                   projects={projects}
@@ -5382,7 +5554,7 @@ export default function Home() {
               />
             ) : (
               <>
-                  {viewingCase ? (
+                  {showCases && viewingCase ? (
                     <CaseDetailSection
                       item={viewingCase}
                       onSave={updateCase}
@@ -5445,8 +5617,8 @@ export default function Home() {
               </section>
             )}
 
-            {!isAllProjects && (
-              viewingCase ? (
+            {showProjects && !isAllProjects && (
+              showCases && viewingCase ? (
                 <CaseDetailSection
                   item={viewingCase}
                   onSave={updateCase}
@@ -5484,20 +5656,20 @@ export default function Home() {
                 renderTaskList={renderTaskList}
                 onAddTask={openTaskModalForView}
                 className={
-                  !isAllProjects
+                  showProjects && !isAllProjects
                     ? "order-3 lg:order-3"
                     : "order-2 lg:order-3"
                 }
               />
             )}
 
-            {isAllProjects && (
+            {showCases && effectiveAllProjects && (
               <section
                 className={`order-3 mt-3 mb-2 lg:order-1 lg:mb-3 lg:mt-0 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
               >
                 <div className="mb-1.5 flex items-center justify-between gap-4">
                   <div className="flex min-w-0 items-baseline gap-3">
-                    <h3 className="shrink-0 text-[17px] font-semibold text-gray-900">進行中の案件</h3>
+                    <h3 className="shrink-0 text-[17px] font-semibold text-gray-900">進行中の{caseLabel}</h3>
                     <span className="text-[13px] text-gray-400">
                       全{cases.length}件（進行中 {ongoingCases.length}件 · 完了 {completedCasesCount}件）
                     </span>
@@ -5508,7 +5680,7 @@ export default function Home() {
                       onClick={() => openAddCaseModal()}
                       className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
                     >
-                      ＋ 案件を追加
+                      ＋ {caseLabel}を追加
                     </button>
                   </div>
                 </div>
@@ -5598,18 +5770,13 @@ export default function Home() {
       {/* Mobile Tab Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden">
         <div className="mx-auto flex max-w-lg justify-around px-1" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
-          {([
-            { id: "home" as const, label: "ホーム", icon: "home" },
-            { id: "projects" as const, label: "プロジェクト", icon: "folder" },
-            { id: "memo" as const, label: "メモ", icon: "memo" },
-            { id: "diary" as const, label: "日記", icon: "diary" },
-            { id: "more" as const, label: "設定", icon: "settings" },
-          ]).map((tab) => (
+          {mobileTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => {
                 if (tab.id === "projects") {
+                  if (!showProjects) return;
                   setMemoSheetOpen(false);
                   setDiarySheetOpen(false);
                   setActiveProject(ALL_PROJECTS_LABEL);
@@ -5654,7 +5821,7 @@ export default function Home() {
         projectOptions={projectNames}
         defaultProject={
           taskModalDefaultProject ??
-          (isAllProjects ? undefined : activeProject)
+          (effectiveAllProjects ? undefined : activeProject)
         }
         defaultDate={taskModalDefaultDate}
         defaultCaseId={taskModalDefaultCaseId}
@@ -5692,17 +5859,20 @@ export default function Home() {
       </DetailOverlay>
 
       <DetailOverlay
-        open={!!selectedCase}
+        open={showCases && !!selectedCase}
         onClose={() => setSelectedCase(null)}
-        title="案件を編集"
+        title={`${caseLabel}を編集`}
       >
-        {selectedCase && (
+        {showCases && selectedCase && (
           <CaseDetailEditor
             key={selectedCase.id}
             item={selectedCase}
             onSave={updateCase}
             onClose={() => setSelectedCase(null)}
-          layout="modal"
+            layout="modal"
+            caseTasks={selectedCaseTasks}
+            onToggleTask={toggleTask}
+            onOpenTask={setSelectedTask}
           />
         )}
       </DetailOverlay>
@@ -5724,6 +5894,7 @@ export default function Home() {
     </div>
     </div>
     </ProjectColorsContext.Provider>
+    </DisplaySettingsProvider>
     </GyokanThemeProvider>
   );
 }
