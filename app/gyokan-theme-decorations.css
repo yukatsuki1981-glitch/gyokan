@@ -3,7 +3,7 @@
 .theme-decoration {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   pointer-events: none;
   overflow: hidden;
 }
@@ -15,6 +15,24 @@
   .themed-task-check * {
     animation: none !important;
     transition: none !important;
+  }
+
+  .theme-deco-fall {
+    opacity: 0.55 !important;
+    top: 12% !important;
+  }
+
+  .theme-deco-snow {
+    opacity: 0.45 !important;
+    top: 8% !important;
+  }
+
+  .theme-deco-star {
+    opacity: 0.55 !important;
+  }
+
+  .theme-deco-marine__waves {
+    opacity: 0.35 !important;
   }
 }
 
@@ -55,11 +73,19 @@
 .theme-deco-fall {
   position: absolute;
   top: -8%;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   opacity: 0;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
+}
+
+.theme-deco-fall--sakura-a {
+  animation-name: sakura-fall-a;
+}
+
+.theme-deco-fall--sakura-b {
+  animation-name: sakura-fall-b;
 }
 
 .theme-deco-fall--sakura-1 {
@@ -106,15 +132,15 @@
 
 @keyframes sakura-fall-a {
   0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
-  8% { opacity: 0.65; }
-  92% { opacity: 0.4; }
+  8% { opacity: 0.75; }
+  92% { opacity: 0.5; }
   100% { transform: translate(24px, 110vh) rotate(300deg); opacity: 0; }
 }
 
 @keyframes sakura-fall-b {
   0% { transform: translate(0, 0) rotate(20deg); opacity: 0; }
-  8% { opacity: 0.6; }
-  92% { opacity: 0.35; }
+  8% { opacity: 0.7; }
+  92% { opacity: 0.45; }
   100% { transform: translate(-18px, 110vh) rotate(420deg); opacity: 0; }
 }
 

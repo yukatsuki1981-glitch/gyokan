@@ -31,6 +31,12 @@ import { ThemePickerModal } from "@/components/theme-picker";
 import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
 import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
 import { isGyokanPaidMember } from "@/lib/gyokan/membership";
+import {
+  appTitleMark,
+  DEFAULT_APP_TITLE,
+  readAppTitle,
+  writeAppTitle,
+} from "@/lib/gyokan/app-title";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -1891,6 +1897,58 @@ function flattenPackedCaseIds(rows: HomeCaseRowSegment[][]) {
   return rows.flatMap((row) => row.flatMap((segment) => segment.cases.map((c) => c.id)));
 }
 
+function HomeCaseProjectBlock({
+  project,
+  cases,
+  sortable,
+  onToggle,
+  onOpen,
+}: {
+  project: string;
+  cases: CaseItem[];
+  sortable?: boolean;
+  onToggle: (id: string) => void;
+  onOpen: (item: CaseItem) => void;
+}) {
+  const { colors } = useProjectColors();
+  const { bg } = tagColor(project, colors);
+
+  return (
+    <div
+      className="min-w-0 rounded-xl border border-black/[0.06] p-1.5"
+      style={{ backgroundColor: bg }}
+    >
+      <p
+        className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
+        title={project}
+      >
+        {project}
+      </p>
+      <div className="grid w-full grid-cols-1 gap-1">
+        {cases.map((caseItem) =>
+          sortable ? (
+            <SortableCaseCard
+              key={caseItem.id}
+              item={caseItem}
+              onToggle={onToggle}
+              onOpen={onOpen}
+              hideStatus
+            />
+          ) : (
+            <CaseCard
+              key={caseItem.id}
+              item={caseItem}
+              onToggle={onToggle}
+              onOpen={onOpen}
+              hideStatus
+            />
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HomeCaseRowSegmentBlock({
   segment,
   sortable,
@@ -1925,8 +1983,8 @@ function HomeCaseRowSegmentBlock({
         <div className="mb-1 h-[14px]" aria-hidden />
       )}
       <div
-        className="grid w-full gap-1"
-        style={{ gridTemplateColumns: `repeat(${span}, minmax(0, 1fr))` }}
+        className="grid w-full grid-cols-1 gap-1 lg:[grid-template-columns:repeat(var(--home-case-segment-cols),minmax(0,1fr))]"
+        style={{ ["--home-case-segment-cols" as string]: span }}
       >
         {segment.cases.map((caseItem) =>
           sortable ? (
@@ -1974,9 +2032,12 @@ function HomeCaseGridRows({
 
   return (
     <div className="flex w-full flex-col gap-1">
-      {rows.map((row, rowIndex) => (
-        <div key={`case-row-${rowIndex}`}>
-          <div className="hidden w-full grid-cols-5 gap-1 lg:grid">
+      <div className="hidden w-full flex-col gap-1 lg:flex">
+        {rows.map((row, rowIndex) => (
+          <div
+            key={`case-row-${rowIndex}`}
+            className="grid w-full grid-cols-5 gap-1"
+          >
             {row.map((segment, segmentIndex) => (
               <HomeCaseRowSegmentBlock
                 key={`${rowIndex}-${segmentIndex}-${segment.cases[0]?.id ?? segment.project}`}
@@ -1987,19 +2048,20 @@ function HomeCaseGridRows({
               />
             ))}
           </div>
-          <div className="flex flex-col gap-1 lg:hidden">
-            {row.map((segment, segmentIndex) => (
-              <HomeCaseRowSegmentBlock
-                key={`mobile-${rowIndex}-${segmentIndex}-${segment.cases[0]?.id ?? segment.project}`}
-                segment={segment}
-                sortable={sortable}
-                onToggle={onToggle}
-                onOpen={onOpen}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <div className="flex flex-col gap-1 lg:hidden">
+        {groups.map((group) => (
+          <HomeCaseProjectBlock
+            key={group.project}
+            project={group.project}
+            cases={group.cases}
+            sortable={sortable}
+            onToggle={onToggle}
+            onOpen={onOpen}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -4609,6 +4671,8 @@ function AppSettingsPanel({
   userEmail,
   loadError,
   caseSaveError,
+  appTitle,
+  onAppTitleChange,
   onOpenTheme,
   onSignOut,
   showMonthlyStats = false,
@@ -4620,6 +4684,8 @@ function AppSettingsPanel({
   userEmail?: string | null;
   loadError?: string | null;
   caseSaveError?: string | null;
+  appTitle: string;
+  onAppTitleChange: (title: string) => void;
   onOpenTheme: () => void;
   onSignOut: () => void;
   showMonthlyStats?: boolean;
@@ -4643,6 +4709,19 @@ function AppSettingsPanel({
       <Card className="p-6">
         <h3 className="gyokan-heading mb-4 text-[15px] font-semibold">設定</h3>
         <ul className="space-y-2">
+          <li className="rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
+            <label className="block">
+              <span className="gyokan-muted mb-2 block">アプリ名</span>
+              <input
+                type="text"
+                value={appTitle}
+                onChange={(e) => onAppTitleChange(e.target.value)}
+                maxLength={24}
+                placeholder={DEFAULT_APP_TITLE}
+                className="w-full rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[13px] font-medium text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
+              />
+            </label>
+          </li>
           {[
             ["通知", "オン"],
             ["データ保存", "Supabase"],
@@ -4738,6 +4817,24 @@ export default function Home() {
   const [diaryListOpen, setDiaryListOpen] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    setAppTitle(readAppTitle(user.id));
+  }, [user?.id]);
+
+  const handleAppTitleChange = useCallback(
+    (title: string) => {
+      setAppTitle(title);
+      writeAppTitle(title, user?.id);
+    },
+    [user?.id],
+  );
+
+  const openSettings = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
   const [diarySpreadDate, setDiarySpreadDate] = useState<string | null>(null);
 
   const openDiarySpread = useCallback((date: string) => {
@@ -5171,18 +5268,31 @@ export default function Home() {
   return (
     <GyokanThemeProvider isPaidMember={isPaidMember}>
     <ProjectColorsContext.Provider value={projectColorsValue}>
-    <div className="gyokan-app relative min-h-screen bg-[var(--gyokan-bg)] text-[var(--gyokan-text)] antialiased">
+    <div className="gyokan-app relative min-h-screen text-[var(--gyokan-text)] antialiased">
+      <div
+        className="pointer-events-none fixed inset-0 z-0 bg-[var(--gyokan-bg)]"
+        aria-hidden
+      />
       <ThemeDecorationLayer />
-      <div className="relative z-[1]">
+      <div className="relative z-[2]">
       <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
       <div className="mx-auto flex min-h-screen max-w-[1480px]">
         {/* Left Sidebar */}
         <aside className="gyokan-panel sticky top-0 hidden h-screen w-[168px] shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col">
           <div className="mb-6 flex items-center justify-between gap-2 px-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--gyokan-accent2)] text-[11px] font-bold text-white shadow-sm">行</div>
-              <span className="gyokan-heading truncate text-[13px] font-semibold tracking-tight">行間</span>
-          </div>
+            <button
+              type="button"
+              onClick={openSettings}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors hover:bg-black/[0.03]"
+              aria-label="設定を開く"
+            >
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--gyokan-accent2)] text-[11px] font-bold text-white shadow-sm">
+                {appTitleMark(appTitle)}
+              </div>
+              <span className="gyokan-heading truncate text-[13px] font-semibold tracking-tight">
+                {appTitle.trim() || DEFAULT_APP_TITLE}
+              </span>
+            </button>
             <RefreshButton iconClassName="h-4 w-4" className="shrink-0 p-1.5 hover:bg-black/[0.04]" onRefresh={handleRefresh} />
           </div>
 
@@ -5201,23 +5311,14 @@ export default function Home() {
             完了済み
           </button>
 
-          <div className="mt-auto space-y-2 border-t border-black/[0.06] pt-4">
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="shrink-0 rounded-lg border border-black/[0.05] px-2 py-2 text-[11px] font-medium text-gray-600 transition-all duration-200 hover:bg-black/[0.02]"
-              >
-                設定
-              </button>
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="min-w-0 flex-1 whitespace-nowrap rounded-lg border border-black/[0.08] px-1.5 py-2 text-center text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.02]"
-              >
-                ログアウト
-              </button>
-            </div>
+          <div className="mt-auto border-t border-black/[0.06] pt-4">
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="w-full rounded-lg border border-black/[0.08] px-3 py-2 text-center text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.02]"
+            >
+              ログアウト
+            </button>
           </div>
         </aside>
 
@@ -5435,6 +5536,8 @@ export default function Home() {
                 userEmail={user.email}
                 loadError={loadError}
                 caseSaveError={caseSaveError}
+                appTitle={appTitle}
+                onAppTitleChange={handleAppTitleChange}
                 onOpenTheme={() => setThemePickerOpen(true)}
                 onSignOut={() => void signOut()}
                 showMonthlyStats
@@ -5617,6 +5720,8 @@ export default function Home() {
             userEmail={user.email}
             loadError={loadError}
             caseSaveError={caseSaveError}
+            appTitle={appTitle}
+            onAppTitleChange={handleAppTitleChange}
             onOpenTheme={() => {
               setSettingsOpen(false);
               setThemePickerOpen(true);

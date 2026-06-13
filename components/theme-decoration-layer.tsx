@@ -1,13 +1,21 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { useGyokanTheme } from "@/components/gyokan-theme-provider";
 import { isPaidThemeId, type GyokanThemeId } from "@/lib/gyokan/themes";
 
-function SakuraPetal({ className, color }: { className: string; color: string }) {
+function SakuraPetal({
+  className,
+  color,
+  style,
+}: {
+  className: string;
+  color: string;
+  style?: CSSProperties;
+}) {
   return (
-    <span className={className} aria-hidden>
-      <svg viewBox="0 0 20 20" width="14" height="14" fill={color}>
+    <span className={className} style={style} aria-hidden>
+      <svg viewBox="0 0 20 20" width="18" height="18" fill={color}>
         <ellipse cx="10" cy="6" rx="3.2" ry="5" />
         <ellipse cx="10" cy="6" rx="3.2" ry="5" transform="rotate(72 10 10)" />
         <ellipse cx="10" cy="6" rx="3.2" ry="5" transform="rotate(144 10 10)" />
@@ -48,11 +56,33 @@ function MarineDecoration() {
 }
 
 function SakuraDecoration() {
+  const petals = useMemo(
+    () =>
+      Array.from({ length: 10 }, (_, i) => ({
+        id: i,
+        left: `${6 + ((i * 19) % 88)}%`,
+        color: i % 3 === 0 ? "#f0b4c8" : i % 3 === 1 ? "#e8a0b8" : "#f5c6d6",
+        duration: 12 + (i % 5) * 2,
+        delay: i * 1.4,
+        variant: i % 2 === 0 ? "a" : "b",
+      })),
+    [],
+  );
+
   return (
     <>
-      <SakuraPetal className="theme-deco-fall theme-deco-fall--sakura-1" color="#f0b4c8" />
-      <SakuraPetal className="theme-deco-fall theme-deco-fall--sakura-2" color="#e8a0b8" />
-      <SakuraPetal className="theme-deco-fall theme-deco-fall--sakura-3" color="#f5c6d6" />
+      {petals.map((p) => (
+        <SakuraPetal
+          key={p.id}
+          className={`theme-deco-fall theme-deco-fall--sakura-${p.variant}`}
+          color={p.color}
+          style={{
+            left: p.left,
+            animationDuration: `${p.duration}s`,
+            animationDelay: `${p.delay}s`,
+          }}
+        />
+      ))}
     </>
   );
 }
