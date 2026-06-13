@@ -5365,6 +5365,23 @@ export default function Home() {
     setViewingCaseId(item.id);
   }, []);
 
+  const mobileTabs = useMemo(() => {
+    const tabs: {
+      id: MobileTab;
+      label: string;
+      icon: "home" | "folder" | "memo" | "diary" | "settings";
+    }[] = [{ id: "home", label: "ホーム", icon: "home" }];
+    if (showProjects) {
+      tabs.push({ id: "projects", label: projectLabel, icon: "folder" });
+    }
+    tabs.push(
+      { id: "memo", label: "メモ", icon: "memo" },
+      { id: "diary", label: "日記", icon: "diary" },
+      { id: "more", label: "設定", icon: "settings" },
+    );
+    return tabs;
+  }, [showProjects, projectLabel]);
+
   if (!isClient || !authReady || (user && !dataReady)) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--gyokan-bg)] px-6">
@@ -5412,23 +5429,6 @@ export default function Home() {
 
   const showHomeCaseGrid = mobileTab === "home";
   const showTasks = mobileTab === "home";
-
-  const mobileTabs = useMemo(() => {
-    const tabs: {
-      id: MobileTab;
-      label: string;
-      icon: "home" | "folder" | "memo" | "diary" | "settings";
-    }[] = [{ id: "home", label: "ホーム", icon: "home" }];
-    if (showProjects) {
-      tabs.push({ id: "projects", label: projectLabel, icon: "folder" });
-    }
-    tabs.push(
-      { id: "memo", label: "メモ", icon: "memo" },
-      { id: "diary", label: "日記", icon: "diary" },
-      { id: "more", label: "設定", icon: "settings" },
-    );
-    return tabs;
-  }, [showProjects, projectLabel]);
 
   return (
     <GyokanThemeProvider isPaidMember={isPaidMember}>
