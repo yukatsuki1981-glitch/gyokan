@@ -1,18 +1,28 @@
 :root,
 html[data-theme="default"] {
-  --gyokan-bg: #F6F4EF;
-  --gyokan-bg2: #EDEAE2;
-  --gyokan-surface: #FDFCF9;
-  --gyokan-border: #DDD9CE;
-  --gyokan-text: #1A1814;
-  --gyokan-text2: #5C5849;
-  --gyokan-accent: #243C26;
-  --gyokan-accent2: #3D6641;
-  --gyokan-accent-lt: #E6EFE7;
-  --gyokan-highlight: #3D6641;
-  --gyokan-font-display: var(--font-shippori-mincho), serif;
-  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
+  --gyokan-bg: #fafafa;
+  --gyokan-bg2: #f3f4f6;
+  --gyokan-surface: #ffffff;
+  --gyokan-border: #ececec;
+  --gyokan-text: #1d1d1f;
+  --gyokan-text2: #9ca3af;
+  --gyokan-accent: #0066DD;
+  --gyokan-accent2: #007AFF;
+  --gyokan-accent-lt: #eff6ff;
+  --gyokan-highlight: #007AFF;
+  --gyokan-font-display: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --gyokan-font-body: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --gyokan-font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html[data-theme="default"] .gyokan-panel {
+  background-color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="default"] .gyokan-card {
+  background-color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 0, 0, 0.06);
 }
 
 html[data-theme="mono"] {

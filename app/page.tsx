@@ -4309,6 +4309,83 @@ function SettingsThemeButton({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+function AppSettingsPanel({
+  userEmail,
+  loadError,
+  caseSaveError,
+  onOpenTheme,
+  onSignOut,
+  showMonthlyStats = false,
+  activeCases = 0,
+  completedCases = 0,
+  activeTasks = 0,
+  completedTasks = 0,
+}: {
+  userEmail?: string | null;
+  loadError?: string | null;
+  caseSaveError?: string | null;
+  onOpenTheme: () => void;
+  onSignOut: () => void;
+  showMonthlyStats?: boolean;
+  activeCases?: number;
+  completedCases?: number;
+  activeTasks?: number;
+  completedTasks?: number;
+}) {
+  return (
+    <section className="space-y-4">
+      {loadError && (
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
+          {loadError}
+        </p>
+      )}
+      {caseSaveError && (
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
+          案件の保存に失敗しました: {caseSaveError}
+        </p>
+      )}
+      <Card className="p-6">
+        <h3 className="gyokan-heading mb-4 text-[15px] font-semibold">設定</h3>
+        <ul className="space-y-2">
+          {[
+            ["通知", "オン"],
+            ["データ保存", "Supabase"],
+          ].map(([k, v]) => (
+            <li key={k} className="flex justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
+              <span className="gyokan-muted">{k}</span>
+              <span className="max-w-[55%] truncate font-medium gyokan-muted">{v}</span>
+            </li>
+          ))}
+          <li>
+            <SettingsThemeButton onOpen={onOpenTheme} />
+          </li>
+          <li className="flex justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
+            <span className="gyokan-muted">アカウント</span>
+            <span className="max-w-[55%] truncate font-medium gyokan-muted">{userEmail ?? "ログイン中"}</span>
+          </li>
+        </ul>
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="mt-4 w-full rounded-xl border border-black/[0.08] px-4 py-2.5 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-50"
+        >
+          ログアウト
+        </button>
+      </Card>
+      {showMonthlyStats && (
+        <Card className="p-6">
+          <MonthlyStats
+            activeCases={activeCases}
+            completedCases={completedCases}
+            activeTasks={activeTasks}
+            completedTasks={completedTasks}
+          />
+        </Card>
+      )}
+    </section>
+  );
+}
+
 export default function Home() {
   const isClient = useIsClient();
   const router = useRouter();
@@ -4364,6 +4441,7 @@ export default function Home() {
   const [diarySheetOpen, setDiarySheetOpen] = useState(false);
   const [diaryListOpen, setDiaryListOpen] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [diarySpreadDate, setDiarySpreadDate] = useState<string | null>(null);
 
   const openDiarySpread = useCallback((date: string) => {
@@ -4803,12 +4881,20 @@ export default function Home() {
             完了済み
           </button>
 
-          <div className="mt-auto border-t border-black/[0.06] pt-4">
+          <div className="mt-auto space-y-2 border-t border-black/[0.06] pt-4">
             {user.email && (
-              <p className="mb-2 truncate px-1 text-[10px] text-gray-400" title={user.email}>
+              <p className="mb-1 truncate px-1 text-[10px] text-gray-400" title={user.email}>
                 {user.email}
               </p>
             )}
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="flex w-full items-center gap-2 rounded-lg border border-black/[0.05] px-2 py-2 text-[11px] font-medium text-gray-600 transition-all duration-200 hover:bg-black/[0.02]"
+            >
+              <Icon name="more" className="h-3.5 w-3.5 text-gray-400" />
+              設定
+            </button>
             <button
               type="button"
               onClick={() => void signOut()}
@@ -5051,49 +5137,18 @@ export default function Home() {
                   )}
 
             {!casesListOpen && mobileTab === "more" && (
-              <section className="space-y-4">
-                {loadError && (
-                  <p className="rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
-                    {loadError}
-                  </p>
-                )}
-                {caseSaveError && (
-                  <p className="rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
-                    案件の保存に失敗しました: {caseSaveError}
-                  </p>
-                )}
-                <Card className="p-6">
-                  <h3 className="gyokan-heading mb-4 text-[15px] font-semibold">設定</h3>
-                  <ul className="space-y-2">
-                    {[
-                      ["通知", "オン"],
-                      ["データ保存", "Supabase"],
-                    ].map(([k, v]) => (
-                      <li key={k} className="flex justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
-                        <span className="gyokan-muted">{k}</span>
-                        <span className="max-w-[55%] truncate font-medium gyokan-muted">{v}</span>
-                      </li>
-                    ))}
-                    <li>
-                      <SettingsThemeButton onOpen={() => setThemePickerOpen(true)} />
-                    </li>
-                    <li className="flex justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
-                      <span className="gyokan-muted">アカウント</span>
-                      <span className="max-w-[55%] truncate font-medium gyokan-muted">{user.email ?? "ログイン中"}</span>
-                    </li>
-                  </ul>
-                  <button
-                    type="button"
-                    onClick={() => void signOut()}
-                    className="mt-4 w-full rounded-xl border border-black/[0.08] px-4 py-2.5 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-50"
-                  >
-                    ログアウト
-                  </button>
-                </Card>
-                <Card className="p-6">
-                  <MonthlyStats activeCases={ongoingCases.length} completedCases={completedCasesCount} activeTasks={activeTasks.length} completedTasks={completedTasks.length} />
-                </Card>
-              </section>
+              <AppSettingsPanel
+                userEmail={user.email}
+                loadError={loadError}
+                caseSaveError={caseSaveError}
+                onOpenTheme={() => setThemePickerOpen(true)}
+                onSignOut={() => void signOut()}
+                showMonthlyStats
+                activeCases={ongoingCases.length}
+                completedCases={completedCasesCount}
+                activeTasks={activeTasks.length}
+                completedTasks={completedTasks.length}
+              />
             )}
           </div>
         </main>
@@ -5261,6 +5316,26 @@ export default function Home() {
       />
 
       <ThemePickerModal open={themePickerOpen} onClose={() => setThemePickerOpen(false)} />
+
+      <DetailOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)} title="設定">
+        <div className="max-h-[min(80vh,640px)] overflow-y-auto px-6 py-4">
+          <AppSettingsPanel
+            userEmail={user.email}
+            loadError={loadError}
+            caseSaveError={caseSaveError}
+            onOpenTheme={() => {
+              setSettingsOpen(false);
+              setThemePickerOpen(true);
+            }}
+            onSignOut={() => void signOut()}
+            showMonthlyStats
+            activeCases={ongoingCases.length}
+            completedCases={completedCasesCount}
+            activeTasks={activeTasks.length}
+            completedTasks={completedTasks.length}
+          />
+        </div>
+      </DetailOverlay>
 
       <DetailOverlay
         open={!!selectedCase}
