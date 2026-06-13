@@ -1592,7 +1592,7 @@ function CaseCard({
   onToggle,
   onOpen,
   showProjectTag = false,
-  layout = "default",
+  hideStatus = false,
   sortable = false,
   dragHandleProps,
   isDragging = false,
@@ -1601,14 +1601,14 @@ function CaseCard({
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
   showProjectTag?: boolean;
-  layout?: "default" | "grouped";
+  hideStatus?: boolean;
   sortable?: boolean;
   dragHandleProps?: Record<string, unknown>;
   isDragging?: boolean;
 }) {
   const projectLabel = item.project;
   const caseName = item.title.trim() || "（無題）";
-  const cardShellClass = `group cursor-pointer rounded-xl border px-2.5 py-1.5 transition-all duration-300 ${
+  const cardShellClass = `group w-full cursor-pointer rounded-xl border px-2.5 py-1.5 transition-all duration-300 ${
     isDragging
       ? "z-50 scale-[1.04] border-blue-200/60 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.12)] ring-1 ring-blue-200/40"
       : "border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
@@ -1643,28 +1643,6 @@ function CaseCard({
     </button>
   ) : null;
 
-  if (layout === "grouped") {
-    return (
-      <article onClick={() => onOpen(item)} className={`${cardShellClass} flex flex-col gap-1`}>
-        <div className="flex items-center gap-1.5">
-          {gripButton}
-          {toggleButton}
-          {item.done && (
-            <span className="ml-auto shrink-0 text-[10px] font-medium text-gray-400">完了</span>
-          )}
-        </div>
-        <h4
-          className={`line-clamp-2 text-[11px] font-medium leading-snug ${
-            item.done ? "text-gray-400 line-through" : "text-gray-900"
-          }`}
-          title={caseName}
-        >
-          {caseName}
-        </h4>
-      </article>
-    );
-  }
-
   return (
     <article onClick={() => onOpen(item)} className={`${cardShellClass} flex items-center gap-1.5`}>
       {gripButton}
@@ -1681,7 +1659,7 @@ function CaseCard({
         <span className="shrink-0 text-[10px] font-medium text-gray-400">完了</span>
       ) : showProjectTag ? (
         <ProjectNameTag name={projectLabel} />
-      ) : (
+      ) : hideStatus ? null : (
         <StatusBadge label={item.status} tone={item.statusTone} />
       )}
     </article>
@@ -1757,13 +1735,13 @@ function SortableCaseCard({
   onToggle,
   onOpen,
   showProjectTag,
-  layout = "default",
+  hideStatus,
 }: {
   item: CaseItem;
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
   showProjectTag?: boolean;
-  layout?: "default" | "grouped";
+  hideStatus?: boolean;
 }) {
   const {
     attributes,
@@ -1777,7 +1755,7 @@ function SortableCaseCard({
   return (
     <div
       ref={setNodeRef}
-      className="min-w-0"
+      className="min-w-0 w-full"
       style={{
         transform: CSS.Transform.toString(transform),
         transition: isDragging ? undefined : transition,
@@ -1789,7 +1767,7 @@ function SortableCaseCard({
         onToggle={onToggle}
         onOpen={onOpen}
         showProjectTag={showProjectTag}
-        layout={layout}
+        hideStatus={hideStatus}
         sortable
         isDragging={isDragging}
         dragHandleProps={{ ...attributes, ...listeners }}
@@ -1798,7 +1776,7 @@ function SortableCaseCard({
   );
 }
 
-const HOME_CASE_COL_MIN = 136;
+const HOME_CASE_MAX_COLS = 5;
 
 function groupCasesByProjectOrder(
   cases: CaseItem[],
@@ -1840,15 +1818,15 @@ function ProjectCaseGroup({
 }) {
   const { colors } = useProjectColors();
   const { bg } = tagColor(project, colors);
-  const cols = Math.min(Math.max(cases.length, 1), 4);
-  const groupWidth = cols * HOME_CASE_COL_MIN + (cols - 1) * 4;
+  const cols = Math.min(Math.max(cases.length, 1), HOME_CASE_MAX_COLS);
 
   return (
     <div
-      className="max-w-full shrink-0 rounded-xl border border-black/[0.06] p-1.5"
+      className="max-w-full shrink-0 rounded-xl border border-black/[0.06] p-1.5 w-full lg:w-[calc(100%/var(--home-case-cols-max)*var(--home-case-cols))]"
       style={{
         backgroundColor: bg,
-        width: `min(100%, ${groupWidth}px)`,
+        ["--home-case-cols" as string]: cols,
+        ["--home-case-cols-max" as string]: HOME_CASE_MAX_COLS,
       }}
     >
       <p
@@ -1858,7 +1836,7 @@ function ProjectCaseGroup({
         {project}
       </p>
       <div
-        className="grid gap-1"
+        className="grid w-full gap-1"
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >
         {cases.map((c) =>
@@ -1868,7 +1846,7 @@ function ProjectCaseGroup({
               item={c}
               onToggle={onToggle}
               onOpen={onOpen}
-              layout="grouped"
+              hideStatus
             />
           ) : (
             <CaseCard
@@ -1876,7 +1854,7 @@ function ProjectCaseGroup({
               item={c}
               onToggle={onToggle}
               onOpen={onOpen}
-              layout="grouped"
+              hideStatus
             />
           ),
         )}
