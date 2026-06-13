@@ -4887,18 +4887,18 @@ export default function Home() {
                 {user.email}
               </p>
             )}
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               <button
                 type="button"
                 onClick={() => setSettingsOpen(true)}
-                className="flex min-w-0 flex-1 items-center justify-center rounded-lg border border-black/[0.05] px-2 py-2 text-[11px] font-medium text-gray-600 transition-all duration-200 hover:bg-black/[0.02]"
+                className="shrink-0 rounded-lg border border-black/[0.05] px-2 py-2 text-[11px] font-medium text-gray-600 transition-all duration-200 hover:bg-black/[0.02]"
               >
                 設定
               </button>
               <button
                 type="button"
                 onClick={() => void signOut()}
-                className="min-w-0 flex-1 rounded-lg border border-black/[0.08] px-2 py-2 text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.02]"
+                className="min-w-0 flex-1 whitespace-nowrap rounded-lg border border-black/[0.08] px-1.5 py-2 text-center text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.02]"
               >
                 ログアウト
               </button>
