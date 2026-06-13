@@ -26,8 +26,9 @@ import {
   taskVisibleInView,
 } from "@/lib/gyokan/task-case";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
-import { useGyokanTheme } from "@/components/gyokan-theme-provider";
+import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
+import { isGyokanPaidMember } from "@/lib/gyokan/membership";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -4292,10 +4293,25 @@ function useIsClient() {
   );
 }
 
+function SettingsThemeButton({ onOpen }: { onOpen: () => void }) {
+  const { theme } = useGyokanTheme();
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px] transition-colors hover:bg-[color-mix(in_srgb,var(--gyokan-border)_35%,var(--gyokan-bg2))]"
+    >
+      <span className="gyokan-muted">テーマ</span>
+      <span className="max-w-[55%] truncate font-medium text-[var(--gyokan-accent2)]">
+        {theme.name}
+      </span>
+    </button>
+  );
+}
+
 export default function Home() {
   const isClient = useIsClient();
   const router = useRouter();
-  const { theme } = useGyokanTheme();
   const {
     user,
     authReady,
@@ -4330,6 +4346,8 @@ export default function Home() {
     saveDailyMemo,
     saveDailyDiary,
   } = useGyokanData();
+
+  const isPaidMember = useMemo(() => isGyokanPaidMember(user), [user]);
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskModalDefaultProject, setTaskModalDefaultProject] = useState<string | undefined>();
@@ -4755,6 +4773,7 @@ export default function Home() {
   const showTasks = mobileTab === "home";
 
   return (
+    <GyokanThemeProvider isPaidMember={isPaidMember}>
     <ProjectColorsContext.Provider value={projectColorsValue}>
     <div className="gyokan-app min-h-screen bg-[var(--gyokan-bg)] text-[var(--gyokan-text)] antialiased">
       <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
@@ -5056,16 +5075,7 @@ export default function Home() {
                       </li>
                     ))}
                     <li>
-                      <button
-                        type="button"
-                        onClick={() => setThemePickerOpen(true)}
-                        className="flex w-full items-center justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px] transition-colors hover:bg-[color-mix(in_srgb,var(--gyokan-border)_35%,var(--gyokan-bg2))]"
-                      >
-                        <span className="gyokan-muted">テーマ</span>
-                        <span className="max-w-[55%] truncate font-medium text-[var(--gyokan-accent2)]">
-                          {theme.name}
-                        </span>
-                      </button>
+                      <SettingsThemeButton onOpen={() => setThemePickerOpen(true)} />
                     </li>
                     <li className="flex justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
                       <span className="gyokan-muted">アカウント</span>
@@ -5284,5 +5294,6 @@ export default function Home() {
       </DetailOverlay>
     </div>
     </ProjectColorsContext.Provider>
+    </GyokanThemeProvider>
   );
 }

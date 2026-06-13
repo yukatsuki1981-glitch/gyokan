@@ -6,7 +6,6 @@ import {
   GYOKAN_THEMES,
   getThemeById,
   isThemeSelectable,
-  PAID_THEMES_UNLOCKED,
   type GyokanThemeId,
 } from "@/lib/gyokan/themes";
 import { useGyokanTheme } from "@/components/gyokan-theme-provider";
@@ -107,7 +106,7 @@ export function ThemePickerModal({
   open: boolean;
   onClose: () => void;
 }) {
-  const { themeId, setThemeId } = useGyokanTheme();
+  const { themeId, setThemeId, isPaidMember } = useGyokanTheme();
   const [paidNotice, setPaidNotice] = useState<GyokanThemeId | null>(null);
 
   if (!open) return null;
@@ -118,14 +117,14 @@ export function ThemePickerModal({
     <>
       <ThemePickerOverlay onClose={onClose} title="テーマ">
         <p className="mb-4 text-[13px] leading-relaxed text-[var(--gyokan-text2)]">
-          {PAID_THEMES_UNLOCKED
-            ? "開発者モード: 全テーマを選択できます。"
-            : "無料テーマはすぐに切り替えられます。有料テーマはプラン加入後に利用できます。"}
+          {isPaidMember
+            ? "有料会員: 全テーマを選択できます。"
+            : "無料テーマはすぐに切り替えられます。有料テーマは有料会員プランで利用できます。"}
         </p>
         <ul className="space-y-2">
           {GYOKAN_THEMES.map((theme) => {
             const selected = theme.id === themeId;
-            const locked = !isThemeSelectable(theme);
+            const locked = !isThemeSelectable(theme, isPaidMember);
             return (
               <li key={theme.id}>
                 <button
@@ -178,7 +177,7 @@ export function ThemePickerModal({
               {paidTheme.name}
             </p>
             <p className="mb-6 text-[13px] leading-relaxed text-[var(--gyokan-text2)]">
-              このテーマは有料プランでご利用いただけます。詳細は今後のアップデートでお知らせします。
+              このテーマは有料会員プランでご利用いただけます。
             </p>
             <button
               type="button"

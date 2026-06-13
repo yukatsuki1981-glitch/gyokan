@@ -42,12 +42,8 @@ export const GYOKAN_THEME_STORAGE_KEY = "gyokan-theme";
 
 export const DEFAULT_THEME_ID: GyokanThemeId = "default";
 
-/** 開発者向け: `.env.local` で `NEXT_PUBLIC_GYOKAN_UNLOCK_PAID_THEMES=true` */
-export const PAID_THEMES_UNLOCKED =
-  process.env.NEXT_PUBLIC_GYOKAN_UNLOCK_PAID_THEMES === "true";
-
-export function isThemeSelectable(theme: GyokanTheme): boolean {
-  return theme.free || PAID_THEMES_UNLOCKED;
+export function isThemeSelectable(theme: GyokanTheme, isPaidMember: boolean): boolean {
+  return theme.free || isPaidMember;
 }
 
 export const GYOKAN_THEMES: GyokanTheme[] = [
@@ -294,13 +290,13 @@ export function isFreeTheme(id: GyokanThemeId): boolean {
   return getThemeById(id).free;
 }
 
-export function readStoredThemeId(): GyokanThemeId {
+export function readStoredThemeId(isPaidMember: boolean): GyokanThemeId {
   if (typeof window === "undefined") return DEFAULT_THEME_ID;
   try {
     const raw = localStorage.getItem(GYOKAN_THEME_STORAGE_KEY);
     if (!raw) return DEFAULT_THEME_ID;
     const theme = getThemeById(raw);
-    if (!isThemeSelectable(theme)) {
+    if (!isThemeSelectable(theme, isPaidMember)) {
       return DEFAULT_THEME_ID;
     }
     return theme.id;

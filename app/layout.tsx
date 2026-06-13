@@ -9,7 +9,7 @@ import {
   Zen_Maru_Gothic,
 } from "next/font/google";
 import { PRODUCTION_SITE_URL } from "@/lib/site-url";
-import { DEFAULT_THEME_ID, GYOKAN_THEMES, GYOKAN_THEME_STORAGE_KEY, PAID_THEMES_UNLOCKED } from "@/lib/gyokan/themes";
+import { DEFAULT_THEME_ID, GYOKAN_THEMES, GYOKAN_THEME_STORAGE_KEY } from "@/lib/gyokan/themes";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -88,10 +88,7 @@ export const viewport: Viewport = {
 };
 
 const allowedThemeBootstrapMap = Object.fromEntries(
-  (PAID_THEMES_UNLOCKED ? GYOKAN_THEMES : GYOKAN_THEMES.filter((t) => t.free)).map((t) => [
-    t.id,
-    1,
-  ]),
+  GYOKAN_THEMES.filter((t) => t.free).map((t) => [t.id, 1]),
 );
 
 const themeBootstrapScript = `
