@@ -4887,21 +4887,22 @@ export default function Home() {
                 {user.email}
               </p>
             )}
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="flex w-full items-center gap-2 rounded-lg border border-black/[0.05] px-2 py-2 text-[11px] font-medium text-gray-600 transition-all duration-200 hover:bg-black/[0.02]"
-            >
-              <Icon name="more" className="h-3.5 w-3.5 text-gray-400" />
-              設定
-            </button>
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="w-full rounded-lg border border-black/[0.08] px-2 py-2 text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.02]"
-            >
-              ログアウト
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="flex min-w-0 flex-1 items-center justify-center rounded-lg border border-black/[0.05] px-2 py-2 text-[11px] font-medium text-gray-600 transition-all duration-200 hover:bg-black/[0.02]"
+              >
+                設定
+              </button>
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="min-w-0 flex-1 rounded-lg border border-black/[0.08] px-2 py-2 text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.02]"
+              >
+                ログアウト
+              </button>
+            </div>
           </div>
         </aside>
 
