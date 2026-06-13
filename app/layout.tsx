@@ -1,6 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import {
+  DM_Mono,
+  Geist,
+  Geist_Mono,
+  Noto_Sans_JP,
+  Noto_Serif_JP,
+  Shippori_Mincho_B1,
+  Zen_Maru_Gothic,
+} from "next/font/google";
 import { PRODUCTION_SITE_URL } from "@/lib/site-url";
+import { DEFAULT_THEME_ID, GYOKAN_THEME_STORAGE_KEY } from "@/lib/gyokan/themes";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,6 +21,46 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+const notoSansJP = Noto_Sans_JP({
+  variable: "--font-noto-sans-jp",
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+});
+
+const notoSerifJP = Noto_Serif_JP({
+  variable: "--font-noto-serif-jp",
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+});
+
+const shipporiMincho = Shippori_Mincho_B1({
+  variable: "--font-shippori-mincho",
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+});
+
+const dmMono = DM_Mono({
+  variable: "--font-dm-mono",
+  subsets: ["latin"],
+  weight: ["400", "500"],
+});
+
+const zenMaruGothic = Zen_Maru_Gothic({
+  variable: "--font-zen-maru-gothic",
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+});
+
+const fontVariables = [
+  geistSans.variable,
+  geistMono.variable,
+  notoSansJP.variable,
+  notoSerifJP.variable,
+  shipporiMincho.variable,
+  dmMono.variable,
+  zenMaruGothic.variable,
+].join(" ");
 
 export const metadata: Metadata = {
   metadataBase: new URL(
@@ -38,6 +87,21 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const themeBootstrapScript = `
+(function () {
+  try {
+    var key = ${JSON.stringify(GYOKAN_THEME_STORAGE_KEY)};
+    var fallback = ${JSON.stringify(DEFAULT_THEME_ID)};
+    var free = { default: 1, mono: 1, forest: 1 };
+    var raw = localStorage.getItem(key) || fallback;
+    var id = free[raw] ? raw : fallback;
+    document.documentElement.dataset.theme = id;
+  } catch (e) {
+    document.documentElement.dataset.theme = ${JSON.stringify(DEFAULT_THEME_ID)};
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -46,8 +110,13 @@ export default function RootLayout({
   return (
     <html
       lang="ja"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${fontVariables} h-full antialiased`}
+      data-theme={DEFAULT_THEME_ID}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

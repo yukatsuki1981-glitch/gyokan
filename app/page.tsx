@@ -26,6 +26,8 @@ import {
   taskVisibleInView,
 } from "@/lib/gyokan/task-case";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
+import { useGyokanTheme } from "@/components/gyokan-theme-provider";
+import { ThemePickerModal } from "@/components/theme-picker";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -634,7 +636,7 @@ function ProjectColorSwatch({
       aria-label={onClick ? "プロジェクトカラー" : undefined}
       onClick={onClick}
       className={`${dim} shrink-0 rounded-full ${onClick ? "transition-transform hover:scale-110" : ""} ${
-        selected ? "ring-2 ring-[#007AFF] ring-offset-2" : ""
+        selected ? "ring-2 ring-[var(--gyokan-accent2)] ring-offset-2" : ""
       }`}
       style={{ backgroundColor: color.accent }}
     />
@@ -786,7 +788,7 @@ function ProjectColorPickerModal({
             onSave(previewAccent);
             onClose();
           }}
-          className="flex-1 rounded-xl bg-[#007AFF] py-2.5 text-[14px] font-medium text-white hover:bg-[#0066DD]"
+          className="flex-1 rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[14px] font-medium text-white hover:bg-[var(--gyokan-accent)]"
         >
           保存
         </button>
@@ -805,7 +807,7 @@ function ProjectColorHeaderLink({ project }: { project: string }) {
       <button
         type="button"
         onClick={() => setColorPickerOpen(true)}
-        className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD] sm:text-[13px]"
+        className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)] sm:text-[13px]"
       >
         <ProjectColorSwatch accent={projectAccent} size="sm" />
         プロジェクトカラーを選択
@@ -905,7 +907,7 @@ function RefreshButton({
           }
         })();
       }}
-      className={`rounded-xl p-2 text-gray-500 transition-colors hover:bg-white hover:text-[#007AFF] ${className}`}
+      className={`rounded-xl p-2 text-gray-500 transition-colors hover:bg-white hover:text-[var(--gyokan-accent2)] ${className}`}
     >
       <Icon
         name="refresh"
@@ -1027,7 +1029,7 @@ function PullToRefresh({
       >
         <Icon
           name="refresh"
-          className={`h-4 w-4 text-[#007AFF] ${refreshing || ready ? "animate-spin" : ""}`}
+          className={`h-4 w-4 text-[var(--gyokan-accent2)] ${refreshing || ready ? "animate-spin" : ""}`}
         />
         <span className="text-[12px] font-medium text-gray-600">
           {refreshing ? "更新中…" : ready ? "離して更新" : "引っ張って更新"}
@@ -1058,10 +1060,10 @@ function Card({
 }) {
   return (
     <div
-      className={`rounded-2xl border transition-all duration-200 ${
+      className={`gyokan-card rounded-2xl border transition-all duration-200 ${
         glass
-          ? "border-black/[0.06] bg-white/75 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.04)] backdrop-blur-xl"
-          : "border-gray-100 bg-white shadow-sm"
+          ? "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.04)] backdrop-blur-xl"
+          : "shadow-sm"
       } ${className}`}
     >
       {children}
@@ -1135,7 +1137,7 @@ function DetailField({
 }
 
 const fieldInputClass =
-  "w-full rounded-xl border border-black/[0.08] bg-black/[0.02] px-3 py-2.5 text-[14px] text-gray-900 outline-none transition-colors focus:border-[#007AFF] focus:ring-2 focus:ring-[#007AFF]/10";
+  "w-full rounded-xl border border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-bg2)_50%,transparent)] px-3 py-2.5 text-[14px] text-[var(--gyokan-text)] outline-none transition-colors focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent-lt)]";
 
 function getDiaryBodyForDate(diaries: DailyDiary[], date: string) {
   const sameDay = diaries
@@ -1190,8 +1192,8 @@ function CaseDetailTaskStack({
             aria-label={task.done ? "未完了に戻す" : "完了にする"}
             className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
               task.done
-                ? "border-[#007AFF] bg-[#007AFF] text-white"
-                : "border-gray-300 bg-white hover:border-[#007AFF]"
+                ? "border-[var(--gyokan-accent2)] bg-[var(--gyokan-accent2)] text-white"
+                : "border-gray-300 bg-white hover:border-[var(--gyokan-accent2)]"
             }`}
           >
             {task.done && <Icon name="check" className="h-2 w-2" />}
@@ -1334,7 +1336,7 @@ function CaseDetailEditor({
           <button
             type="button"
             onClick={onAddTask}
-            className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
+            className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
           >
             ＋ タスクを追加
           </button>
@@ -1345,7 +1347,7 @@ function CaseDetailEditor({
         <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
         )}
         {layout === "modal" && (
-        <button type="button" onClick={save} className="rounded-xl bg-[#007AFF] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
+        <button type="button" onClick={save} className="rounded-xl bg-[var(--gyokan-accent2)] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
         )}
         {layout === "page" && (
           <p className="text-[11px] text-gray-300">入力内容は自動保存されます</p>
@@ -1563,7 +1565,7 @@ function TaskDetailEditor({
       )}
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
-        <button type="button" onClick={save} className="rounded-xl bg-[#007AFF] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
+        <button type="button" onClick={save} className="rounded-xl bg-[var(--gyokan-accent2)] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
       </div>
     </div>
   );
@@ -1634,8 +1636,8 @@ function CaseCard({
         aria-label={item.done ? "進行中に戻す" : "完了にする"}
         className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-all duration-200 ${
           item.done
-            ? "border-[#007AFF] bg-[#007AFF] text-white"
-            : "border-gray-300 bg-white hover:border-[#007AFF]"
+            ? "border-[var(--gyokan-accent2)] bg-[var(--gyokan-accent2)] text-white"
+            : "border-gray-300 bg-white hover:border-[var(--gyokan-accent2)]"
         }`}
       >
         {item.done && <Icon name="check" className="h-2.5 w-2.5" />}
@@ -2021,7 +2023,7 @@ function ProjectMemoEditor({
           <button
             type="button"
             onClick={save}
-            className="rounded-xl bg-[#007AFF] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600"
+            className="rounded-xl bg-[var(--gyokan-accent2)] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600"
           >
             保存
           </button>
@@ -2149,7 +2151,7 @@ function ProjectDetailSection({
           <button
             type="button"
             onClick={onAddCase}
-            className="shrink-0 text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
+            className="shrink-0 text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
           >
             ＋ 案件を追加
           </button>
@@ -2183,7 +2185,7 @@ function ProjectDetailSection({
         <button
           type="button"
           onClick={openNewMemo}
-          className={`flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-3 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-[#007AFF]/40 hover:bg-blue-50/40 hover:text-[#007AFF] ${
+          className={`flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-3 py-3 text-[13px] font-medium text-gray-500 transition-colors hover:border-[var(--gyokan-accent2)]/40 hover:bg-blue-50/40 hover:text-[var(--gyokan-accent2)] ${
             timeline.length > 0 ? "mt-2" : ""
           }`}
         >
@@ -2262,7 +2264,7 @@ function TodayTasksSection({
         <button
           type="button"
           onClick={onAddTask}
-          className="shrink-0 whitespace-nowrap text-[11px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF] sm:text-[13px]"
+          className="shrink-0 whitespace-nowrap text-[11px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)] sm:text-[13px]"
         >
           ＋タスク追加
         </button>
@@ -2357,8 +2359,8 @@ function TaskRowContent({
         aria-label={task.done ? "未完了に戻す" : "完了にする"}
         className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
           task.done
-            ? "border-[#007AFF] bg-[#007AFF] text-white"
-            : "border-gray-300 bg-white hover:border-[#007AFF]"
+            ? "border-[var(--gyokan-accent2)] bg-[var(--gyokan-accent2)] text-white"
+            : "border-gray-300 bg-white hover:border-[var(--gyokan-accent2)]"
         }`}
       >
         {task.done && <Icon name="check" className="h-2.5 w-2.5" />}
@@ -2994,7 +2996,7 @@ function MobileCalendarWidget({
           type="button"
         onClick={goToday}
         aria-label="今日へ"
-        className="relative z-10 rounded-lg px-2 py-0.5 text-[13px] font-medium text-[#007AFF] hover:bg-blue-50"
+        className="relative z-10 rounded-lg px-2 py-0.5 text-[13px] font-medium text-[var(--gyokan-accent2)] hover:bg-blue-50"
       >
         今日
         </button>
@@ -3164,7 +3166,7 @@ function DailyMemoEditor({
   }, [flush]);
 
           return (
-    <article className="rounded-md border border-black/[0.06] bg-[#fafafa]/80 px-3 py-2.5">
+    <article className="rounded-md border border-black/[0.06] bg-[var(--gyokan-bg)]/80 px-3 py-2.5">
       <textarea
         ref={textareaRef}
         value={body}
@@ -3325,7 +3327,7 @@ function DiarySpreadModal({
             type="button"
             disabled={!canGoPrev}
             onClick={() => setSpreadIndex((i) => Math.max(0, i - pageStep))}
-            className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD] disabled:pointer-events-none disabled:opacity-30"
+            className="text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)] disabled:pointer-events-none disabled:opacity-30"
           >
             ← 前のページ
           </button>
@@ -3333,7 +3335,7 @@ function DiarySpreadModal({
             type="button"
             disabled={!canGoNext}
             onClick={() => setSpreadIndex((i) => Math.min(filledDates.length - 1, i + pageStep))}
-            className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD] disabled:pointer-events-none disabled:opacity-30"
+            className="text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)] disabled:pointer-events-none disabled:opacity-30"
           >
             次のページ →
           </button>
@@ -3360,7 +3362,7 @@ function DiaryAllList({
         <button
           type="button"
           onClick={onBack}
-          className="text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD]"
+          className="text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)]"
         >
           戻る
         </button>
@@ -3374,7 +3376,7 @@ function DiaryAllList({
               <button
                 type="button"
                 onClick={() => onOpenSpread(entry.date)}
-                className="w-full rounded-xl border border-black/[0.06] bg-[#fafafa]/80 px-3 py-2.5 text-left transition-colors hover:bg-white"
+                className="w-full rounded-xl border border-black/[0.06] bg-[var(--gyokan-bg)]/80 px-3 py-2.5 text-left transition-colors hover:bg-white"
               >
                 <p className="mb-1 text-[12px] font-semibold text-gray-700">
                   {formatDateJa(entry.date)}
@@ -3497,7 +3499,7 @@ function DailyDiaryBoard({
       <button
         type="button"
         onClick={() => onOpenList?.()}
-        className="mt-3 text-[12px] font-medium text-[#007AFF] hover:text-[#0066DD]"
+        className="mt-3 text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)]"
       >
         全ての日記を見る
       </button>
@@ -3777,7 +3779,7 @@ function AddProjectModalForm({
           <button type="button" onClick={onClose} className="rounded-2xl px-5 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50">
             キャンセル
           </button>
-          <button type="button" onClick={submit} className="rounded-2xl bg-blue-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-blue-500/25 hover:bg-blue-600">
+          <button type="button" onClick={submit} className="rounded-2xl bg-[var(--gyokan-accent2)] px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[var(--gyokan-accent)]">
             追加する
           </button>
         </div>
@@ -3842,7 +3844,7 @@ function SortableSidebarProjectItem({
         onClick={onSelect}
         className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] transition-all duration-200 ${
           active
-            ? "bg-[#007AFF]/10 font-medium text-[#007AFF]"
+            ? "bg-[var(--gyokan-accent2)]/10 font-medium text-[var(--gyokan-accent2)]"
             : "text-gray-600 hover:bg-black/[0.03]"
         }`}
       >
@@ -3891,13 +3893,13 @@ function DesktopProjectSidebar({
             onClick={() => onSelect(ALL_PROJECTS_LABEL)}
             className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] transition-all duration-200 ${
               activeProject === ALL_PROJECTS_LABEL
-                ? "bg-[#007AFF]/10 font-medium text-[#007AFF]"
+                ? "bg-[var(--gyokan-accent2)]/10 font-medium text-[var(--gyokan-accent2)]"
                 : "text-gray-600 hover:bg-black/[0.03]"
             }`}
           >
             <Icon
               name={activeProject === ALL_PROJECTS_LABEL ? "folderOpen" : "folder"}
-              className={`h-3.5 w-3.5 shrink-0 ${activeProject === ALL_PROJECTS_LABEL ? "text-[#007AFF]" : "text-gray-400"}`}
+              className={`h-3.5 w-3.5 shrink-0 ${activeProject === ALL_PROJECTS_LABEL ? "text-[var(--gyokan-accent2)]" : "text-gray-400"}`}
             />
             <span className="truncate">すべて</span>
           </button>
@@ -3993,7 +3995,7 @@ function AddCaseModalForm({
           <button type="button" onClick={onClose} className="rounded-lg px-5 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50">
             キャンセル
           </button>
-          <button type="button" onClick={submit} className="rounded-lg bg-blue-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-600">
+          <button type="button" onClick={submit} className="rounded-lg bg-[var(--gyokan-accent2)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--gyokan-accent)]">
             追加する
           </button>
         </div>
@@ -4227,7 +4229,7 @@ function AddTaskModalForm({
         )}
         <div className={`flex justify-end gap-2 ${useRange ? "" : "mt-2"}`}>
           <button type="button" onClick={onClose} className="rounded-2xl px-5 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50">キャンセル</button>
-          <button type="button" onClick={submit} className="rounded-2xl bg-blue-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-blue-500/25 hover:bg-blue-600">追加する</button>
+          <button type="button" onClick={submit} className="rounded-2xl bg-[var(--gyokan-accent2)] px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[var(--gyokan-accent)]">追加する</button>
         </div>
       </div>
     </div>
@@ -4293,6 +4295,7 @@ function useIsClient() {
 export default function Home() {
   const isClient = useIsClient();
   const router = useRouter();
+  const { theme } = useGyokanTheme();
   const {
     user,
     authReady,
@@ -4342,6 +4345,7 @@ export default function Home() {
   const [memoSheetOpen, setMemoSheetOpen] = useState(false);
   const [diarySheetOpen, setDiarySheetOpen] = useState(false);
   const [diaryListOpen, setDiaryListOpen] = useState(false);
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [diarySpreadDate, setDiarySpreadDate] = useState<string | null>(null);
 
   const openDiarySpread = useCallback((date: string) => {
@@ -4709,7 +4713,7 @@ export default function Home() {
 
   if (!isClient || !authReady || (user && !dataReady)) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#fafafa] px-6">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--gyokan-bg)] px-6">
         <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
         {loadError && (
           <p className="max-w-sm text-center text-[13px] text-red-600">
@@ -4752,15 +4756,15 @@ export default function Home() {
 
   return (
     <ProjectColorsContext.Provider value={projectColorsValue}>
-    <div className="min-h-screen bg-[#fafafa] font-[family-name:var(--font-geist-sans)] text-gray-900 antialiased">
+    <div className="gyokan-app min-h-screen bg-[var(--gyokan-bg)] text-[var(--gyokan-text)] antialiased">
       <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
       <div className="mx-auto flex min-h-screen max-w-[1480px]">
         {/* Left Sidebar */}
-        <aside className="sticky top-0 hidden h-screen w-[168px] shrink-0 flex-col border-r border-black/[0.06] bg-white/70 px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col">
+        <aside className="gyokan-panel sticky top-0 hidden h-screen w-[168px] shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col">
           <div className="mb-6 flex items-center justify-between gap-2 px-1">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#007AFF] text-[11px] font-bold text-white shadow-sm">行</div>
-              <span className="truncate text-[13px] font-semibold tracking-tight text-gray-900">行間</span>
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--gyokan-accent2)] text-[11px] font-bold text-white shadow-sm">行</div>
+              <span className="gyokan-heading truncate text-[13px] font-semibold tracking-tight">行間</span>
           </div>
             <RefreshButton iconClassName="h-4 w-4" className="shrink-0 p-1.5 hover:bg-black/[0.04]" onRefresh={handleRefresh} />
           </div>
@@ -4982,7 +4986,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => openAddCaseModal()}
-                      className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[#007AFF]"
+                      className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
                     >
                       ＋ 案件を追加
                     </button>
@@ -5040,19 +5044,33 @@ export default function Home() {
                   </p>
                 )}
                 <Card className="p-6">
-                  <h3 className="mb-4 text-[15px] font-semibold">設定</h3>
+                  <h3 className="gyokan-heading mb-4 text-[15px] font-semibold">設定</h3>
                   <ul className="space-y-2">
                     {[
                       ["通知", "オン"],
                       ["データ保存", "Supabase"],
-                      ["テーマ", "ライト"],
-                      ["アカウント", user.email ?? "ログイン中"],
                     ].map(([k, v]) => (
-                      <li key={k} className="flex justify-between rounded-2xl bg-gray-50/80 px-4 py-3 text-[13px]">
-                        <span className="text-gray-600">{k}</span>
-                        <span className="max-w-[55%] truncate font-medium text-gray-400">{v}</span>
+                      <li key={k} className="flex justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
+                        <span className="gyokan-muted">{k}</span>
+                        <span className="max-w-[55%] truncate font-medium gyokan-muted">{v}</span>
                       </li>
                     ))}
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => setThemePickerOpen(true)}
+                        className="flex w-full items-center justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px] transition-colors hover:bg-[color-mix(in_srgb,var(--gyokan-border)_35%,var(--gyokan-bg2))]"
+                      >
+                        <span className="gyokan-muted">テーマ</span>
+                        <span className="max-w-[55%] truncate font-medium text-[var(--gyokan-accent2)]">
+                          {theme.name}
+                        </span>
+                      </button>
+                    </li>
+                    <li className="flex justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
+                      <span className="gyokan-muted">アカウント</span>
+                      <span className="max-w-[55%] truncate font-medium gyokan-muted">{user.email ?? "ログイン中"}</span>
+                    </li>
                   </ul>
                   <button
                     type="button"
@@ -5071,7 +5089,7 @@ export default function Home() {
         </main>
 
         {/* Right Panel - calendar and stats */}
-        <aside className="hidden w-[280px] shrink-0 self-start border-l border-black/[0.06] bg-white/40 px-4 py-3 backdrop-blur-xl lg:block">
+        <aside className="gyokan-panel hidden w-[280px] shrink-0 self-start border-l px-4 py-3 backdrop-blur-xl lg:block">
           <Card className="mb-4 p-4">
             <CalendarWidget
               key={viewDateISO.slice(0, 7)}
@@ -5145,7 +5163,7 @@ export default function Home() {
       )}
 
       {/* Mobile Tab Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-black/[0.06] bg-white/80 backdrop-blur-2xl lg:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden">
         <div className="mx-auto flex max-w-lg justify-around px-1" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
           {([
             { id: "home" as const, label: "ホーム", icon: "home" },
@@ -5195,7 +5213,7 @@ export default function Home() {
                     : tab.id === "diary"
                       ? diarySheetOpen
                       : mobileTab === tab.id)
-                  ? "text-blue-500"
+                  ? "text-[var(--gyokan-accent2)]"
                   : "text-gray-400"
               }`}
             >
@@ -5231,6 +5249,8 @@ export default function Home() {
         onSubmit={addCase}
         defaultProject={caseModalDefaultProject}
       />
+
+      <ThemePickerModal open={themePickerOpen} onClose={() => setThemePickerOpen(false)} />
 
       <DetailOverlay
         open={!!selectedCase}

@@ -1,0 +1,256 @@
+:root,
+html[data-theme="default"] {
+  --gyokan-bg: #F6F4EF;
+  --gyokan-bg2: #EDEAE2;
+  --gyokan-surface: #FDFCF9;
+  --gyokan-border: #DDD9CE;
+  --gyokan-text: #1A1814;
+  --gyokan-text2: #5C5849;
+  --gyokan-accent: #243C26;
+  --gyokan-accent2: #3D6641;
+  --gyokan-accent-lt: #E6EFE7;
+  --gyokan-highlight: #3D6641;
+  --gyokan-font-display: var(--font-shippori-mincho), serif;
+  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+html[data-theme="mono"] {
+  --gyokan-bg: #F5F5F5;
+  --gyokan-bg2: #EBEBEB;
+  --gyokan-surface: #FFFFFF;
+  --gyokan-border: #D9D9D9;
+  --gyokan-text: #1A1A1A;
+  --gyokan-text2: #595959;
+  --gyokan-accent: #1A1A1A;
+  --gyokan-accent2: #404040;
+  --gyokan-accent-lt: #E8E8E8;
+  --gyokan-highlight: #404040;
+  --gyokan-font-display: var(--font-noto-serif-jp), serif;
+  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+html[data-theme="forest"] {
+  --gyokan-bg: #F3F5EE;
+  --gyokan-bg2: #E6EBDC;
+  --gyokan-surface: #FCFDFA;
+  --gyokan-border: #D5DEC8;
+  --gyokan-text: #1F2A1A;
+  --gyokan-text2: #586350;
+  --gyokan-accent: #2E4A23;
+  --gyokan-accent2: #4F7A3E;
+  --gyokan-accent-lt: #E3EEDB;
+  --gyokan-highlight: #4F7A3E;
+  --gyokan-font-display: var(--font-shippori-mincho), serif;
+  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+html[data-theme="marine"] {
+  --gyokan-bg: #F0F6F7;
+  --gyokan-bg2: #DCEBED;
+  --gyokan-surface: #FBFEFE;
+  --gyokan-border: #C2DEE2;
+  --gyokan-text: #16313A;
+  --gyokan-text2: #4D7480;
+  --gyokan-accent: #1B5E6D;
+  --gyokan-accent2: #2E8FA3;
+  --gyokan-accent-lt: #DEF0F2;
+  --gyokan-highlight: #E97A5C;
+  --gyokan-font-display: var(--font-zen-maru-gothic), sans-serif;
+  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+html[data-theme="sakura"] {
+  --gyokan-bg: #FBF3F4;
+  --gyokan-bg2: #F6E4E7;
+  --gyokan-surface: #FFFCFC;
+  --gyokan-border: #EFD3D8;
+  --gyokan-text: #3A2429;
+  --gyokan-text2: #8A6770;
+  --gyokan-accent: #B85C72;
+  --gyokan-accent2: #D98A9C;
+  --gyokan-accent-lt: #FBE6EA;
+  --gyokan-highlight: #D98A9C;
+  --gyokan-font-display: var(--font-zen-maru-gothic), sans-serif;
+  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+html[data-theme="sunset"] {
+  --gyokan-bg: #FDF3EC;
+  --gyokan-bg2: #FBE3D4;
+  --gyokan-surface: #FFFAF6;
+  --gyokan-border: #F2CDB0;
+  --gyokan-text: #3A2418;
+  --gyokan-text2: #8A5F45;
+  --gyokan-accent: #C2542E;
+  --gyokan-accent2: #E08A47;
+  --gyokan-accent-lt: #FBE9DA;
+  --gyokan-highlight: #6B4A8A;
+  --gyokan-font-display: var(--font-shippori-mincho), serif;
+  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+html[data-theme="momiji"] {
+  --gyokan-bg: #F8F0EB;
+  --gyokan-bg2: #EFDDD2;
+  --gyokan-surface: #FDFAF7;
+  --gyokan-border: #E0C5B5;
+  --gyokan-text: #3A211A;
+  --gyokan-text2: #8A6354;
+  --gyokan-accent: #A8432A;
+  --gyokan-accent2: #C9683F;
+  --gyokan-accent-lt: #F5E0D5;
+  --gyokan-highlight: #C9683F;
+  --gyokan-font-display: var(--font-shippori-mincho), serif;
+  --gyokan-font-body: var(--font-noto-serif-jp), serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+html[data-theme="yukigeshiki"] {
+  --gyokan-bg: #F4F7FA;
+  --gyokan-bg2: #E5EDF3;
+  --gyokan-surface: #FFFFFF;
+  --gyokan-border: #D3E1EB;
+  --gyokan-text: #1E2A33;
+  --gyokan-text2: #5C7384;
+  --gyokan-accent: #3D6E8F;
+  --gyokan-accent2: #6FA3C2;
+  --gyokan-accent-lt: #E3EEF5;
+  --gyokan-highlight: #6FA3C2;
+  --gyokan-font-display: var(--font-noto-serif-jp), serif;
+  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+html[data-theme="kami"] {
+  --gyokan-bg: #F7F2E6;
+  --gyokan-bg2: #EEE5D1;
+  --gyokan-surface: #FDFAF1;
+  --gyokan-border: #DDD0B5;
+  --gyokan-text: #2B2620;
+  --gyokan-text2: #6E6354;
+  --gyokan-accent: #4A3D2A;
+  --gyokan-accent2: #7A6A4D;
+  --gyokan-accent-lt: #EFE7D4;
+  --gyokan-highlight: #7A6A4D;
+  --gyokan-font-display: var(--font-shippori-mincho), serif;
+  --gyokan-font-body: var(--font-noto-serif-jp), serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+html[data-theme="yofukashi"] {
+  --gyokan-bg: #1C1B22;
+  --gyokan-bg2: #2A2832;
+  --gyokan-surface: #25232C;
+  --gyokan-border: #3A3744;
+  --gyokan-text: #EDEAF2;
+  --gyokan-text2: #A8A3B5;
+  --gyokan-accent: #9C8CD4;
+  --gyokan-accent2: #B6A8E0;
+  --gyokan-accent-lt: #34304A;
+  --gyokan-highlight: #B6A8E0;
+  --gyokan-font-display: var(--font-shippori-mincho), serif;
+  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+  color-scheme: dark;
+}
+
+html[data-theme="furikaeri"] {
+  --gyokan-bg: #F5EFE6;
+  --gyokan-bg2: #E9DDC9;
+  --gyokan-surface: #FBF7F0;
+  --gyokan-border: #D8C7AC;
+  --gyokan-text: #3A3024;
+  --gyokan-text2: #807058;
+  --gyokan-accent: #8A6B3F;
+  --gyokan-accent2: #AD8C5C;
+  --gyokan-accent-lt: #EFE4D0;
+  --gyokan-highlight: #AD8C5C;
+  --gyokan-font-display: var(--font-noto-serif-jp), serif;
+  --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
+  --gyokan-font-mono: var(--font-dm-mono), monospace;
+}
+
+.gyokan-app {
+  background-color: var(--gyokan-bg);
+  color: var(--gyokan-text);
+  font-family: var(--gyokan-font-body);
+}
+
+.gyokan-app .gyokan-heading,
+.gyokan-app :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--gyokan-font-display);
+  color: var(--gyokan-text);
+}
+
+.gyokan-app .gyokan-tabular {
+  font-family: var(--gyokan-font-mono);
+}
+
+.gyokan-card {
+  background-color: color-mix(in srgb, var(--gyokan-surface) 88%, transparent);
+  border-color: color-mix(in srgb, var(--gyokan-border) 80%, transparent);
+}
+
+.gyokan-panel {
+  background-color: color-mix(in srgb, var(--gyokan-surface) 75%, transparent);
+  border-color: color-mix(in srgb, var(--gyokan-border) 70%, transparent);
+}
+
+.gyokan-muted {
+  color: var(--gyokan-text2);
+}
+
+html[data-theme="yofukashi"] .gyokan-app .text-gray-900 {
+  color: var(--gyokan-text);
+}
+
+html[data-theme="yofukashi"] .gyokan-app .text-gray-800,
+html[data-theme="yofukashi"] .gyokan-app .text-gray-700,
+html[data-theme="yofukashi"] .gyokan-app .text-gray-600 {
+  color: color-mix(in srgb, var(--gyokan-text) 88%, var(--gyokan-text2));
+}
+
+html[data-theme="yofukashi"] .gyokan-app .text-gray-500,
+html[data-theme="yofukashi"] .gyokan-app .text-gray-400,
+html[data-theme="yofukashi"] .gyokan-app .text-gray-300 {
+  color: var(--gyokan-text2);
+}
+
+html[data-theme="yofukashi"] .gyokan-app .bg-white,
+html[data-theme="yofukashi"] .gyokan-app .bg-white\/90,
+html[data-theme="yofukashi"] .gyokan-app .bg-white\/75,
+html[data-theme="yofukashi"] .gyokan-app .bg-white\/70,
+html[data-theme="yofukashi"] .gyokan-app .bg-white\/40,
+html[data-theme="yofukashi"] .gyokan-app .bg-white\/95 {
+  background-color: color-mix(in srgb, var(--gyokan-surface) 92%, transparent) !important;
+}
+
+html[data-theme="yofukashi"] .gyokan-app .bg-gray-50,
+html[data-theme="yofukashi"] .gyokan-app .bg-gray-50\/80,
+html[data-theme="yofukashi"] .gyokan-app .bg-gray-50\/60,
+html[data-theme="yofukashi"] .gyokan-app .bg-black\/\[0\.02\] {
+  background-color: var(--gyokan-bg2) !important;
+}
+
+html[data-theme="yofukashi"] .gyokan-app .border-black\/\[0\.06\],
+html[data-theme="yofukashi"] .gyokan-app .border-black\/\[0\.05\],
+html[data-theme="yofukashi"] .gyokan-app .border-black\/\[0\.04\],
+html[data-theme="yofukashi"] .gyokan-app .border-gray-100,
+html[data-theme="yofukashi"] .gyokan-app .border-gray-200 {
+  border-color: var(--gyokan-border) !important;
+}
+
+html[data-theme="yofukashi"] .gyokan-app nav.fixed.bottom-0 {
+  background-color: color-mix(in srgb, var(--gyokan-surface) 90%, transparent) !important;
+}
+
+html[data-theme="yofukashi"] .gyokan-app .hover\:bg-white:hover,
+html[data-theme="yofukashi"] .gyokan-app .hover\:bg-black\/\[0\.04\]:hover {
+  background-color: var(--gyokan-bg2) !important;
+}
