@@ -28,6 +28,8 @@ import {
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
+import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
+import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
 import { isGyokanPaidMember } from "@/lib/gyokan/membership";
 import { useRouter } from "next/navigation";
 import {
@@ -1184,21 +1186,15 @@ function CaseDetailTaskStack({
               : "border-black/[0.06] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:bg-white"
           }`}
         >
-          <button
-            type="button"
+          <ThemedTaskCheckbox
+            done={task.done}
+            size="sm"
             onClick={(e) => {
               e.stopPropagation();
               onToggleTask?.(task.id);
             }}
             aria-label={task.done ? "未完了に戻す" : "完了にする"}
-            className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
-              task.done
-                ? "border-[var(--gyokan-accent2)] bg-[var(--gyokan-accent2)] text-white"
-                : "border-gray-300 bg-white hover:border-[var(--gyokan-accent2)]"
-            }`}
-          >
-            {task.done && <Icon name="check" className="h-2 w-2" />}
-          </button>
+          />
           <p
             className={`min-w-0 flex-1 truncate text-[11px] font-medium ${
               task.done ? "text-gray-400 line-through" : "text-gray-800"
@@ -2351,21 +2347,15 @@ function TaskRowContent({
       </button>
       )}
 
-      <button
-        type="button"
+      <ThemedTaskCheckbox
+        done={task.done}
+        size="md"
         onClick={(e) => {
           e.stopPropagation();
           onToggle(task.id);
         }}
         aria-label={task.done ? "未完了に戻す" : "完了にする"}
-        className={`flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-150 ${
-          task.done
-            ? "border-[var(--gyokan-accent2)] bg-[var(--gyokan-accent2)] text-white"
-            : "border-gray-300 bg-white hover:border-[var(--gyokan-accent2)]"
-        }`}
-      >
-        {task.done && <Icon name="check" className="h-2.5 w-2.5" />}
-      </button>
+      />
 
       <p
         className={`min-w-0 flex-1 truncate text-[12px] font-medium ${
@@ -4853,7 +4843,9 @@ export default function Home() {
   return (
     <GyokanThemeProvider isPaidMember={isPaidMember}>
     <ProjectColorsContext.Provider value={projectColorsValue}>
-    <div className="gyokan-app min-h-screen bg-[var(--gyokan-bg)] text-[var(--gyokan-text)] antialiased">
+    <div className="gyokan-app relative min-h-screen bg-[var(--gyokan-bg)] text-[var(--gyokan-text)] antialiased">
+      <ThemeDecorationLayer />
+      <div className="relative z-[1]">
       <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
       <div className="mx-auto flex min-h-screen max-w-[1480px]">
         {/* Left Sidebar */}
@@ -5368,6 +5360,7 @@ export default function Home() {
           />
         )}
       </DetailOverlay>
+    </div>
     </div>
     </ProjectColorsContext.Provider>
     </GyokanThemeProvider>

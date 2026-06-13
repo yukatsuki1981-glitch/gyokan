@@ -1,0 +1,413 @@
+/* Theme background decorations + paid task check styles */
+
+.theme-decoration {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-decoration,
+  .theme-decoration *,
+  .themed-task-check,
+  .themed-task-check * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ─── Marine ─── */
+
+.theme-deco-marine__waves {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  height: 72px;
+  opacity: 0.35;
+  animation: marine-wave-drift 20s linear infinite;
+}
+
+.theme-deco-marine__waves svg {
+  width: 100%;
+  height: 100%;
+}
+
+.theme-deco-marine__starfish {
+  position: absolute;
+  right: 1.25rem;
+  bottom: 1.5rem;
+  width: 28px;
+  height: 28px;
+  opacity: 0.28;
+  color: #2e8fa3;
+}
+
+@keyframes marine-wave-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ─── Sakura / Momiji falling ─── */
+
+.theme-deco-fall {
+  position: absolute;
+  top: -8%;
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.theme-deco-fall--sakura-1 {
+  left: 18%;
+  animation-name: sakura-fall-a;
+  animation-duration: 14s;
+  animation-delay: 0s;
+}
+
+.theme-deco-fall--sakura-2 {
+  left: 62%;
+  animation-name: sakura-fall-b;
+  animation-duration: 16s;
+  animation-delay: 6s;
+}
+
+.theme-deco-fall--sakura-3 {
+  left: 82%;
+  animation-name: sakura-fall-a;
+  animation-duration: 15s;
+  animation-delay: 11s;
+}
+
+.theme-deco-fall--momiji-1 {
+  left: 25%;
+  animation-name: momiji-fall-a;
+  animation-duration: 11s;
+  animation-delay: 2s;
+}
+
+.theme-deco-fall--momiji-2 {
+  left: 55%;
+  animation-name: momiji-fall-b;
+  animation-duration: 10s;
+  animation-delay: 8s;
+}
+
+.theme-deco-fall--momiji-3 {
+  left: 78%;
+  animation-name: momiji-fall-a;
+  animation-duration: 12s;
+  animation-delay: 13s;
+}
+
+@keyframes sakura-fall-a {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  8% { opacity: 0.65; }
+  92% { opacity: 0.4; }
+  100% { transform: translate(24px, 110vh) rotate(300deg); opacity: 0; }
+}
+
+@keyframes sakura-fall-b {
+  0% { transform: translate(0, 0) rotate(20deg); opacity: 0; }
+  8% { opacity: 0.6; }
+  92% { opacity: 0.35; }
+  100% { transform: translate(-18px, 110vh) rotate(420deg); opacity: 0; }
+}
+
+@keyframes momiji-fall-a {
+  0% { transform: translate(0, 0) rotate(-15deg); opacity: 0; }
+  6% { opacity: 0.7; }
+  100% { transform: translate(20px, 110vh) rotate(260deg); opacity: 0; }
+}
+
+@keyframes momiji-fall-b {
+  0% { transform: translate(0, 0) rotate(10deg); opacity: 0; }
+  6% { opacity: 0.65; }
+  100% { transform: translate(-22px, 110vh) rotate(320deg); opacity: 0; }
+}
+
+/* ─── Sunset ─── */
+
+.theme-deco-sunset__band {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 80px;
+  opacity: 0.45;
+  background: linear-gradient(90deg, #e08a47, #c2542e, #6b4a8a);
+  animation: sunset-hue 30s ease-in-out infinite alternate;
+}
+
+.theme-deco-sunset__bird {
+  position: absolute;
+  top: 72%;
+  width: 18px;
+  height: 8px;
+  opacity: 0.25;
+  color: #8a5f45;
+  animation: sunset-bird 28s ease-in-out infinite;
+}
+
+.theme-deco-sunset__bird--a { left: 12%; animation-delay: 0s; }
+.theme-deco-sunset__bird--b { left: 78%; animation-delay: 9s; animation-direction: reverse; }
+
+@keyframes sunset-hue {
+  from { filter: hue-rotate(0deg) saturate(1); }
+  to { filter: hue-rotate(12deg) saturate(1.08); }
+}
+
+@keyframes sunset-bird {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(36px); }
+}
+
+/* ─── Snow ─── */
+
+.theme-deco-snow {
+  position: absolute;
+  top: -4px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.5);
+  animation: snow-fall linear infinite;
+}
+
+@keyframes snow-fall {
+  0% { transform: translate(0, 0); opacity: 0; }
+  10% { opacity: var(--snow-opacity, 0.45); }
+  90% { opacity: var(--snow-opacity, 0.35); }
+  100% { transform: translate(var(--snow-drift, 12px), 105vh); opacity: 0; }
+}
+
+/* ─── Kami ─── */
+
+.theme-deco-kami__texture {
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+.theme-deco-kami__vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at top left, rgba(74, 61, 42, 0.12), transparent 42%),
+    radial-gradient(ellipse at top right, rgba(74, 61, 42, 0.1), transparent 42%),
+    radial-gradient(ellipse at bottom left, rgba(74, 61, 42, 0.1), transparent 42%),
+    radial-gradient(ellipse at bottom right, rgba(74, 61, 42, 0.12), transparent 42%);
+}
+
+/* ─── Yofukashi ─── */
+
+.theme-deco-star {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.85);
+  animation: star-twinkle ease-in-out infinite;
+}
+
+.theme-deco-yofukashi__moon {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  box-shadow: inset -6px -2px 0 0 rgba(182, 168, 224, 0.35);
+  opacity: 0.35;
+}
+
+@keyframes star-twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.15); }
+}
+
+/* ─── Furikaeri ─── */
+
+.theme-deco-furikaeri__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(58, 48, 36, 0.22) 100%);
+}
+
+.theme-deco-furikaeri__grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  animation: furikaeri-grain 4s steps(2) infinite;
+}
+
+@keyframes furikaeri-grain {
+  0%, 100% { opacity: 0.05; }
+  50% { opacity: 0.08; }
+}
+
+/* ─── Themed task checks (paid themes) ─── */
+
+.themed-task-check {
+  border-color: #d1d5db;
+  background: #fff;
+  border-radius: 9999px;
+}
+
+.themed-task-check:hover:not(.is-done) {
+  border-color: var(--gyokan-accent2);
+}
+
+.themed-task-check.is-done {
+  border-color: transparent;
+  background: transparent;
+  overflow: visible;
+  border-radius: 9999px;
+}
+
+.themed-task-check--marine.is-done,
+.themed-task-check--sakura.is-done,
+.themed-task-check--momiji.is-done,
+.themed-task-check--yukigeshiki.is-done,
+.themed-task-check--yofukashi.is-done {
+  background: var(--gyokan-accent2);
+}
+
+.themed-task-check__burst {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.themed-task-check.is-done[data-anim="1"] .themed-task-check__burst {
+  animation: check-burst 0.3s ease-out forwards;
+}
+
+@keyframes check-burst {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+.themed-task-check--marine.is-done .themed-task-check__burst {
+  border: 2px solid rgba(46, 143, 163, 0.45);
+}
+
+.themed-task-check--sakura.is-done[data-anim="1"] .themed-task-check__petal-pop {
+  animation: sakura-pop 0.45s ease-out forwards;
+}
+
+.themed-task-check__petal-pop {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  width: 10px;
+  height: 10px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes sakura-pop {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  20% { opacity: 0.85; }
+  100% { transform: translate(6px, -12px) rotate(120deg); opacity: 0; }
+}
+
+.themed-task-check--sunset.is-done {
+  background: linear-gradient(135deg, #e08a47, #6b4a8a);
+  border-radius: 9999px;
+}
+
+.themed-task-check--sunset.is-done .themed-task-check__burst {
+  box-shadow: 0 0 0 0 rgba(224, 138, 71, 0.55);
+  animation: sunset-ring 0.35s ease-out forwards;
+}
+
+@keyframes sunset-ring {
+  0% { box-shadow: 0 0 0 0 rgba(224, 138, 71, 0.55); opacity: 1; }
+  100% { box-shadow: 0 0 0 10px rgba(224, 138, 71, 0); opacity: 0; }
+}
+
+.themed-task-check--momiji.is-done[data-anim="1"] .themed-task-check__leaf-spin {
+  animation: leaf-spin-out 0.45s ease-in forwards;
+}
+
+.themed-task-check__leaf-spin {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes leaf-spin-out {
+  0% { transform: rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: rotate(180deg) scale(0.2); opacity: 0; }
+}
+
+.themed-task-check--yukigeshiki.is-done[data-anim="1"] {
+  animation: crystal-flash 0.35s ease-out;
+}
+
+@keyframes crystal-flash {
+  0% { box-shadow: 0 0 0 0 rgba(111, 163, 194, 0); }
+  40% { box-shadow: 0 0 8px 2px rgba(111, 163, 194, 0.75); }
+  100% { box-shadow: 0 0 0 0 rgba(111, 163, 194, 0); }
+}
+
+.themed-task-check--kami.is-done .themed-task-check__ink {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.4s ease;
+}
+
+.themed-task-check--kami .themed-task-check__ink {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+}
+
+.themed-task-check--yofukashi.is-done[data-anim="1"] .themed-task-check__glyph {
+  animation: star-pop 0.35s ease-out;
+}
+
+@keyframes star-pop {
+  0% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.18); filter: brightness(1.6); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+.themed-task-check--furikaeri.is-done {
+  background: #ad8c5c;
+  border-radius: 9999px;
+}
+
+.themed-task-check--furikaeri.is-done[data-anim="1"]::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.55);
+  animation: photo-flash 0.2s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes photo-flash {
+  0% { opacity: 0; }
+  30% { opacity: 0.6; }
+  100% { opacity: 0; }
+}
+
+.themed-task-check__glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.themed-task-check__glyph svg {
+  display: block;
+}

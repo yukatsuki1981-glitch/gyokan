@@ -282,6 +282,12 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
   },
 ];
 
+export const PAID_THEME_IDS = GYOKAN_THEMES.filter((t) => !t.free).map((t) => t.id);
+
+export function isPaidThemeId(id: string): id is GyokanThemeId {
+  return PAID_THEME_IDS.includes(id as GyokanThemeId);
+}
+
 export function getThemeById(id: string | null | undefined): GyokanTheme {
   return GYOKAN_THEMES.find((t) => t.id === id) ?? GYOKAN_THEMES[0];
 }
