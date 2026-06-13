@@ -9,7 +9,7 @@ import {
   Zen_Maru_Gothic,
 } from "next/font/google";
 import { PRODUCTION_SITE_URL } from "@/lib/site-url";
-import { DEFAULT_THEME_ID, GYOKAN_THEME_STORAGE_KEY } from "@/lib/gyokan/themes";
+import { DEFAULT_THEME_ID, GYOKAN_THEMES, GYOKAN_THEME_STORAGE_KEY, PAID_THEMES_UNLOCKED } from "@/lib/gyokan/themes";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -87,14 +87,21 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const allowedThemeBootstrapMap = Object.fromEntries(
+  (PAID_THEMES_UNLOCKED ? GYOKAN_THEMES : GYOKAN_THEMES.filter((t) => t.free)).map((t) => [
+    t.id,
+    1,
+  ]),
+);
+
 const themeBootstrapScript = `
 (function () {
   try {
     var key = ${JSON.stringify(GYOKAN_THEME_STORAGE_KEY)};
     var fallback = ${JSON.stringify(DEFAULT_THEME_ID)};
-    var free = { default: 1, mono: 1, forest: 1 };
+    var allowed = ${JSON.stringify(allowedThemeBootstrapMap)};
     var raw = localStorage.getItem(key) || fallback;
-    var id = free[raw] ? raw : fallback;
+    var id = allowed[raw] ? raw : fallback;
     document.documentElement.dataset.theme = id;
   } catch (e) {
     document.documentElement.dataset.theme = ${JSON.stringify(DEFAULT_THEME_ID)};

@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import {
   GYOKAN_THEMES,
   getThemeById,
+  isThemeSelectable,
+  PAID_THEMES_UNLOCKED,
   type GyokanThemeId,
 } from "@/lib/gyokan/themes";
 import { useGyokanTheme } from "@/components/gyokan-theme-provider";
@@ -116,12 +118,14 @@ export function ThemePickerModal({
     <>
       <ThemePickerOverlay onClose={onClose} title="テーマ">
         <p className="mb-4 text-[13px] leading-relaxed text-[var(--gyokan-text2)]">
-          無料テーマはすぐに切り替えられます。有料テーマはプラン加入後に利用できます。
+          {PAID_THEMES_UNLOCKED
+            ? "開発者モード: 全テーマを選択できます。"
+            : "無料テーマはすぐに切り替えられます。有料テーマはプラン加入後に利用できます。"}
         </p>
         <ul className="space-y-2">
           {GYOKAN_THEMES.map((theme) => {
             const selected = theme.id === themeId;
-            const locked = !theme.free;
+            const locked = !isThemeSelectable(theme);
             return (
               <li key={theme.id}>
                 <button

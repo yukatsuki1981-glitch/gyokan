@@ -6,6 +6,7 @@ import {
   DEFAULT_THEME_ID,
   getThemeById,
   GYOKAN_THEME_STORAGE_KEY,
+  isThemeSelectable,
   readStoredThemeId,
   writeStoredThemeId,
   type GyokanTheme,
@@ -62,7 +63,7 @@ export function useGyokanTheme(): GyokanThemeContextValue {
 
   const setThemeId = useCallback((id: GyokanThemeId) => {
     const next = getThemeById(id);
-    if (!next.free) return false;
+    if (!isThemeSelectable(next)) return false;
     writeStoredThemeId(id);
     applyThemeToDocument(next);
     setThemeIdState(id);
