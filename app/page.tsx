@@ -1803,62 +1803,126 @@ function groupCasesByProjectOrder(
   return groups;
 }
 
-function ProjectCaseGroup({
+type HomeCaseGridItem = {
+  caseItem: CaseItem;
+  project: string;
+  showProjectLabel: boolean;
+};
+
+function buildHomeCaseGridItems(
+  groups: { project: string; cases: CaseItem[] }[],
+): HomeCaseGridItem[] {
+  const items: HomeCaseGridItem[] = [];
+  for (const group of groups) {
+    group.cases.forEach((caseItem, index) => {
+      items.push({
+        caseItem,
+        project: group.project,
+        showProjectLabel: index === 0,
+      });
+    });
+  }
+  return items;
+}
+
+function chunkHomeCaseRows(items: HomeCaseGridItem[], cols: number): HomeCaseGridItem[][] {
+  const rows: HomeCaseGridItem[][] = [];
+  for (let i = 0; i < items.length; i += cols) {
+    rows.push(items.slice(i, i + cols));
+  }
+  return rows;
+}
+
+function HomeCaseGridCell({
+  caseItem,
   project,
-  cases,
+  showProjectLabel,
+  sortable,
   onToggle,
   onOpen,
-  sortable = false,
 }: {
+  caseItem: CaseItem;
   project: string;
-  cases: CaseItem[];
+  showProjectLabel: boolean;
+  sortable?: boolean;
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
-  sortable?: boolean;
 }) {
   const { colors } = useProjectColors();
   const { bg } = tagColor(project, colors);
-  const cols = Math.min(Math.max(cases.length, 1), HOME_CASE_MAX_COLS);
 
   return (
     <div
-      className="max-w-full shrink-0 rounded-xl border border-black/[0.06] p-1.5 w-full lg:w-[calc(100%/var(--home-case-cols-max)*var(--home-case-cols))]"
-      style={{
-        backgroundColor: bg,
-        ["--home-case-cols" as string]: cols,
-        ["--home-case-cols-max" as string]: HOME_CASE_MAX_COLS,
-      }}
+      className="min-w-0 rounded-xl border border-black/[0.06] p-1.5"
+      style={{ backgroundColor: bg }}
     >
-      <p
-        className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
-        title={project}
-      >
-        {project}
-      </p>
-      <div
-        className="grid w-full gap-1"
-        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-      >
-        {cases.map((c) =>
-          sortable ? (
-            <SortableCaseCard
-              key={c.id}
-              item={c}
+      {showProjectLabel ? (
+        <p
+          className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
+          title={project}
+        >
+          {project}
+        </p>
+      ) : (
+        <div className="mb-1 h-[14px]" aria-hidden />
+      )}
+      {sortable ? (
+        <SortableCaseCard
+          item={caseItem}
+          onToggle={onToggle}
+          onOpen={onOpen}
+          hideStatus
+        />
+      ) : (
+        <CaseCard
+          item={caseItem}
+          onToggle={onToggle}
+          onOpen={onOpen}
+          hideStatus
+        />
+      )}
+    </div>
+  );
+}
+
+function HomeCaseGridRows({
+  groups,
+  sortable,
+  onToggle,
+  onOpen,
+}: {
+  groups: { project: string; cases: CaseItem[] }[];
+  sortable?: boolean;
+  onToggle: (id: string) => void;
+  onOpen: (item: CaseItem) => void;
+}) {
+  const rows = useMemo(() => {
+    const items = buildHomeCaseGridItems(groups);
+    return chunkHomeCaseRows(items, HOME_CASE_MAX_COLS);
+  }, [groups]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="flex w-full flex-col gap-1">
+      {rows.map((row, rowIndex) => (
+        <div
+          key={`case-row-${rowIndex}`}
+          className="grid w-full grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-5"
+        >
+          {row.map(({ caseItem, project, showProjectLabel }) => (
+            <HomeCaseGridCell
+              key={caseItem.id}
+              caseItem={caseItem}
+              project={project}
+              showProjectLabel={showProjectLabel}
+              sortable={sortable}
               onToggle={onToggle}
               onOpen={onOpen}
-              hideStatus
             />
-          ) : (
-            <CaseCard
-              key={c.id}
-              item={c}
-              onToggle={onToggle}
-              onOpen={onOpen}
-              hideStatus
-            />
-          ),
-        )}
-      </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -1896,31 +1960,21 @@ function HomeCasesByProjectGrid({
           items={ongoingCases.map((c) => c.id)}
           strategy={rectSortingStrategy}
         >
-          <div className="flex flex-wrap items-start gap-2">
-            {ongoingGroups.map((g) => (
-              <ProjectCaseGroup
-                key={g.project}
-                project={g.project}
-                cases={g.cases}
-                onToggle={onToggle}
-                onOpen={onOpen}
-                sortable
-              />
-            ))}
-          </div>
+          <HomeCaseGridRows
+            groups={ongoingGroups}
+            sortable
+            onToggle={onToggle}
+            onOpen={onOpen}
+          />
         </SortableContext>
       </DndContext>
       {completedGroups.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-start gap-2 border-t border-black/[0.04] pt-2">
-          {completedGroups.map((g) => (
-            <ProjectCaseGroup
-              key={`done-${g.project}`}
-              project={g.project}
-              cases={g.cases}
-              onToggle={onToggle}
-              onOpen={onOpen}
-            />
-          ))}
+        <div className="mt-2 border-t border-black/[0.04] pt-2">
+          <HomeCaseGridRows
+            groups={completedGroups}
+            onToggle={onToggle}
+            onOpen={onOpen}
+          />
         </div>
       )}
     </>
