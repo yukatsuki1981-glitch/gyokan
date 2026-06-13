@@ -131,7 +131,7 @@ type SidebarProject = {
   name: string;
 };
 
-type MobileTab = "home" | "cases" | "projects" | "memo" | "more";
+type MobileTab = "home" | "projects" | "memo" | "more";
 
 /* ─── Constants ─── */
 
@@ -873,6 +873,12 @@ function Icon({ name, className = "h-5 w-5" }: { name: string; className?: strin
       </svg>
     ),
     x: <svg {...p}><path d="M6 6l12 12M18 6 6 18" /></svg>,
+    settings: (
+      <svg {...p}>
+        <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+      </svg>
+    ),
     trash: <svg {...p}><path d="M4 7h16M9 7V5h6v2M10 11v6M14 11v6M6 7l1 13h10l1-13" /></svg>,
   };
 
@@ -4031,44 +4037,6 @@ function DailyMemoBoard({
   );
 }
 
-/* ─── Monthly Stats ─── */
-
-function MonthlyStats({
-  activeCases,
-  completedCases,
-  activeTasks,
-  completedTasks,
-}: {
-  activeCases: number;
-  completedCases: number;
-  activeTasks: number;
-  completedTasks: number;
-}) {
-  return (
-    <div className="space-y-5">
-      <div className="flex gap-4">
-        <div className="w-1 shrink-0 rounded-full bg-blue-500" />
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">案件</p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums text-gray-900">{activeCases}<span className="ml-2 text-[13px] font-normal text-gray-400">件 進行中</span></p>
-          <p className="mt-0.5 text-[12px] text-gray-400">完了 {completedCases}件</p>
-        </div>
-      </div>
-      <div className="flex gap-4">
-        <div className="w-1 shrink-0 rounded-full bg-emerald-400" />
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">タスク</p>
-          <p className="mt-2 text-2xl font-semibold tabular-nums text-gray-900">{activeTasks}<span className="ml-2 text-[13px] font-normal text-gray-400">件 未完了</span></p>
-          <p className="mt-0.5 text-[12px] text-gray-400">完了 {completedTasks}件</p>
-        </div>
-      </div>
-      <button type="button" className="flex w-full items-center justify-between text-[13px] font-medium text-blue-600 transition-all duration-200 hover:text-blue-700">
-        レポートを見る <span>›</span>
-      </button>
-    </div>
-  );
-}
-
 /* ─── Add Project Modal ─── */
 
 function AddProjectModalForm({
@@ -4675,11 +4643,6 @@ function AppSettingsPanel({
   onAppTitleChange,
   onOpenTheme,
   onSignOut,
-  showMonthlyStats = false,
-  activeCases = 0,
-  completedCases = 0,
-  activeTasks = 0,
-  completedTasks = 0,
 }: {
   userEmail?: string | null;
   loadError?: string | null;
@@ -4688,11 +4651,6 @@ function AppSettingsPanel({
   onAppTitleChange: (title: string) => void;
   onOpenTheme: () => void;
   onSignOut: () => void;
-  showMonthlyStats?: boolean;
-  activeCases?: number;
-  completedCases?: number;
-  activeTasks?: number;
-  completedTasks?: number;
 }) {
   return (
     <section className="space-y-4">
@@ -4747,16 +4705,6 @@ function AppSettingsPanel({
           ログアウト
         </button>
       </Card>
-      {showMonthlyStats && (
-        <Card className="p-6">
-          <MonthlyStats
-            activeCases={activeCases}
-            completedCases={completedCases}
-            activeTasks={activeTasks}
-            completedTasks={completedTasks}
-          />
-        </Card>
-      )}
     </section>
   );
 }
@@ -4844,7 +4792,6 @@ export default function Home() {
   const [activeProject, setActiveProject] = useState<string>(ALL_PROJECTS_LABEL);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
   const [calendarPeekReset, setCalendarPeekReset] = useState(0);
-  const [casesListOpen, setCasesListOpen] = useState(false);
   const viewDateInitialized = useRef(false);
 
   const viewDateLabel = formatDateJa(viewDateISO);
@@ -4977,10 +4924,6 @@ export default function Home() {
     () => cases.filter((c) => c.done).length,
     [cases],
   );
-  const openCasesList = useCallback(() => {
-    setCasesListOpen(true);
-    setMobileTab("home");
-  }, []);
 
   const displayedTasks = useMemo(() => {
     let list = topViewTasks;
@@ -5339,7 +5282,6 @@ export default function Home() {
                 案件の保存に失敗しました: {caseSaveError}
               </p>
             )}
-            {!casesListOpen && (
             <header className="mb-2 lg:mb-3">
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
                 <button type="button" className="shrink-0 rounded-xl p-2 text-gray-500 hover:bg-white"><Icon name="menu" className="h-5 w-5" /></button>
@@ -5374,18 +5316,8 @@ export default function Home() {
                 <RefreshButton iconClassName="h-4 w-4" className="ml-auto rounded-lg p-1.5" onRefresh={handleRefresh} />
               </div>
             </header>
-            )}
 
-            {casesListOpen ? (
-              <CasesListSection
-                cases={orderedCases}
-                onToggle={toggleCase}
-                onOpen={setSelectedCase}
-                onBack={() => setCasesListOpen(false)}
-                sensors={sensors}
-                onDragEnd={handleCaseDragEnd}
-              />
-            ) : mobileTab === "projects" ? (
+            {mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
                   projects={projectNames}
@@ -5432,6 +5364,16 @@ export default function Home() {
                   )}
                 </>
               )
+            ) : mobileTab === "more" ? (
+              <AppSettingsPanel
+                userEmail={user.email}
+                loadError={loadError}
+                caseSaveError={caseSaveError}
+                appTitle={appTitle}
+                onAppTitleChange={handleAppTitleChange}
+                onOpenTheme={() => setThemePickerOpen(true)}
+                onSignOut={() => void signOut()}
+              />
             ) : (
               <>
             <div className="flex flex-col">
@@ -5527,25 +5469,7 @@ export default function Home() {
             )}
 
                 </div>
-
-                    </>
-                  )}
-
-            {!casesListOpen && mobileTab === "more" && (
-              <AppSettingsPanel
-                userEmail={user.email}
-                loadError={loadError}
-                caseSaveError={caseSaveError}
-                appTitle={appTitle}
-                onAppTitleChange={handleAppTitleChange}
-                onOpenTheme={() => setThemePickerOpen(true)}
-                onSignOut={() => void signOut()}
-                showMonthlyStats
-                activeCases={ongoingCases.length}
-                completedCases={completedCasesCount}
-                activeTasks={activeTasks.length}
-                completedTasks={completedTasks.length}
-              />
+              </>
             )}
           </div>
         </main>
@@ -5573,15 +5497,6 @@ export default function Home() {
               viewDateISO={viewDateISO}
               onSave={saveDailyDiary}
               onOpenList={() => setDiaryListOpen(true)}
-            />
-          </Card>
-          <Card className="p-6">
-            <h3 className="mb-5 text-sm font-semibold text-gray-900">今月の状況</h3>
-            <MonthlyStats
-              activeCases={ongoingCases.length}
-              completedCases={completedCasesCount}
-              activeTasks={activeTasks.length}
-              completedTasks={completedTasks.length}
             />
           </Card>
         </aside>
@@ -5630,37 +5545,28 @@ export default function Home() {
           {([
             { id: "home" as const, label: "ホーム", icon: "home" },
             { id: "projects" as const, label: "プロジェクト", icon: "folder" },
-            { id: "cases" as const, label: "案件", icon: "cases" },
             { id: "memo" as const, label: "メモ", icon: "memo" },
             { id: "diary" as const, label: "日記", icon: "diary" },
-            { id: "more" as const, label: "その他", icon: "more" },
+            { id: "more" as const, label: "設定", icon: "settings" },
           ]).map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => {
-                if (tab.id === "cases") {
+                if (tab.id === "projects") {
                   setMemoSheetOpen(false);
                   setDiarySheetOpen(false);
-                  openCasesList();
-                } else if (tab.id === "projects") {
-                  setMemoSheetOpen(false);
-                  setDiarySheetOpen(false);
-                  setCasesListOpen(false);
                   setActiveProject(ALL_PROJECTS_LABEL);
                   setMobileTab("projects");
                 } else if (tab.id === "memo") {
-                  setCasesListOpen(false);
                   setDiarySheetOpen(false);
                   setMemoSheetOpen(true);
                 } else if (tab.id === "diary") {
-                  setCasesListOpen(false);
                   setMemoSheetOpen(false);
                   setDiarySheetOpen(true);
                 } else {
                   setMemoSheetOpen(false);
                   setDiarySheetOpen(false);
-                  setCasesListOpen(false);
                   setMobileTab(tab.id);
                   if (tab.id === "home") {
                     setCalendarPeekReset((n) => n + 1);
@@ -5668,13 +5574,11 @@ export default function Home() {
                 }
               }}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-all duration-200 ${
-                (tab.id === "cases"
-                  ? casesListOpen
-                  : tab.id === "memo"
-                    ? memoSheetOpen
-                    : tab.id === "diary"
-                      ? diarySheetOpen
-                      : mobileTab === tab.id)
+                tab.id === "memo"
+                  ? memoSheetOpen
+                  : tab.id === "diary"
+                    ? diarySheetOpen
+                    : mobileTab === tab.id
                   ? "text-[var(--gyokan-accent2)]"
                   : "text-gray-400"
               }`}
@@ -5727,11 +5631,6 @@ export default function Home() {
               setThemePickerOpen(true);
             }}
             onSignOut={() => void signOut()}
-            showMonthlyStats
-            activeCases={ongoingCases.length}
-            completedCases={completedCasesCount}
-            activeTasks={activeTasks.length}
-            completedTasks={completedTasks.length}
           />
         </div>
       </DetailOverlay>
