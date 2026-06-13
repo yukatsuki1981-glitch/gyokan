@@ -2401,36 +2401,90 @@ function ProjectMemoEditor({
 
 /* ─── Project Detail ─── */
 
+function SortableMobileProjectRow({
+  project,
+  activeCount,
+  accent,
+  onSelect,
+}: {
+  project: SidebarProject;
+  activeCount: number;
+  accent: string;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: project.id,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: isDragging ? undefined : transition,
+        zIndex: isDragging ? 50 : undefined,
+      }}
+      className={`flex items-center border-b border-black/[0.04] last:border-b-0 ${
+        isDragging ? "bg-white shadow-sm" : ""
+      }`}
+    >
+      <button
+        type="button"
+        aria-label={`${project.name}の順番を変更`}
+        className="flex shrink-0 cursor-grab items-center self-stretch px-3 py-3.5 text-gray-300 hover:text-gray-500 active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <Icon name="grip" className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 items-center gap-3 py-3.5 pr-4 text-left transition-colors hover:bg-black/[0.02]"
+      >
+        <ProjectColorSwatch accent={accent} size="sm" />
+        <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-gray-900">{project.name}</span>
+        <span className="shrink-0 text-[13px] text-gray-400">進行中 {activeCount}件</span>
+        <Icon name="chevronRight" className="h-4 w-4 shrink-0 text-gray-300" />
+      </button>
+    </div>
+  );
+}
+
 function MobileProjectList({
   projects,
   cases,
+  sensors,
   onSelect,
+  onDragEnd,
 }: {
-  projects: readonly string[];
+  projects: readonly SidebarProject[];
   cases: CaseItem[];
+  sensors: ReturnType<typeof useSensors>;
   onSelect: (name: string) => void;
+  onDragEnd: (event: DragEndEvent) => void;
 }) {
   const { colors } = useProjectColors();
   return (
     <section className="mb-4 lg:hidden">
       <h3 className="mb-2 text-[17px] font-semibold tracking-tight text-gray-900">プロジェクト</h3>
-      <Card className="overflow-hidden divide-y divide-black/[0.04] p-0">
-        {projects.map((name) => {
-          const activeCount = cases.filter((c) => c.project === name && !c.done).length;
-          return (
-            <button
-              key={name}
-              type="button"
-              onClick={() => onSelect(name)}
-              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-black/[0.02]"
-            >
-              <ProjectColorSwatch accent={colors[name]} size="sm" />
-              <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-gray-900">{name}</span>
-              <span className="shrink-0 text-[13px] text-gray-400">進行中 {activeCount}件</span>
-              <Icon name="chevronRight" className="h-4 w-4 shrink-0 text-gray-300" />
-            </button>
-          );
-        })}
+      <Card className="overflow-hidden p-0">
+        <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
+          <SortableContext items={projects.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+            {projects.map((project) => {
+              const activeCount = cases.filter((c) => c.project === project.name && !c.done).length;
+              return (
+                <SortableMobileProjectRow
+                  key={project.id}
+                  project={project}
+                  activeCount={activeCount}
+                  accent={colors[project.name] ?? DEFAULT_PROJECT_ACCENT}
+                  onSelect={() => onSelect(project.name)}
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
       </Card>
     </section>
   );
@@ -5320,9 +5374,11 @@ export default function Home() {
             {mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
-                  projects={projectNames}
+                  projects={projects}
                   cases={cases}
+                  sensors={sensors}
                   onSelect={setActiveProject}
+                  onDragEnd={handleProjectDragEnd}
               />
             ) : (
               <>
