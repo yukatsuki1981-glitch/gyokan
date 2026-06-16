@@ -2015,9 +2015,13 @@ function homeCaseCellShellClass(connections: HomeCaseCellConnections): string {
   if (!connections.bottom && !connections.left) parts.push("rounded-bl-xl");
   if (!connections.bottom && !connections.right) parts.push("rounded-br-xl");
   if (connections.top) parts.push("border-t-0 pt-0");
+  else parts.push("mt-0.5");
   if (connections.bottom) parts.push("border-b-0 pb-0");
+  else parts.push("mb-0.5");
   if (connections.left) parts.push("border-l-0 pl-0");
+  else parts.push("ml-0.5");
   if (connections.right) parts.push("border-r-0 pr-0");
+  else parts.push("mr-0.5");
   return parts.join(" ");
 }
 
