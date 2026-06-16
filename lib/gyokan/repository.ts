@@ -433,6 +433,11 @@ export async function deleteTaskDb(supabase: SupabaseClient, id: string) {
   if (error) throw error;
 }
 
+export async function deleteCaseDb(supabase: SupabaseClient, id: string) {
+  const { error } = await supabase.from("cases").delete().eq("id", id);
+  if (error) throw error;
+}
+
 async function upsertCaseRow(
   supabase: SupabaseClient,
   row: ReturnType<typeof mapCaseToDb>,

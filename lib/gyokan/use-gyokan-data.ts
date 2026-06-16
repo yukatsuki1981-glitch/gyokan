@@ -18,6 +18,7 @@ import {
   deleteDailyDiaryDb,
   deleteDailyMemoDb,
   deleteTaskDb,
+  deleteCaseDb,
   fetchGyokanData,
   projectsToColorMap,
   saveLastViewDate,
@@ -699,6 +700,23 @@ export function useGyokanData() {
     });
   }, [persistCase]);
 
+  const deleteCase = useCallback((id: string) => {
+    clearDraft("case", id);
+    setCases((prev) => {
+      const next = prev.filter((c) => c.id !== id);
+      casesRef.current = next;
+      return next;
+    });
+    setTasks((prev) => {
+      const next = prev.map((t) =>
+        t.caseId === id ? { ...t, caseId: undefined } : t,
+      );
+      void persistTasks(next);
+      return next;
+    });
+    void deleteCaseDb(getSupabase(), id);
+  }, [getSupabase, persistTasks]);
+
   const replaceCases = useCallback((updater: (prev: AppCase[]) => AppCase[]) => {
     setCases((prev) => {
       const next = assignSortOrders(updater(prev));
@@ -901,6 +919,7 @@ export function useGyokanData() {
     addCase,
     updateCase,
     toggleCase,
+    deleteCase,
     replaceCases,
     saveProjectMemo,
     deleteProjectMemo,

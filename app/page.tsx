@@ -1242,6 +1242,7 @@ function CaseDetailEditor({
   caseTasks,
   onToggleTask,
   onOpenTask,
+  onDelete,
 }: {
   item: CaseItem;
   onSave: (
@@ -1261,6 +1262,7 @@ function CaseDetailEditor({
   caseTasks?: Task[];
   onToggleTask?: (id: string) => void;
   onOpenTask?: (task: Task) => void;
+  onDelete?: () => void;
 }) {
   const { projectOptions } = useProjectColors();
   const { showProjects, projectLabel, caseLabel } = useDisplaySettings();
@@ -1381,7 +1383,19 @@ function CaseDetailEditor({
           </button>
         </div>
       )}
-      <div className={`flex gap-2 ${layout === "page" ? "mt-5 justify-end" : "mt-5 justify-end"}`}>
+      <div className={`mt-5 flex items-center justify-between gap-2 ${layout === "modal" ? "justify-end" : ""}`}>
+        {layout === "page" && onDelete ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded-xl px-4 py-2 text-[13px] font-medium text-rose-500 hover:bg-rose-50"
+          >
+            削除する
+          </button>
+        ) : layout === "page" ? (
+          <span />
+        ) : null}
+        <div className={`flex gap-2 ${layout === "modal" ? "" : "justify-end"}`}>
         {layout === "modal" && onClose && (
         <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
         )}
@@ -1391,6 +1405,7 @@ function CaseDetailEditor({
         {layout === "page" && (
           <p className="text-[11px] text-gray-300">入力内容は自動保存されます</p>
         )}
+        </div>
       </div>
     </div>
   );
@@ -1825,7 +1840,7 @@ function SortableCaseCard({
   );
 }
 
-const HOME_CASE_MAX_COLS = 5;
+const HOME_CASE_MAX_COLS = 4;
 
 function groupCasesByProjectOrder(
   cases: CaseItem[],
@@ -1895,7 +1910,7 @@ function pickNextHomeCaseSegment(
   return { group: earliest, take: slotsLeft };
 }
 
-/** Pack project groups into full-width rows; may reorder projects slightly to fill five slots. */
+/** Pack project groups into full-width rows; may reorder projects slightly to fill four slots. */
 function packProjectGroupsIntoRows(
   groups: { project: string; cases: CaseItem[] }[],
   projectOrder: string[],
@@ -2083,7 +2098,7 @@ function HomeCaseGridRows({
         {rows.map((row, rowIndex) => (
           <div
             key={`case-row-${rowIndex}`}
-            className="grid w-full grid-cols-5 gap-1"
+            className="grid w-full grid-cols-4 gap-1"
           >
             {row.map((segment, segmentIndex) => (
               <HomeCaseRowSegmentBlock
@@ -2184,6 +2199,7 @@ function CaseDetailSection({
   onAddTask,
   onToggleTask,
   onOpenTask,
+  onDelete,
   className = "",
 }: {
   item: CaseItem;
@@ -2204,6 +2220,7 @@ function CaseDetailSection({
   onAddTask?: () => void;
   onToggleTask?: (id: string) => void;
   onOpenTask?: (task: Task) => void;
+  onDelete?: () => void;
   className?: string;
 }) {
   const { projectLabel } = useDisplaySettings();
@@ -2248,6 +2265,7 @@ function CaseDetailSection({
           caseTasks={caseTasks}
           onToggleTask={onToggleTask}
           onOpenTask={onOpenTask}
+          onDelete={onDelete}
         />
       </Card>
     </section>
@@ -4907,6 +4925,7 @@ export default function Home() {
     replaceCases,
     updateCase,
     toggleCase,
+    deleteCase,
     deleteTask,
     addCase,
     saveProjectMemo,
@@ -5365,6 +5384,15 @@ export default function Home() {
     setViewingCaseId(item.id);
   }, []);
 
+  const handleDeleteCase = useCallback(
+    (id: string) => {
+      deleteCase(id);
+      setViewingCaseId((prev) => (prev === id ? null : prev));
+      setSelectedCase((prev) => (prev?.id === id ? null : prev));
+    },
+    [deleteCase],
+  );
+
   const mobileTabs = useMemo(() => {
     const tabs: {
       id: MobileTab;
@@ -5569,6 +5597,7 @@ export default function Home() {
                       onAddTask={() => openTaskModalForCase(viewingCase)}
                       onToggleTask={toggleTask}
                       onOpenTask={setSelectedTask}
+                      onDelete={() => handleDeleteCase(viewingCase.id)}
                     />
                   ) : (
                     <>
@@ -5633,6 +5662,7 @@ export default function Home() {
                   onAddTask={() => openTaskModalForCase(viewingCase)}
                   onToggleTask={toggleTask}
                   onOpenTask={setSelectedTask}
+                  onDelete={() => handleDeleteCase(viewingCase.id)}
                   className="order-2 mb-4 lg:order-2 lg:mb-4"
                 />
               ) : (
