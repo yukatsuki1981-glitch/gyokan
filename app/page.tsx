@@ -2008,21 +2008,37 @@ function getHomeCaseCellConnections(
   };
 }
 
-function homeCaseCellShellClass(connections: HomeCaseCellConnections): string {
-  const parts = ["min-w-0 border border-black/[0.06] p-1.5"];
+function homeCaseCellMarginClass(connections: HomeCaseCellConnections): string {
+  const parts = ["relative min-w-0"];
+  if (!connections.top) parts.push("mt-0.5");
+  if (!connections.bottom) parts.push("mb-0.5");
+  if (!connections.left) parts.push("ml-0.5");
+  if (!connections.right) parts.push("mr-0.5");
+  return parts.join(" ");
+}
+
+function homeCaseCellBgClass(connections: HomeCaseCellConnections): string {
+  const parts = ["absolute border border-black/[0.06]"];
   if (!connections.top && !connections.left) parts.push("rounded-tl-xl");
   if (!connections.top && !connections.right) parts.push("rounded-tr-xl");
   if (!connections.bottom && !connections.left) parts.push("rounded-bl-xl");
   if (!connections.bottom && !connections.right) parts.push("rounded-br-xl");
-  if (connections.top) parts.push("border-t-0 pt-0");
-  else parts.push("mt-0.5");
-  if (connections.bottom) parts.push("border-b-0 pb-0");
-  else parts.push("mb-0.5");
-  if (connections.left) parts.push("border-l-0 pl-0");
-  else parts.push("ml-0.5");
-  if (connections.right) parts.push("border-r-0 pr-0");
-  else parts.push("mr-0.5");
+  if (connections.top) parts.push("border-t-0 -top-0.5");
+  else parts.push("top-0");
+  if (connections.bottom) parts.push("border-b-0 -bottom-0.5");
+  else parts.push("bottom-0");
+  if (connections.left) parts.push("border-l-0 -left-0.5");
+  else parts.push("left-0");
+  if (connections.right) parts.push("border-r-0 -right-0.5");
+  else parts.push("right-0");
   return parts.join(" ");
+}
+
+function homeCaseCellContentClass(connections: HomeCaseCellConnections): string {
+  // Keep label row aligned across a grid row: disconnected cells use mt-0.5 + pt-1.5 (8px).
+  return connections.top
+    ? "relative z-10 px-1.5 pb-1.5 pt-2"
+    : "relative z-10 p-1.5";
 }
 
 function HomeCaseGridCell({
@@ -2043,10 +2059,12 @@ function HomeCaseGridCell({
   const { bg } = tagColor(cell.project, colors);
 
   return (
-    <div
-      className={homeCaseCellShellClass(connections)}
-      style={{ backgroundColor: showProjects ? bg : "rgba(255,255,255,0.55)" }}
-    >
+    <div className={homeCaseCellMarginClass(connections)}>
+      <div
+        className={homeCaseCellBgClass(connections)}
+        style={{ backgroundColor: showProjects ? bg : "rgba(255,255,255,0.55)" }}
+      />
+      <div className={homeCaseCellContentClass(connections)}>
       {showProjects && cell.showProjectLabel ? (
         <p
           className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
@@ -2072,6 +2090,7 @@ function HomeCaseGridCell({
           hideStatus
         />
       )}
+      </div>
     </div>
   );
 }
