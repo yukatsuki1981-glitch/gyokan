@@ -1955,6 +1955,123 @@ function flattenPackedCaseIds(rows: HomeCaseRowSegment[][]) {
   return rows.flatMap((row) => row.flatMap((segment) => segment.cases.map((c) => c.id)));
 }
 
+type HomeCaseGridCell = {
+  caseItem: CaseItem;
+  project: string;
+  showProjectLabel: boolean;
+};
+
+type HomeCaseCellConnections = {
+  top: boolean;
+  right: boolean;
+  bottom: boolean;
+  left: boolean;
+};
+
+function buildHomeCaseCellGrid(rows: HomeCaseRowSegment[][]): (HomeCaseGridCell | null)[][] {
+  return rows.map((row) => {
+    const cells: (HomeCaseGridCell | null)[] = Array.from(
+      { length: HOME_CASE_MAX_COLS },
+      () => null,
+    );
+    let col = 0;
+    for (const segment of row) {
+      segment.cases.forEach((caseItem, index) => {
+        if (col + index < HOME_CASE_MAX_COLS) {
+          cells[col + index] = {
+            caseItem,
+            project: segment.project,
+            showProjectLabel: index === 0 && segment.showProjectLabel,
+          };
+        }
+      });
+      col += segment.cases.length;
+    }
+    return cells;
+  });
+}
+
+function getHomeCaseCellConnections(
+  grid: (HomeCaseGridCell | null)[][],
+  row: number,
+  col: number,
+): HomeCaseCellConnections {
+  const cell = grid[row]?.[col];
+  if (!cell) return { top: false, right: false, bottom: false, left: false };
+  const project = cell.project;
+  const sameProject = (r: number, c: number) => grid[r]?.[c]?.project === project;
+  return {
+    top: sameProject(row - 1, col),
+    right: col + 1 < HOME_CASE_MAX_COLS && sameProject(row, col + 1),
+    bottom: sameProject(row + 1, col),
+    left: col > 0 && sameProject(row, col - 1),
+  };
+}
+
+function homeCaseCellShellClass(connections: HomeCaseCellConnections): string {
+  const parts = ["min-w-0 border border-black/[0.06] p-1.5"];
+  if (!connections.top && !connections.left) parts.push("rounded-tl-xl");
+  if (!connections.top && !connections.right) parts.push("rounded-tr-xl");
+  if (!connections.bottom && !connections.left) parts.push("rounded-bl-xl");
+  if (!connections.bottom && !connections.right) parts.push("rounded-br-xl");
+  if (connections.top) parts.push("border-t-0 pt-0");
+  if (connections.bottom) parts.push("border-b-0 pb-0");
+  if (connections.left) parts.push("border-l-0 pl-0");
+  if (connections.right) parts.push("border-r-0 pr-0");
+  return parts.join(" ");
+}
+
+function HomeCaseGridCell({
+  cell,
+  connections,
+  sortable,
+  onToggle,
+  onOpen,
+}: {
+  cell: HomeCaseGridCell;
+  connections: HomeCaseCellConnections;
+  sortable?: boolean;
+  onToggle: (id: string) => void;
+  onOpen: (item: CaseItem) => void;
+}) {
+  const { colors } = useProjectColors();
+  const { showProjects } = useDisplaySettings();
+  const { bg } = tagColor(cell.project, colors);
+
+  return (
+    <div
+      className={homeCaseCellShellClass(connections)}
+      style={{ backgroundColor: showProjects ? bg : "rgba(255,255,255,0.55)" }}
+    >
+      {showProjects && cell.showProjectLabel ? (
+        <p
+          className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
+          title={cell.project}
+        >
+          {cell.project}
+        </p>
+      ) : (
+        <div className="mb-1 h-[14px]" aria-hidden />
+      )}
+      {sortable ? (
+        <SortableCaseCard
+          item={cell.caseItem}
+          onToggle={onToggle}
+          onOpen={onOpen}
+          hideStatus
+        />
+      ) : (
+        <CaseCard
+          item={cell.caseItem}
+          onToggle={onToggle}
+          onOpen={onOpen}
+          hideStatus
+        />
+      )}
+    </div>
+  );
+}
+
 function HomeCaseProjectBlock({
   project,
   cases,
@@ -2010,68 +2127,6 @@ function HomeCaseProjectBlock({
   );
 }
 
-function HomeCaseRowSegmentBlock({
-  segment,
-  sortable,
-  onToggle,
-  onOpen,
-}: {
-  segment: HomeCaseRowSegment;
-  sortable?: boolean;
-  onToggle: (id: string) => void;
-  onOpen: (item: CaseItem) => void;
-}) {
-  const { colors } = useProjectColors();
-  const { showProjects } = useDisplaySettings();
-  const { bg } = tagColor(segment.project, colors);
-  const span = segment.cases.length;
-
-  return (
-    <div
-      className="min-w-0 rounded-xl border border-black/[0.06] p-1.5 max-lg:w-full"
-      style={{
-        backgroundColor: showProjects ? bg : "rgba(255,255,255,0.55)",
-        gridColumn: span > 1 ? `span ${span}` : undefined,
-      }}
-    >
-      {showProjects && segment.showProjectLabel ? (
-        <p
-          className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
-          title={segment.project}
-        >
-          {segment.project}
-        </p>
-      ) : (
-        <div className="mb-1 h-[14px]" aria-hidden />
-      )}
-      <div
-        className="grid w-full grid-cols-1 gap-1 lg:[grid-template-columns:repeat(var(--home-case-segment-cols),minmax(0,1fr))]"
-        style={{ ["--home-case-segment-cols" as string]: span }}
-      >
-        {segment.cases.map((caseItem) =>
-          sortable ? (
-            <SortableCaseCard
-              key={caseItem.id}
-              item={caseItem}
-              onToggle={onToggle}
-              onOpen={onOpen}
-              hideStatus
-            />
-          ) : (
-            <CaseCard
-              key={caseItem.id}
-              item={caseItem}
-              onToggle={onToggle}
-              onOpen={onOpen}
-              hideStatus
-            />
-          ),
-        )}
-      </div>
-    </div>
-  );
-}
-
 function HomeCaseGridRows({
   groups,
   projectOrder,
@@ -2089,28 +2144,29 @@ function HomeCaseGridRows({
     () => packProjectGroupsIntoRows(groups, projectOrder, HOME_CASE_MAX_COLS),
     [groups, projectOrder],
   );
+  const grid = useMemo(() => buildHomeCaseCellGrid(rows), [rows]);
 
   if (rows.length === 0) return null;
 
   return (
     <div className="flex w-full flex-col gap-1">
-      <div className="hidden w-full flex-col gap-1 lg:flex">
-        {rows.map((row, rowIndex) => (
-          <div
-            key={`case-row-${rowIndex}`}
-            className="grid w-full grid-cols-4 gap-1"
-          >
-            {row.map((segment, segmentIndex) => (
-              <HomeCaseRowSegmentBlock
-                key={`${rowIndex}-${segmentIndex}-${segment.cases[0]?.id ?? segment.project}`}
-                segment={segment}
+      <div className="hidden w-full lg:grid lg:grid-cols-4 lg:gap-0">
+        {grid.map((row, rowIndex) =>
+          row.map((cell, colIndex) =>
+            cell ? (
+              <HomeCaseGridCell
+                key={cell.caseItem.id}
+                cell={cell}
+                connections={getHomeCaseCellConnections(grid, rowIndex, colIndex)}
                 sortable={sortable}
                 onToggle={onToggle}
                 onOpen={onOpen}
               />
-            ))}
-          </div>
-        ))}
+            ) : (
+              <div key={`empty-${rowIndex}-${colIndex}`} aria-hidden />
+            ),
+          ),
+        )}
       </div>
       <div className="flex flex-col gap-1 lg:hidden">
         {groups.map((group) => (
