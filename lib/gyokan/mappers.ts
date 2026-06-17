@@ -13,6 +13,7 @@ import type {
   DbTask,
 } from "./types";
 import { DEFAULT_PROJECT_ACCENT } from "./constants";
+import { normalizeTaskISODate } from "./task-completed-at";
 
 export function buildProjectMaps(projects: AppProject[]) {
   const idToName: Record<string, string> = {};
@@ -67,7 +68,7 @@ export function mapDbTask(row: DbTask, idToName: Record<string, string>): AppTas
     date,
     dateEnd,
     done: row.done,
-    completedAt: row.completed_at,
+    completedAt: normalizeTaskISODate(row.completed_at),
     project: row.project_id ? (idToName[row.project_id] ?? "") : "",
     caseId: row.case_id ?? undefined,
     starred: row.starred,

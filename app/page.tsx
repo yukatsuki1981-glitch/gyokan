@@ -25,6 +25,11 @@ import {
   pickDefaultCaseId,
   taskVisibleInView,
 } from "@/lib/gyokan/task-case";
+import {
+  normalizeTaskISODate,
+  rememberTaskCompletedAt,
+  resolveTaskCompletedAt,
+} from "@/lib/gyokan/task-completed-at";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
@@ -430,21 +435,26 @@ function isRangeTask(task: Task) {
 }
 
 function getTaskCompletedDate(task: Task): string {
-  if (task.completedAt) return task.completedAt;
-  if (isRangeTask(task)) return task.dateEnd!;
-  return task.date;
+  return resolveTaskCompletedAt(task);
 }
 
 function isTaskDoneOnViewDate(task: Task, viewDate: string): boolean {
   if (!task.done) return false;
-  return viewDate === getTaskCompletedDate(task);
+  return normalizeTaskISODate(viewDate) === getTaskCompletedDate(task);
+}
+
+function isRangeTaskCompletedOn(task: Task, viewDate: string): boolean {
+  return isRangeTask(task) && isTaskDoneOnViewDate(task, viewDate);
 }
 
 function isRangeTaskVisibleOnViewDate(task: Task, viewDate: string): boolean {
   if (!isRangeTask(task)) return false;
-  if (viewDate < task.date || viewDate > task.dateEnd!) return false;
+  const day = normalizeTaskISODate(viewDate);
+  const start = normalizeTaskISODate(task.date);
+  const end = normalizeTaskISODate(task.dateEnd);
+  if (!day || !start || !end || day < start || day > end) return false;
   if (!task.done) return true;
-  return viewDate === getTaskCompletedDate(task);
+  return day === getTaskCompletedDate(task);
 }
 
 function isActiveRangeTask(task: Task, viewDate: string) {
@@ -456,11 +466,17 @@ function isRangeTaskEndingOn(task: Task, viewDate: string) {
 }
 
 function isOngoingRangeTask(task: Task, viewDate: string) {
-  return isActiveRangeTask(task, viewDate) && task.dateEnd !== viewDate;
+  if (!isActiveRangeTask(task, viewDate)) return false;
+  if (task.dateEnd === viewDate) return false;
+  if (isRangeTaskCompletedOn(task, viewDate)) return false;
+  return true;
 }
 
 function isTopSectionTask(task: Task, viewDate: string) {
-  return (!isRangeTask(task) && task.date === viewDate) || isRangeTaskEndingOn(task, viewDate);
+  if (!isRangeTask(task) && task.date === viewDate) return true;
+  if (isRangeTaskEndingOn(task, viewDate)) return true;
+  if (isRangeTaskCompletedOn(task, viewDate) && task.dateEnd !== viewDate) return true;
+  return false;
 }
 
 function formatMonthDay(iso: string) {
@@ -5459,10 +5475,12 @@ export default function Home() {
       const updated = prev.map((t) => {
         if (t.id !== id) return t;
         const nextDone = !t.done;
+        const completedAt = nextDone ? normalizeTaskISODate(viewDateISO) : null;
+        rememberTaskCompletedAt(id, completedAt);
         return {
           ...t,
           done: nextDone,
-          completedAt: nextDone ? viewDateISO : null,
+          completedAt,
         };
       });
       const task = updated.find((t) => t.id === id);

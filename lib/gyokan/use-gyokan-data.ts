@@ -13,6 +13,11 @@ import {
 } from "./task-case";
 import { parseCaseDeadlineInput } from "./date-format";
 import {
+  mergeRememberedTaskCompletedAt,
+  normalizeTaskISODate,
+  rememberTaskCompletedAt,
+} from "./task-completed-at";
+import {
   assignSortOrders,
   deleteMemoDb,
   deleteDailyDiaryDb,
@@ -304,7 +309,9 @@ export function useGyokanData() {
       const mergedCases = mergeCasesWithDrafts(data.cases);
       setCases(mergedCases);
       casesRef.current = mergedCases;
-      setTasks(mergeTasksWithDrafts(data.tasks, mergedCases));
+      setTasks(
+        mergeTasksWithDrafts(data.tasks, mergedCases).map(mergeRememberedTaskCompletedAt),
+      );
       setMemos(mergeMemosWithDrafts(data.memos));
       const mergedDailyMemos = mergeDailyMemosWithPending(data.dailyMemos);
       const consolidatedDailyMemos = consolidateDailyMemosByDate(mergedDailyMemos);
@@ -615,10 +622,14 @@ export function useGyokanData() {
       const next = prev.map((t) => {
         if (t.id !== id) return t;
         const done = !t.done;
+        const completedAt = done
+          ? normalizeTaskISODate(completedOn ?? t.date)
+          : null;
+        rememberTaskCompletedAt(id, completedAt);
         return {
           ...t,
           done,
-          completedAt: done ? (completedOn ?? t.date) : null,
+          completedAt,
         };
       });
       const updated = next.find((t) => t.id === id);
