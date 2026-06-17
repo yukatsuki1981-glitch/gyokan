@@ -1383,19 +1383,19 @@ function CaseDetailEditor({
           </button>
         </div>
       )}
-      <div className={`mt-5 flex items-center justify-between gap-2 ${layout === "modal" ? "justify-end" : ""}`}>
-        {layout === "page" && onDelete ? (
+      <div className="mt-5 flex items-center justify-between gap-2">
+        {onDelete ? (
           <button
             type="button"
             onClick={onDelete}
             className="rounded-xl px-4 py-2 text-[13px] font-medium text-rose-500 hover:bg-rose-50"
           >
-            削除する
+            削除
           </button>
-        ) : layout === "page" ? (
+        ) : (
           <span />
-        ) : null}
-        <div className={`flex gap-2 ${layout === "modal" ? "" : "justify-end"}`}>
+        )}
+        <div className={`flex gap-2 ${layout === "page" ? "justify-end" : ""}`}>
         {layout === "modal" && onClose && (
         <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
         )}
@@ -5987,6 +5987,7 @@ export default function Home() {
             caseTasks={selectedCaseTasks}
             onToggleTask={toggleTask}
             onOpenTask={setSelectedTask}
+            onDelete={() => handleDeleteCase(selectedCase.id)}
           />
         )}
       </DetailOverlay>
