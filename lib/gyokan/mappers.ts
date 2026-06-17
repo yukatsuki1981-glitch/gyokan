@@ -67,6 +67,7 @@ export function mapDbTask(row: DbTask, idToName: Record<string, string>): AppTas
     date,
     dateEnd,
     done: row.done,
+    completedAt: row.completed_at,
     project: row.project_id ? (idToName[row.project_id] ?? "") : "",
     caseId: row.case_id ?? undefined,
     starred: row.starred,
@@ -147,6 +148,7 @@ export function mapTaskToDb(
     task_date: normalized.date,
     date_end: normalized.dateEnd ?? null,
     done: normalized.done,
+    completed_at: normalized.completedAt ?? null,
     starred: normalized.starred ?? false,
     sort_order: normalized.sortOrder,
   };

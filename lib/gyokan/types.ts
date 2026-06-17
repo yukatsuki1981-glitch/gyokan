@@ -16,6 +16,7 @@ export type DbTask = {
   task_date: string;
   date_end: string | null;
   done: boolean;
+  completed_at: string | null;
   starred: boolean;
   sort_order: number;
 };
@@ -75,6 +76,7 @@ export type AppTask = {
   date: string;
   dateEnd?: string;
   done: boolean;
+  completedAt?: string | null;
   project: string;
   caseId?: string;
   starred?: boolean;

@@ -72,6 +72,7 @@ export function normalizeTaskRow(row: Row, index: number): DbTask {
     task_date: taskDate,
     date_end: dateEndRaw ?? null,
     done: Boolean(row.done),
+    completed_at: (row.completed_at as string | null) ?? null,
     starred: Boolean(row.starred ?? false),
     sort_order: Number(row.sort_order ?? index),
   };
@@ -140,6 +141,7 @@ export type TaskUpsertRow = {
   task_date: string;
   date_end: string | null;
   done: boolean;
+  completed_at?: string | null;
   starred?: boolean;
   sort_order: number;
 };
@@ -189,6 +191,7 @@ export function toLegacyTaskUpsert(row: {
   task_date: string;
   date_end: string | null;
   done: boolean;
+  completed_at?: string | null;
   starred?: boolean;
   sort_order: number;
 }) {

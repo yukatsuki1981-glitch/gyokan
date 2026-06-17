@@ -31,6 +31,7 @@ create table if not exists public.tasks (
   task_date date not null,
   date_end date,
   done boolean not null default false,
+  completed_at date,
   starred boolean not null default false,
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),

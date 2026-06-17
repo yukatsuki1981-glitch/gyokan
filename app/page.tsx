@@ -93,6 +93,7 @@ type Task = {
   date: string;
   dateEnd?: string;
   done: boolean;
+  completedAt?: string | null;
   project: string;
   caseId?: string;
   starred?: boolean;
@@ -419,6 +420,7 @@ function normalizeTask(item: Task): Task {
     ...item,
     date,
     dateEnd: item.dateEnd && item.dateEnd !== date ? item.dateEnd : undefined,
+    completedAt: item.completedAt ?? null,
     sortOrder: item.sortOrder ?? 0,
   };
 }
@@ -427,12 +429,30 @@ function isRangeTask(task: Task) {
   return !!task.dateEnd && task.dateEnd !== task.date;
 }
 
+function getTaskCompletedDate(task: Task): string {
+  if (task.completedAt) return task.completedAt;
+  if (isRangeTask(task)) return task.dateEnd!;
+  return task.date;
+}
+
+function isTaskDoneOnViewDate(task: Task, viewDate: string): boolean {
+  if (!task.done) return false;
+  return viewDate === getTaskCompletedDate(task);
+}
+
+function isRangeTaskVisibleOnViewDate(task: Task, viewDate: string): boolean {
+  if (!isRangeTask(task)) return false;
+  if (viewDate < task.date || viewDate > task.dateEnd!) return false;
+  if (!task.done) return true;
+  return viewDate === getTaskCompletedDate(task);
+}
+
 function isActiveRangeTask(task: Task, viewDate: string) {
-  return isRangeTask(task) && viewDate >= task.date && viewDate <= task.dateEnd!;
+  return isRangeTaskVisibleOnViewDate(task, viewDate);
 }
 
 function isRangeTaskEndingOn(task: Task, viewDate: string) {
-  return isRangeTask(task) && task.dateEnd === viewDate;
+  return isRangeTask(task) && task.dateEnd === viewDate && isRangeTaskVisibleOnViewDate(task, viewDate);
 }
 
 function isOngoingRangeTask(task: Task, viewDate: string) {
@@ -503,9 +523,11 @@ function buildSingleDayTasksByDate(tasks: Task[]) {
     if (isRangeTask(task)) {
       let day = task.date;
       while (day <= task.dateEnd!) {
-        const list = map.get(day) ?? [];
-        list.push(task);
-        map.set(day, list);
+        if (isRangeTaskVisibleOnViewDate(task, day)) {
+          const list = map.get(day) ?? [];
+          list.push(task);
+          map.set(day, list);
+        }
         day = shiftISODate(day, 1);
       }
       continue;
@@ -2877,6 +2899,7 @@ function TodayTasksSection({
 
 function TaskRowContent({
   task,
+  viewDateISO,
   onToggle,
   onDelete,
   onOpen,
@@ -2886,6 +2909,7 @@ function TaskRowContent({
   dragHandleProps,
 }: {
   task: Task;
+  viewDateISO: string;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onOpen: (task: Task) => void;
@@ -2895,13 +2919,14 @@ function TaskRowContent({
   dragHandleProps?: Record<string, unknown>;
 }) {
   const { showProjects, showCases } = useDisplaySettings();
+  const displayDone = isTaskDoneOnViewDate(task, viewDateISO);
   return (
     <div
       onClick={() => onOpen(task)}
       className={`group flex w-full items-center gap-1.5 rounded-xl border px-2.5 py-1.5 transition-all duration-300 ${
         isDragging
           ? "z-50 scale-[1.04] border-blue-200/60 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.12)] ring-1 ring-blue-200/40"
-          : task.done
+          : displayDone
             ? "cursor-pointer border-black/[0.05] bg-black/[0.02] opacity-60"
             : "cursor-pointer border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
       } ${sortable ? "select-none" : ""}`}
@@ -2923,26 +2948,26 @@ function TaskRowContent({
       </button>
 
       <ThemedTaskCheckbox
-        done={task.done}
+        done={displayDone}
         size="md"
         onClick={(e) => {
           e.stopPropagation();
           onToggle(task.id);
         }}
-        aria-label={task.done ? "未完了に戻す" : "完了にする"}
+        aria-label={displayDone ? "未完了に戻す" : "完了にする"}
       />
 
       <p
         className={`min-w-0 flex-1 truncate text-[12px] font-medium ${
-          task.done ? "text-gray-400" : "text-gray-900"
+          displayDone ? "text-gray-400" : "text-gray-900"
         }`}
       >
         {task.title}
       </p>
       {showCases && task.caseId ? (
-        <CaseNameTag caseId={task.caseId} muted={task.done} />
+        <CaseNameTag caseId={task.caseId} muted={displayDone} />
       ) : showProjects && task.project.trim() ? (
-      <ProjectNameTag name={task.project} muted={task.done} />
+      <ProjectNameTag name={task.project} muted={displayDone} />
       ) : null}
       {isRangeTask(task) && (
         <span className="shrink-0 text-[10px] text-gray-400">{formatTaskPeriod(task)}</span>
@@ -2951,7 +2976,7 @@ function TaskRowContent({
         <span className="shrink-0 text-[10px] text-gray-400">{formatMonthDay(task.date)}</span>
       )}
 
-      {!task.done && (
+      {!displayDone && (
         <button
           type="button"
           onClick={(e) => {
@@ -2970,12 +2995,14 @@ function TaskRowContent({
 
 function SortableTaskRow({
   task,
+  viewDateISO,
   onToggle,
   onDelete,
   onOpen,
   showOriginalDeadline = false,
 }: {
   task: Task;
+  viewDateISO: string;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onOpen: (task: Task) => void;
@@ -2996,6 +3023,7 @@ function SortableTaskRow({
     >
       <TaskRowContent
         task={task}
+        viewDateISO={viewDateISO}
         onToggle={onToggle}
         onDelete={onDelete}
         onOpen={onOpen}
@@ -3010,6 +3038,7 @@ function SortableTaskRow({
 
 function SortableTaskList({
   list,
+  viewDateISO,
   sensors,
   onDragEnd,
   onToggle,
@@ -3019,6 +3048,7 @@ function SortableTaskList({
   sortable = true,
 }: {
   list: Task[];
+  viewDateISO: string;
   sensors: ReturnType<typeof useSensors>;
   onDragEnd: (event: DragEndEvent) => void;
   onToggle: (id: string) => void;
@@ -3036,6 +3066,7 @@ function SortableTaskList({
           <TaskRowContent
             key={task.id}
             task={task}
+            viewDateISO={viewDateISO}
             onToggle={onToggle}
             onDelete={onDelete}
             onOpen={onOpen}
@@ -3054,6 +3085,7 @@ function SortableTaskList({
             <SortableTaskRow
               key={task.id}
               task={task}
+              viewDateISO={viewDateISO}
               onToggle={onToggle}
               onDelete={onDelete}
               onOpen={onOpen}
@@ -3222,12 +3254,13 @@ function MobileCalendarDayCell({
         <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-px overflow-hidden">
           {preview.map((task, i) => {
             const taskColor = getProjectColor(colors[task.project]);
+            const displayDone = isTaskDoneOnViewDate(task, cellIso);
             return (
             <span
               key={task.id}
               className="relative truncate rounded-[2px] px-0.5 text-[8px] leading-[10px]"
               style={
-                task.done
+                displayDone
                   ? { backgroundColor: "rgba(229, 231, 235, 0.9)", color: "rgb(156, 163, 175)" }
                   : { backgroundColor: `${taskColor.accent}E6`, color: "#ffffff" }
               }
@@ -5142,8 +5175,14 @@ export default function Home() {
     () => tasks.filter((t) => isTopSectionTask(t, viewDateISO)),
     [tasks, viewDateISO],
   );
-  const activeTasks = useMemo(() => topViewTasks.filter((t) => !t.done), [topViewTasks]);
-  const completedTasks = useMemo(() => topViewTasks.filter((t) => t.done), [topViewTasks]);
+  const activeTasks = useMemo(
+    () => topViewTasks.filter((t) => !isTaskDoneOnViewDate(t, viewDateISO)),
+    [topViewTasks, viewDateISO],
+  );
+  const completedTasks = useMemo(
+    () => topViewTasks.filter((t) => isTaskDoneOnViewDate(t, viewDateISO)),
+    [topViewTasks, viewDateISO],
+  );
 
   const ongoingCases = useMemo(
     () => cases.filter((c) => !c.done),
@@ -5212,9 +5251,9 @@ export default function Home() {
       list = list.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
     }
     const active = list
-      .filter((t) => !t.done)
+      .filter((t) => !isTaskDoneOnViewDate(t, viewDateISO))
       .sort((a, b) => (a.dateEnd ?? "").localeCompare(b.dateEnd ?? ""));
-    const done = list.filter((t) => t.done);
+    const done = list.filter((t) => isTaskDoneOnViewDate(t, viewDateISO));
     return [...active, ...done];
   }, [tasks, viewDateISO, activeProject, effectiveAllProjects, caseById]);
 
@@ -5228,10 +5267,10 @@ export default function Home() {
     if (!effectiveAllProjects) {
       list = list.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
     }
-    const active = list.filter((t) => !t.done);
-    const done = list.filter((t) => t.done);
+    const active = list.filter((t) => !isTaskDoneOnViewDate(t, viewDateISO));
+    const done = list.filter((t) => isTaskDoneOnViewDate(t, viewDateISO));
     return [...active, ...done];
-  }, [topViewTasks, activeProject, effectiveAllProjects, caseById]);
+  }, [topViewTasks, activeProject, effectiveAllProjects, caseById, viewDateISO]);
 
   const goToDate = useCallback((iso: string) => {
     setViewDateISO(iso);
@@ -5417,12 +5456,20 @@ export default function Home() {
 
   const toggleTask = useCallback((id: string) => {
     replaceTasks((prev) => {
-      const updated = prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
+      const updated = prev.map((t) => {
+        if (t.id !== id) return t;
+        const nextDone = !t.done;
+        return {
+          ...t,
+          done: nextDone,
+          completedAt: nextDone ? viewDateISO : null,
+        };
+      });
       const task = updated.find((t) => t.id === id);
       if (!task || isRangeTask(task)) return updated;
       return sortTasksByDateWithDoneLast(updated, task.date);
     });
-  }, [replaceTasks]);
+  }, [replaceTasks, viewDateISO]);
 
   const openAddCaseModal = useCallback((project?: string) => {
     setCaseModalDefaultProject(project);
@@ -5518,6 +5565,7 @@ export default function Home() {
   ) => (
     <SortableTaskList
       list={list}
+      viewDateISO={viewDateISO}
       sensors={sensors}
       onDragEnd={
         dragScope === "today"

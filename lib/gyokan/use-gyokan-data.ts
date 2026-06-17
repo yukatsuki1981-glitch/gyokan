@@ -610,9 +610,17 @@ export function useGyokanData() {
     });
   }, [persistTask]);
 
-  const toggleTask = useCallback((id: string) => {
+  const toggleTask = useCallback((id: string, completedOn?: string) => {
     setTasks((prev) => {
-      const next = prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
+      const next = prev.map((t) => {
+        if (t.id !== id) return t;
+        const done = !t.done;
+        return {
+          ...t,
+          done,
+          completedAt: done ? (completedOn ?? t.date) : null,
+        };
+      });
       const updated = next.find((t) => t.id === id);
       if (updated) void persistTask(updated);
       return next;
