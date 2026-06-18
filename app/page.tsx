@@ -23,7 +23,8 @@ import {
 import {
   caseSelectLabel,
   pickDefaultCaseId,
-  taskVisibleInView,
+  taskBelongsToPrivateProject,
+  isWorkTaskInView,
 } from "@/lib/gyokan/task-case";
 import {
   normalizeTaskISODate,
@@ -2833,9 +2834,13 @@ function TodayTasksSection({
   viewDateISO,
   activeTaskCount,
   completedTaskCount,
-  displayedTasks,
-  incompleteOtherTasks,
-  ongoingRangeTasks,
+  workDisplayedTasks,
+  workIncompleteOtherTasks,
+  workOngoingRangeTasks,
+  privateDisplayedTasks,
+  privateIncompleteOtherTasks,
+  privateOngoingRangeTasks,
+  showPrivateSection,
   renderTaskList,
   onAddTask,
   className = "",
@@ -2843,17 +2848,26 @@ function TodayTasksSection({
   viewDateISO: string;
   activeTaskCount: number;
   completedTaskCount: number;
-  displayedTasks: Task[];
-  incompleteOtherTasks: Task[];
-  ongoingRangeTasks: Task[];
+  workDisplayedTasks: Task[];
+  workIncompleteOtherTasks: Task[];
+  workOngoingRangeTasks: Task[];
+  privateDisplayedTasks: Task[];
+  privateIncompleteOtherTasks: Task[];
+  privateOngoingRangeTasks: Task[];
+  showPrivateSection: boolean;
   renderTaskList: (
     list: Task[],
-    dragScope: "today" | "upcoming" | "range",
-    options?: { showOriginalDeadline?: boolean },
+    dragScope: "today" | "upcoming" | "range" | "private-today" | "private-upcoming" | "private-range",
+    options?: { showOriginalDeadline?: boolean; subdued?: boolean },
   ) => ReactNode;
   onAddTask: () => void;
   className?: string;
 }) {
+  const hasWorkTasks =
+    workDisplayedTasks.length > 0 ||
+    workIncompleteOtherTasks.length > 0 ||
+    workOngoingRangeTasks.length > 0;
+
   return (
     <section className={`mb-4 ${className}`}>
       <div className="mb-2 flex flex-nowrap items-center justify-between gap-2 overflow-hidden">
@@ -2875,34 +2889,37 @@ function TodayTasksSection({
       </div>
 
       <Card className="overflow-hidden p-1.5">
-        {displayedTasks.length === 0 &&
-        incompleteOtherTasks.length === 0 &&
-        ongoingRangeTasks.length === 0 ? (
+        {!hasWorkTasks && !showPrivateSection ? (
           <div className="px-4 py-8 text-center">
             <p className="text-[12px] text-gray-400">タスクがありません</p>
           </div>
         ) : (
           <>
-            {displayedTasks.length > 0 && renderTaskList(displayedTasks, "today")}
-            {incompleteOtherTasks.length > 0 && (
-              <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
-                <div className="mb-1.5 flex items-center justify-between px-1">
-                  <span className="text-[11px] font-medium text-gray-400">未完了のタスク</span>
-                  <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
+            <div className="px-1 pt-1">
+              <p className="mb-1.5 text-[11px] font-medium text-gray-400">仕事のタスク</p>
+              <TaskListPanel
+                displayedTasks={workDisplayedTasks}
+                incompleteOtherTasks={workIncompleteOtherTasks}
+                ongoingRangeTasks={workOngoingRangeTasks}
+                renderTaskList={renderTaskList}
+              />
+            </div>
+
+            {showPrivateSection && (
+              <>
+                <div className="my-2 border-t border-black/[0.06]" />
+                <div className="rounded-xl bg-gray-50/60 px-1 pb-1 pt-1">
+                  <p className="mb-1.5 px-0.5 text-[11px] font-medium text-gray-400">
+                    🏠 プライベート
+                  </p>
+                  <PrivateTaskListPanel
+                    displayedTasks={privateDisplayedTasks}
+                    incompleteOtherTasks={privateIncompleteOtherTasks}
+                    ongoingRangeTasks={privateOngoingRangeTasks}
+                    renderTaskList={renderTaskList}
+                  />
                 </div>
-                {renderTaskList(incompleteOtherTasks, "range", { showOriginalDeadline: true })}
-              </div>
-            )}
-            {ongoingRangeTasks.length > 0 && (
-              <div
-                className={
-                  displayedTasks.length > 0 || incompleteOtherTasks.length > 0
-                    ? "mt-2 border-t border-black/[0.04] pt-2"
-                    : ""
-                }
-              >
-                {renderTaskList(ongoingRangeTasks, "upcoming")}
-              </div>
+              </>
             )}
           </>
         )}
@@ -2920,6 +2937,7 @@ function TaskRowContent({
   onDelete,
   onOpen,
   showOriginalDeadline = false,
+  subdued = false,
   sortable = false,
   isDragging = false,
   dragHandleProps,
@@ -2930,6 +2948,7 @@ function TaskRowContent({
   onDelete: (id: string) => void;
   onOpen: (task: Task) => void;
   showOriginalDeadline?: boolean;
+  subdued?: boolean;
   sortable?: boolean;
   isDragging?: boolean;
   dragHandleProps?: Record<string, unknown>;
@@ -2943,8 +2962,12 @@ function TaskRowContent({
         isDragging
           ? "z-50 scale-[1.04] border-blue-200/60 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.12)] ring-1 ring-blue-200/40"
           : displayDone
-            ? "cursor-pointer border-black/[0.05] bg-black/[0.02] opacity-60"
-            : "cursor-pointer border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
+            ? subdued
+              ? "cursor-pointer border-black/[0.03] bg-gray-100/70 opacity-55"
+              : "cursor-pointer border-black/[0.05] bg-black/[0.02] opacity-60"
+            : subdued
+              ? "cursor-pointer border-black/[0.03] bg-gray-100/50 hover:bg-gray-100/80"
+              : "cursor-pointer border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
       } ${sortable ? "select-none" : ""}`}
     >
       <button
@@ -2975,14 +2998,14 @@ function TaskRowContent({
 
       <p
         className={`min-w-0 flex-1 truncate text-[12px] font-medium ${
-          displayDone ? "text-gray-400" : "text-gray-900"
+          displayDone ? "text-gray-400" : subdued ? "text-gray-500" : "text-gray-900"
         }`}
       >
         {task.title}
       </p>
-      {showCases && task.caseId ? (
+      {!subdued && showCases && task.caseId ? (
         <CaseNameTag caseId={task.caseId} muted={displayDone} />
-      ) : showProjects && task.project.trim() ? (
+      ) : !subdued && showProjects && task.project.trim() ? (
       <ProjectNameTag name={task.project} muted={displayDone} />
       ) : null}
       {isRangeTask(task) && (
@@ -3016,6 +3039,7 @@ function SortableTaskRow({
   onDelete,
   onOpen,
   showOriginalDeadline = false,
+  subdued = false,
 }: {
   task: Task;
   viewDateISO: string;
@@ -3023,6 +3047,7 @@ function SortableTaskRow({
   onDelete: (id: string) => void;
   onOpen: (task: Task) => void;
   showOriginalDeadline?: boolean;
+  subdued?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id });
@@ -3044,6 +3069,7 @@ function SortableTaskRow({
         onDelete={onDelete}
         onOpen={onOpen}
         showOriginalDeadline={showOriginalDeadline}
+        subdued={subdued}
         sortable
         isDragging={isDragging}
         dragHandleProps={{ ...attributes, ...listeners }}
@@ -3062,6 +3088,7 @@ function SortableTaskList({
   onOpen,
   showOriginalDeadline = false,
   sortable = true,
+  subdued = false,
 }: {
   list: Task[];
   viewDateISO: string;
@@ -3072,6 +3099,7 @@ function SortableTaskList({
   onOpen: (task: Task) => void;
   showOriginalDeadline?: boolean;
   sortable?: boolean;
+  subdued?: boolean;
 }) {
   const listClass = "flex flex-col gap-1 lg:grid lg:grid-cols-2 lg:gap-1";
 
@@ -3087,6 +3115,7 @@ function SortableTaskList({
             onDelete={onDelete}
             onOpen={onOpen}
             showOriginalDeadline={showOriginalDeadline}
+            subdued={subdued}
           />
         ))}
       </div>
@@ -3106,6 +3135,7 @@ function SortableTaskList({
               onDelete={onDelete}
               onOpen={onOpen}
               showOriginalDeadline={showOriginalDeadline}
+              subdued={subdued}
             />
           ))}
         </div>
@@ -4872,6 +4902,156 @@ function AddTaskModal({
 
 /* ─── Main Page ─── */
 
+function sortTasksForViewDate(list: Task[], viewDateISO: string) {
+  const active = list.filter((t) => !isTaskDoneOnViewDate(t, viewDateISO));
+  const done = list.filter((t) => isTaskDoneOnViewDate(t, viewDateISO));
+  return [...active, ...done];
+}
+
+function buildTaskViewBuckets(
+  tasks: Task[],
+  viewDateISO: string,
+  belongs: (task: Task) => boolean,
+) {
+  const scoped = (predicate: (task: Task) => boolean) =>
+    tasks.filter((task) => belongs(task) && predicate(task));
+
+  const displayed = sortTasksForViewDate(
+    scoped((task) => isTopSectionTask(task, viewDateISO)),
+    viewDateISO,
+  );
+
+  const incompleteOther =
+    viewDateISO > todayISO()
+      ? []
+      : sortTasksActiveFirst(
+          scoped((task) => !task.done && !isRangeTask(task) && task.date < viewDateISO),
+        );
+
+  const ongoingRange = (() => {
+    const list = scoped((task) => isOngoingRangeTask(task, viewDateISO));
+    const active = list
+      .filter((task) => !isTaskDoneOnViewDate(task, viewDateISO))
+      .sort((a, b) => (a.dateEnd ?? "").localeCompare(b.dateEnd ?? ""));
+    const done = list.filter((task) => isTaskDoneOnViewDate(task, viewDateISO));
+    return [...active, ...done];
+  })();
+
+  const activeCount = displayed.filter((task) => !isTaskDoneOnViewDate(task, viewDateISO)).length;
+  const completedCount = displayed.filter((task) => isTaskDoneOnViewDate(task, viewDateISO)).length;
+
+  return {
+    displayed,
+    incompleteOther,
+    ongoingRange,
+    activeCount,
+    completedCount,
+    hasAny: displayed.length + incompleteOther.length + ongoingRange.length > 0,
+  };
+}
+
+function TaskListPanel({
+  displayedTasks,
+  incompleteOtherTasks,
+  ongoingRangeTasks,
+  renderTaskList,
+  emptyLabel = "タスクがありません",
+}: {
+  displayedTasks: Task[];
+  incompleteOtherTasks: Task[];
+  ongoingRangeTasks: Task[];
+  renderTaskList: (
+    list: Task[],
+    dragScope: "today" | "upcoming" | "range" | "private-today" | "private-upcoming" | "private-range",
+    options?: { showOriginalDeadline?: boolean; subdued?: boolean },
+  ) => ReactNode;
+  emptyLabel?: string;
+}) {
+  if (
+    displayedTasks.length === 0 &&
+    incompleteOtherTasks.length === 0 &&
+    ongoingRangeTasks.length === 0
+  ) {
+    return (
+      <div className="px-4 py-6 text-center">
+        <p className="text-[12px] text-gray-400">{emptyLabel}</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {displayedTasks.length > 0 && renderTaskList(displayedTasks, "today")}
+      {incompleteOtherTasks.length > 0 && (
+        <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
+          <div className="mb-1.5 flex items-center justify-between px-1">
+            <span className="text-[11px] font-medium text-gray-400">未完了のタスク</span>
+            <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
+          </div>
+          {renderTaskList(incompleteOtherTasks, "range", { showOriginalDeadline: true })}
+        </div>
+      )}
+      {ongoingRangeTasks.length > 0 && (
+        <div
+          className={
+            displayedTasks.length > 0 || incompleteOtherTasks.length > 0
+              ? "mt-2 border-t border-black/[0.04] pt-2"
+              : ""
+          }
+        >
+          {renderTaskList(ongoingRangeTasks, "upcoming")}
+        </div>
+      )}
+    </>
+  );
+}
+
+function PrivateTaskListPanel({
+  displayedTasks,
+  incompleteOtherTasks,
+  ongoingRangeTasks,
+  renderTaskList,
+}: {
+  displayedTasks: Task[];
+  incompleteOtherTasks: Task[];
+  ongoingRangeTasks: Task[];
+  renderTaskList: (
+    list: Task[],
+    dragScope: "today" | "upcoming" | "range" | "private-today" | "private-upcoming" | "private-range",
+    options?: { showOriginalDeadline?: boolean; subdued?: boolean },
+  ) => ReactNode;
+}) {
+  return (
+    <>
+      {displayedTasks.length > 0 &&
+        renderTaskList(displayedTasks, "private-today", { subdued: true })}
+      {incompleteOtherTasks.length > 0 && (
+        <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
+          <div className="mb-1.5 flex items-center justify-between px-1">
+            <span className="text-[11px] font-medium text-gray-400">未完了のタスク</span>
+            <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
+          </div>
+          {renderTaskList(incompleteOtherTasks, "private-range", {
+            showOriginalDeadline: true,
+            subdued: true,
+          })}
+        </div>
+      )}
+      {ongoingRangeTasks.length > 0 && (
+        <div
+          className={
+            displayedTasks.length > 0 || incompleteOtherTasks.length > 0
+              ? "mt-2 border-t border-black/[0.04] pt-2"
+              : ""
+          }
+        >
+          {renderTaskList(ongoingRangeTasks, "private-upcoming", { subdued: true })}
+        </div>
+      )}
+    </>
+  );
+}
+
 function sortTasksActiveFirst(list: Task[]) {
   const active = list.filter((t) => !t.done);
   const done = list.filter((t) => t.done);
@@ -5187,19 +5367,6 @@ export default function Home() {
     if (lastView) setViewDateISO(lastView);
   }, [reload]);
 
-  const topViewTasks = useMemo(
-    () => tasks.filter((t) => isTopSectionTask(t, viewDateISO)),
-    [tasks, viewDateISO],
-  );
-  const activeTasks = useMemo(
-    () => topViewTasks.filter((t) => !isTaskDoneOnViewDate(t, viewDateISO)),
-    [topViewTasks, viewDateISO],
-  );
-  const completedTasks = useMemo(
-    () => topViewTasks.filter((t) => isTaskDoneOnViewDate(t, viewDateISO)),
-    [topViewTasks, viewDateISO],
-  );
-
   const ongoingCases = useMemo(
     () => cases.filter((c) => !c.done),
     [cases],
@@ -5236,6 +5403,24 @@ export default function Home() {
     return map;
   }, [cases]);
 
+  const workTaskBuckets = useMemo(
+    () =>
+      buildTaskViewBuckets(tasks, viewDateISO, (task) =>
+        isWorkTaskInView(task, activeProject, effectiveAllProjects, caseById),
+      ),
+    [tasks, viewDateISO, activeProject, effectiveAllProjects, caseById],
+  );
+
+  const privateTaskBuckets = useMemo(
+    () =>
+      buildTaskViewBuckets(tasks, viewDateISO, (task) =>
+        taskBelongsToPrivateProject(task, caseById),
+      ),
+    [tasks, viewDateISO, caseById],
+  );
+
+  const showPrivateTaskSection = privateTaskBuckets.hasAny;
+
   const projectColorsValue = useMemo(
     () => ({
       colors: projectColors,
@@ -5248,45 +5433,24 @@ export default function Home() {
     [projectColors, setProjectColor, projectNames, cases, ongoingCases, caseTitleById],
   );
 
-  const incompleteOtherTasks = useMemo(() => {
-    if (viewDateISO > todayISO()) {
-      return [];
-    }
-    let list = tasks.filter(
-      (t) => !t.done && !isRangeTask(t) && t.date < viewDateISO,
-    );
-    if (!effectiveAllProjects) {
-      list = list.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
-    }
-    return sortTasksActiveFirst(list);
-  }, [tasks, viewDateISO, activeProject, effectiveAllProjects, caseById]);
-
-  const ongoingRangeTasks = useMemo(() => {
-    let list = tasks.filter((t) => isOngoingRangeTask(t, viewDateISO));
-    if (!effectiveAllProjects) {
-      list = list.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
-    }
-    const active = list
-      .filter((t) => !isTaskDoneOnViewDate(t, viewDateISO))
-      .sort((a, b) => (a.dateEnd ?? "").localeCompare(b.dateEnd ?? ""));
-    const done = list.filter((t) => isTaskDoneOnViewDate(t, viewDateISO));
-    return [...active, ...done];
-  }, [tasks, viewDateISO, activeProject, effectiveAllProjects, caseById]);
+  const incompleteOtherTasks = workTaskBuckets.incompleteOther;
+  const ongoingRangeTasks = workTaskBuckets.ongoingRange;
+  const displayedTasks = workTaskBuckets.displayed;
 
   const completedCasesCount = useMemo(
     () => cases.filter((c) => c.done).length,
     [cases],
   );
 
-  const displayedTasks = useMemo(() => {
-    let list = topViewTasks;
-    if (!effectiveAllProjects) {
-      list = list.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
-    }
-    const active = list.filter((t) => !isTaskDoneOnViewDate(t, viewDateISO));
-    const done = list.filter((t) => isTaskDoneOnViewDate(t, viewDateISO));
-    return [...active, ...done];
-  }, [topViewTasks, activeProject, effectiveAllProjects, caseById, viewDateISO]);
+  const filterWorkTask = useCallback(
+    (task: Task) => isWorkTaskInView(task, activeProject, effectiveAllProjects, caseById),
+    [activeProject, effectiveAllProjects, caseById],
+  );
+
+  const filterPrivateTask = useCallback(
+    (task: Task) => taskBelongsToPrivateProject(task, caseById),
+    [caseById],
+  );
 
   const goToDate = useCallback((iso: string) => {
     setViewDateISO(iso);
@@ -5316,14 +5480,13 @@ export default function Home() {
       if (!over || active.id === over.id) return;
 
       replaceTasks((prev) => {
-        let visible = prev.filter((t) => isTopSectionTask(t, viewDateISO));
-        if (!effectiveAllProjects) {
-          visible = visible.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
-        }
+        let visible = prev.filter(
+          (t) => isTopSectionTask(t, viewDateISO) && filterWorkTask(t),
+        );
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
     },
-    [activeProject, effectiveAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
+    [filterWorkTask, viewDateISO, reorderTasksInList, replaceTasks],
   );
 
   const handleUpcomingTaskDragEnd = useCallback(
@@ -5332,14 +5495,13 @@ export default function Home() {
       if (!over || active.id === over.id) return;
 
       replaceTasks((prev) => {
-        let visible = prev.filter((t) => isOngoingRangeTask(t, viewDateISO));
-        if (!effectiveAllProjects) {
-          visible = visible.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
-        }
+        let visible = prev.filter(
+          (t) => isOngoingRangeTask(t, viewDateISO) && filterWorkTask(t),
+        );
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
     },
-    [activeProject, effectiveAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
+    [filterWorkTask, viewDateISO, reorderTasksInList, replaceTasks],
   );
 
   const handleRangeTaskDragEnd = useCallback(
@@ -5354,14 +5516,62 @@ export default function Home() {
         if (viewDateISO > todayISO()) {
           visible = [];
         }
-        if (!effectiveAllProjects) {
-          visible = visible.filter((t) => taskVisibleInView(t, activeProject, effectiveAllProjects, caseById));
-        }
+        visible = visible.filter(filterWorkTask);
         visible = sortTasksActiveFirst(visible);
         return reorderTasksInList(prev, visible, active.id, over.id);
       });
     },
-    [activeProject, effectiveAllProjects, viewDateISO, reorderTasksInList, replaceTasks, caseById],
+    [filterWorkTask, viewDateISO, reorderTasksInList, replaceTasks],
+  );
+
+  const handlePrivateTaskDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      replaceTasks((prev) => {
+        const visible = prev.filter(
+          (t) => isTopSectionTask(t, viewDateISO) && filterPrivateTask(t),
+        );
+        return reorderTasksInList(prev, visible, active.id, over.id);
+      });
+    },
+    [filterPrivateTask, viewDateISO, reorderTasksInList, replaceTasks],
+  );
+
+  const handlePrivateUpcomingTaskDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      replaceTasks((prev) => {
+        const visible = prev.filter(
+          (t) => isOngoingRangeTask(t, viewDateISO) && filterPrivateTask(t),
+        );
+        return reorderTasksInList(prev, visible, active.id, over.id);
+      });
+    },
+    [filterPrivateTask, viewDateISO, reorderTasksInList, replaceTasks],
+  );
+
+  const handlePrivateRangeTaskDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      replaceTasks((prev) => {
+        let visible = prev.filter(
+          (t) => !t.done && !isRangeTask(t) && t.date < viewDateISO,
+        );
+        if (viewDateISO > todayISO()) {
+          visible = [];
+        }
+        visible = visible.filter(filterPrivateTask);
+        visible = sortTasksActiveFirst(visible);
+        return reorderTasksInList(prev, visible, active.id, over.id);
+      });
+    },
+    [filterPrivateTask, viewDateISO, reorderTasksInList, replaceTasks],
   );
 
   const handleCaseDragEnd = useCallback((event: DragEndEvent) => {
@@ -5578,8 +5788,14 @@ export default function Home() {
 
   const renderTaskList = (
     list: Task[],
-    dragScope: "today" | "upcoming" | "range",
-    options?: { showOriginalDeadline?: boolean },
+    dragScope:
+      | "today"
+      | "upcoming"
+      | "range"
+      | "private-today"
+      | "private-upcoming"
+      | "private-range",
+    options?: { showOriginalDeadline?: boolean; subdued?: boolean },
   ) => (
     <SortableTaskList
       list={list}
@@ -5590,12 +5806,19 @@ export default function Home() {
           ? handleTaskDragEnd
           : dragScope === "upcoming"
             ? handleUpcomingTaskDragEnd
-            : handleRangeTaskDragEnd
+            : dragScope === "range"
+              ? handleRangeTaskDragEnd
+              : dragScope === "private-today"
+                ? handlePrivateTaskDragEnd
+                : dragScope === "private-upcoming"
+                  ? handlePrivateUpcomingTaskDragEnd
+                  : handlePrivateRangeTaskDragEnd
       }
       onToggle={toggleTask}
       onDelete={deleteTask}
       onOpen={setSelectedTask}
       showOriginalDeadline={options?.showOriginalDeadline}
+      subdued={options?.subdued}
       sortable
     />
   );
@@ -5759,11 +5982,15 @@ export default function Home() {
                       />
                       <TodayTasksSection
                         viewDateISO={viewDateISO}
-                        activeTaskCount={activeTasks.length}
-                        completedTaskCount={completedTasks.length}
-                        displayedTasks={displayedTasks}
-                        incompleteOtherTasks={incompleteOtherTasks}
-                        ongoingRangeTasks={ongoingRangeTasks}
+                        activeTaskCount={workTaskBuckets.activeCount}
+                        completedTaskCount={workTaskBuckets.completedCount}
+                        workDisplayedTasks={displayedTasks}
+                        workIncompleteOtherTasks={incompleteOtherTasks}
+                        workOngoingRangeTasks={ongoingRangeTasks}
+                        privateDisplayedTasks={privateTaskBuckets.displayed}
+                        privateIncompleteOtherTasks={privateTaskBuckets.incompleteOther}
+                        privateOngoingRangeTasks={privateTaskBuckets.ongoingRange}
+                        showPrivateSection={showPrivateTaskSection}
                         renderTaskList={renderTaskList}
                         onAddTask={openTaskModalForView}
                       />
@@ -5828,11 +6055,15 @@ export default function Home() {
             {showTasks && (
               <TodayTasksSection
                 viewDateISO={viewDateISO}
-                activeTaskCount={activeTasks.length}
-                completedTaskCount={completedTasks.length}
-                displayedTasks={displayedTasks}
-                incompleteOtherTasks={incompleteOtherTasks}
-                ongoingRangeTasks={ongoingRangeTasks}
+                activeTaskCount={workTaskBuckets.activeCount}
+                completedTaskCount={workTaskBuckets.completedCount}
+                workDisplayedTasks={displayedTasks}
+                workIncompleteOtherTasks={incompleteOtherTasks}
+                workOngoingRangeTasks={ongoingRangeTasks}
+                privateDisplayedTasks={privateTaskBuckets.displayed}
+                privateIncompleteOtherTasks={privateTaskBuckets.incompleteOther}
+                privateOngoingRangeTasks={privateTaskBuckets.ongoingRange}
+                showPrivateSection={showPrivateTaskSection}
                 renderTaskList={renderTaskList}
                 onAddTask={openTaskModalForView}
                 className={

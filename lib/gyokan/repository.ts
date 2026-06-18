@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DEFAULT_PROJECT_ACCENT, DEFAULT_PROJECT_NAMES, LEGACY_STORAGE_KEYS } from "./constants";
+import { DEFAULT_PROJECT_ACCENT, DEFAULT_PROJECT_NAMES, LEGACY_STORAGE_KEYS, PRIVATE_PROJECT_ACCENT, PRIVATE_PROJECT_NAME, INITIAL_SEED_PROJECT_NAMES } from "./constants";
 import {
   buildProjectMaps,
   mapCaseToDb,
@@ -230,11 +230,15 @@ async function seedDefaultProjectsOnce(
     return existing.map(mapDbProject);
   }
 
-  const rows = DEFAULT_PROJECT_NAMES.map((name, index) => ({
+  const rows = INITIAL_SEED_PROJECT_NAMES.map((name, index) => ({
     id: newUuid(),
     user_id: userId,
     name,
-    accent_color: isValidHex(colors[name] ?? "") ? colors[name].toUpperCase() : DEFAULT_PROJECT_ACCENT,
+    accent_color: isValidHex(colors[name] ?? "")
+      ? colors[name].toUpperCase()
+      : name === PRIVATE_PROJECT_NAME
+        ? PRIVATE_PROJECT_ACCENT
+        : DEFAULT_PROJECT_ACCENT,
     sort_order: index,
   }));
 
@@ -247,6 +251,24 @@ async function seedDefaultProjectsOnce(
 
   const seeded = await fetchProjectRows(supabase, userId);
   return seeded.map(mapDbProject);
+}
+
+async function ensurePrivateProject(
+  supabase: SupabaseClient,
+  userId: string,
+  projects: AppProject[],
+): Promise<AppProject[]> {
+  if (projects.some((project) => project.name === PRIVATE_PROJECT_NAME)) {
+    return projects;
+  }
+  const project: AppProject = {
+    id: newUuid(),
+    name: PRIVATE_PROJECT_NAME,
+    accentColor: PRIVATE_PROJECT_ACCENT,
+    sortOrder: projects.length,
+  };
+  await upsertProject(supabase, project, userId);
+  return [...projects, project];
 }
 
 export async function fetchGyokanData(
@@ -282,6 +304,8 @@ export async function fetchGyokanData(
       return fetchGyokanData(supabase, userId);
     }
   }
+
+  projects = await ensurePrivateProject(supabase, userId, projects);
 
   const { idToName } = buildProjectMaps(projects);
   const cases = caseRows.map((r) => mapDbCase(r, idToName));

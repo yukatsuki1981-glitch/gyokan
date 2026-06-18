@@ -1,3 +1,4 @@
+import { PRIVATE_PROJECT_NAME } from "./constants";
 import type { AppCase, AppTask } from "./types";
 
 export function buildCaseById(cases: AppCase[]): Record<string, AppCase> {
@@ -38,6 +39,27 @@ export function taskBelongsToProject(
     return caseById[task.caseId]?.project === project;
   }
   return task.project === project;
+}
+
+export function isPrivateProjectName(project: string) {
+  return project === PRIVATE_PROJECT_NAME;
+}
+
+export function taskBelongsToPrivateProject(
+  task: AppTask,
+  caseById: Record<string, AppCase>,
+): boolean {
+  return taskBelongsToProject(task, PRIVATE_PROJECT_NAME, caseById);
+}
+
+export function isWorkTaskInView(
+  task: AppTask,
+  project: string,
+  isAllProjects: boolean,
+  caseById: Record<string, AppCase>,
+): boolean {
+  if (taskBelongsToPrivateProject(task, caseById)) return false;
+  return taskVisibleInView(task, project, isAllProjects, caseById);
 }
 
 /** Unassigned tasks (no project / case) are always visible in any view. */

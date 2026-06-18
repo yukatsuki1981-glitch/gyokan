@@ -7,6 +7,16 @@ export const DEFAULT_PROJECT_NAMES = [
   "立川倉庫",
 ] as const;
 
+export const PRIVATE_PROJECT_NAME = "プライベート";
+
+export const PRIVATE_PROJECT_ACCENT = "#9CA3AF";
+
+/** Default projects seeded for new accounts (work projects + private). */
+export const INITIAL_SEED_PROJECT_NAMES = [
+  ...DEFAULT_PROJECT_NAMES,
+  PRIVATE_PROJECT_NAME,
+] as const;
+
 export const DEFAULT_PROJECT_ACCENT = "#3B82F6";
 
 export const ALL_PROJECTS_LABEL = "すべての案件";
