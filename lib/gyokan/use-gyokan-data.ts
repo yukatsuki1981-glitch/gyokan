@@ -13,6 +13,10 @@ import {
 } from "./task-case";
 import { parseCaseDeadlineInput } from "./date-format";
 import {
+  serializeJournalEntry,
+  type JournalEntry,
+} from "./journal-entry";
+import {
   mergeRememberedTaskCompletedAt,
   normalizeTaskISODate,
   rememberTaskCompletedAt,
@@ -907,6 +911,13 @@ export function useGyokanData() {
     void deleteDailyDiaryDb(getSupabase(), id);
   }, [getSupabase]);
 
+  const saveJournalEntry = useCallback(
+    async (date: string, entry: JournalEntry): Promise<boolean> => {
+      return saveDailyDiary(date, serializeJournalEntry(entry));
+    },
+    [saveDailyDiary],
+  );
+
   return {
     user,
     authReady,
@@ -945,6 +956,7 @@ export function useGyokanData() {
     saveDailyMemo,
     deleteDailyMemo,
     saveDailyDiary,
+    saveJournalEntry,
     deleteDailyDiary,
     reload: () => {
       const uid = userIdRef.current;
