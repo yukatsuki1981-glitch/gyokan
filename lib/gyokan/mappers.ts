@@ -139,6 +139,7 @@ export function mapTaskToDb(
     (normalized.caseId && caseById[normalized.caseId]?.project) ||
     normalized.project;
   const projectId = projectName ? (nameToId[projectName] ?? null) : null;
+  const completedAt = normalizeTaskISODate(normalized.completedAt);
   return {
     id: normalized.id,
     user_id: userId,
@@ -149,7 +150,7 @@ export function mapTaskToDb(
     task_date: normalized.date,
     date_end: normalized.dateEnd ?? null,
     done: normalized.done,
-    completed_at: normalized.completedAt ?? null,
+    ...(completedAt ? { completed_at: completedAt } : {}),
     starred: normalized.starred ?? false,
     sort_order: normalized.sortOrder,
   };

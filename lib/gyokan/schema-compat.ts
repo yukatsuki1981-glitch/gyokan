@@ -156,6 +156,12 @@ export function buildTaskUpsertAttempts(row: TaskUpsertRow): Row[] {
   const legacy = toLegacyTaskUpsert(row);
   const attempts: Row[] = [modern, withDateAlias, legacy];
 
+  if (row.completed_at != null) {
+    const { completed_at: _completedAt, ...modernNoCompletedAt } = modern;
+    const { completed_at: _completedAt2, ...withDateAliasNoCompletedAt } = withDateAlias;
+    attempts.splice(1, 0, modernNoCompletedAt, withDateAliasNoCompletedAt);
+  }
+
   if (row.project_id == null) {
     const { project_id: _p, ...modernNoProject } = modern;
     attempts.push(modernNoProject);
