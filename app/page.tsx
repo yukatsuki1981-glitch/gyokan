@@ -32,6 +32,7 @@ import {
   resolveTaskCompletedAt,
 } from "@/lib/gyokan/task-completed-at";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
+import { hasDiaryContent } from "@/lib/gyokan/journal-entry";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
 import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
@@ -1205,27 +1206,6 @@ function DetailField({
 
 const fieldInputClass =
   "w-full rounded-xl border border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-bg2)_50%,transparent)] px-3 py-2.5 text-[14px] text-[var(--gyokan-text)] outline-none transition-colors focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent-lt)]";
-
-function getDiaryBodyForDate(diaries: DailyDiary[], date: string) {
-  const sameDay = diaries
-    .filter((d) => d.date === date)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  if (sameDay.length === 0) return "";
-  return sameDay
-    .map((d) => d.body.trim())
-    .filter(Boolean)
-    .join("\n");
-}
-
-function getFilledDiaryDates(diaries: DailyDiary[]) {
-  const dates = new Set<string>();
-  for (const d of diaries) {
-    if (getDiaryBodyForDate(diaries, d.date).trim()) {
-      dates.add(d.date);
-    }
-  }
-  return [...dates].sort();
-}
 
 function CaseDetailTaskStack({
   tasks,
@@ -3825,282 +3805,14 @@ function DailyMemoEditor({
   );
 }
 
-function DiaryNotebookPage({
-  date,
-  body,
-  onSave,
-  variant,
-}: {
-  date: string;
-  body: string;
-  onSave: (date: string, body: string) => Promise<boolean>;
-  variant: "single" | "left" | "right";
-}) {
-  const rounded =
-    variant === "left"
-      ? "rounded-l-md rounded-r-none"
-      : variant === "right"
-        ? "rounded-r-md rounded-l-none border-l-0"
-        : "rounded-md";
-
-  return (
-    <div
-      className={`flex min-h-[360px] flex-1 flex-col border border-black/[0.1] bg-[#faf8f5] p-4 shadow-inner ${rounded}`}
-    >
-      <p className="mb-3 border-b border-black/[0.08] pb-2 text-[12px] font-medium text-gray-600">
-        {formatDateJa(date)}
-      </p>
-      <DailyMemoEditor
-        key={date}
-        date={date}
-        body={body}
-        onSave={onSave}
-        placeholder="日記を書き込む…"
-      />
-    </div>
-  );
-}
-
-function DiarySpreadModal({
-  focusDate,
-  diaries,
-  onClose,
-  onSave,
-}: {
-  focusDate: string;
-  diaries: DailyDiary[];
-  onClose: () => void;
-  onSave: (date: string, body: string) => Promise<boolean>;
-}) {
-  const filledDates = useMemo(() => getFilledDiaryDates(diaries), [diaries]);
-  const [spreadIndex, setSpreadIndex] = useState(0);
-  const [pageStep, setPageStep] = useState(1);
-
-  useEffect(() => {
-    const idx = filledDates.indexOf(focusDate);
-    setSpreadIndex(idx >= 0 ? idx : 0);
-  }, [focusDate, filledDates]);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const update = () => setPageStep(mq.matches ? 2 : 1);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-
-  const leftDate = filledDates[spreadIndex];
-  const rightDate = pageStep === 2 ? filledDates[spreadIndex + 1] : undefined;
-  const canGoPrev = spreadIndex > 0;
-  const canGoNext = spreadIndex + pageStep < filledDates.length;
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="日記を開く"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 bg-white/55 backdrop-blur-[1px]"
-        aria-label="日記を閉じる"
-        onClick={onClose}
-      />
-      <div
-        className="relative flex max-h-[88dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-[#f3f1ec] shadow-[0_24px_80px_rgba(0,0,0,0.15)] ring-1 ring-black/[0.08]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex shrink-0 items-center justify-between border-b border-black/[0.08] bg-[#faf8f5] px-4 py-3">
-          <h2 className="text-[16px] font-semibold text-gray-900">日記</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="閉じる"
-            className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-black/[0.04]"
-          >
-            <Icon name="x" className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {filledDates.length === 0 ? (
-            <p className="py-12 text-center text-[13px] text-gray-400">まだ日記がありません</p>
-          ) : (
-            <>
-              <div className="lg:hidden">
-                {leftDate && (
-                  <DiaryNotebookPage
-                    date={leftDate}
-                    body={getDiaryBodyForDate(diaries, leftDate)}
-                    onSave={onSave}
-                    variant="single"
-                  />
-                )}
-              </div>
-              <div className="hidden lg:flex lg:items-stretch">
-                {leftDate && (
-                  <DiaryNotebookPage
-                    date={leftDate}
-                    body={getDiaryBodyForDate(diaries, leftDate)}
-                    onSave={onSave}
-                    variant={rightDate ? "left" : "single"}
-                  />
-                )}
-                {rightDate && (
-                  <>
-                    <div className="w-3 shrink-0 bg-gradient-to-r from-black/[0.06] via-black/[0.12] to-black/[0.06]" />
-                    <DiaryNotebookPage
-                      date={rightDate}
-                      body={getDiaryBodyForDate(diaries, rightDate)}
-                      onSave={onSave}
-                      variant="right"
-                    />
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-        {filledDates.length > 0 && (
-        <div className="flex shrink-0 items-center justify-between border-t border-black/[0.08] bg-[#faf8f5] px-4 py-2.5">
-          <button
-            type="button"
-            disabled={!canGoPrev}
-            onClick={() => setSpreadIndex((i) => Math.max(0, i - pageStep))}
-            className="text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)] disabled:pointer-events-none disabled:opacity-30"
-          >
-            ← 前のページ
-          </button>
-          <button
-            type="button"
-            disabled={!canGoNext}
-            onClick={() => setSpreadIndex((i) => Math.min(filledDates.length - 1, i + pageStep))}
-            className="text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)] disabled:pointer-events-none disabled:opacity-30"
-          >
-            次のページ →
-          </button>
-        </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DiaryAllList({
-  entries,
-  onOpenSpread,
-  onBack,
-}: {
-  entries: DailyDiary[];
-  onOpenSpread: (date: string) => void;
-  onBack: () => void;
-}) {
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-900">全ての日記</h3>
-        <button
-          type="button"
-          onClick={onBack}
-          className="text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)]"
-        >
-          戻る
-        </button>
-      </div>
-      {entries.length === 0 ? (
-        <p className="text-[12px] text-gray-400">まだ日記がありません</p>
-      ) : (
-        <ul className="max-h-[min(60vh,520px)] space-y-2 overflow-y-auto">
-          {entries.map((entry) => (
-            <li key={entry.id}>
-              <button
-                type="button"
-                onClick={() => onOpenSpread(entry.date)}
-                className="w-full rounded-xl border border-black/[0.06] bg-[var(--gyokan-bg)]/80 px-3 py-2.5 text-left transition-colors hover:bg-white"
-              >
-                <p className="mb-1 text-[12px] font-semibold text-gray-700">
-                  {formatDateJa(entry.date)}
-                </p>
-                <p className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-600">
-                  {entry.body.trim()}
-                </p>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function DiaryListModal({
-  onClose,
-  diaries,
-  onOpenSpread,
-}: {
-  onClose: () => void;
-  diaries: DailyDiary[];
-  onOpenSpread: (date: string) => void;
-}) {
-  const entriesWithBody = useMemo(
-    () =>
-      diaries
-        .filter((d) => d.body.trim())
-        .sort((a, b) => b.date.localeCompare(a.date)),
-    [diaries],
-  );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="全ての日記"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 bg-white/55 backdrop-blur-[1px]"
-        aria-label="一覧を閉じる"
-        onClick={onClose}
-      />
-      <div
-        className="relative flex h-[84vh] w-full max-h-[84dvh] max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-[0_24px_80px_rgba(0,0,0,0.15)] ring-1 ring-black/[0.06] lg:max-w-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <DiaryAllList
-            entries={entriesWithBody}
-            onOpenSpread={onOpenSpread}
-            onBack={onClose}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function DailyDiaryBoard({
   diaries,
   viewDateISO,
   onSave,
-  onOpenList,
 }: {
   diaries: DailyDiary[];
   viewDateISO: string;
   onSave: (date: string, body: string) => Promise<boolean>;
-  onOpenList?: () => void;
 }) {
   const [writeDate, setWriteDate] = useState(viewDateISO);
 
@@ -4142,79 +3854,16 @@ function DailyDiaryBoard({
         onSave={onSave}
         placeholder="日記を書き込む…"
       />
-      <button
-        type="button"
-        onClick={() => onOpenList?.()}
-        className="mt-3 text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)]"
+      <Link
+        href={
+          hasDiaryContent(diaries, writeDate)
+            ? `/diary?date=${encodeURIComponent(writeDate)}`
+            : "/diary"
+        }
+        className="mt-3 block text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)]"
       >
         全ての日記を見る
-      </button>
-      <Link
-        href={`/diary?date=${encodeURIComponent(writeDate)}`}
-        className="mt-2 block text-[12px] font-medium text-[#8a7058] hover:text-[#6a5040]"
-      >
-        日記モードで開く →
       </Link>
-    </div>
-  );
-}
-
-function MobileDiaryModal({
-  onClose,
-  diaries,
-  viewDateISO,
-  onSave,
-  onOpenList,
-}: {
-  onClose: () => void;
-  diaries: DailyDiary[];
-  viewDateISO: string;
-  onSave: (date: string, body: string) => Promise<boolean>;
-  onOpenList?: () => void;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-label="日記"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 bg-white/55 backdrop-blur-[1px]"
-        aria-label="日記を閉じる"
-        onClick={onClose}
-      />
-      <div
-        className="relative flex h-[84vh] w-[84vw] max-h-[84dvh] flex-col overflow-hidden rounded-3xl bg-white shadow-[0_24px_80px_rgba(0,0,0,0.15)] ring-1 ring-black/[0.06]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-4 py-3">
-          <h2 className="text-[17px] font-semibold text-gray-900">日記</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="閉じる"
-            className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-50"
-          >
-            <Icon name="x" className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <DailyDiaryBoard
-            diaries={diaries}
-            viewDateISO={viewDateISO}
-            onSave={onSave}
-            onOpenList={onOpenList}
-          />
-        </div>
-      </div>
     </div>
   );
 }
@@ -5263,8 +4912,6 @@ export default function Home() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("home");
   const [memoSheetOpen, setMemoSheetOpen] = useState(false);
-  const [diarySheetOpen, setDiarySheetOpen] = useState(false);
-  const [diaryListOpen, setDiaryListOpen] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
@@ -5296,12 +4943,6 @@ export default function Home() {
 
   const openSettings = useCallback(() => {
     setSettingsOpen(true);
-  }, []);
-  const [diarySpreadDate, setDiarySpreadDate] = useState<string | null>(null);
-
-  const openDiarySpread = useCallback((date: string) => {
-    setDiaryListOpen(false);
-    setDiarySpreadDate(date);
   }, []);
   const [activeProject, setActiveProject] = useState<string>(ALL_PROJECTS_LABEL);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
@@ -5897,7 +5538,7 @@ export default function Home() {
                 <path d="M6 4h9l3 3v13a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
                 <path d="M15 4v4h4M8 13h8M8 17h6" />
               </svg>
-              日記モード
+              全ての日記
             </Link>
             <button
               type="button"
@@ -6152,7 +5793,6 @@ export default function Home() {
               diaries={dailyDiaries}
               viewDateISO={viewDateISO}
               onSave={saveDailyDiary}
-              onOpenList={() => setDiaryListOpen(true)}
             />
           </Card>
         </aside>
@@ -6168,33 +5808,6 @@ export default function Home() {
         />
       )}
 
-      {diarySheetOpen && (
-        <MobileDiaryModal
-          onClose={() => setDiarySheetOpen(false)}
-          diaries={dailyDiaries}
-          viewDateISO={viewDateISO}
-          onSave={saveDailyDiary}
-          onOpenList={() => setDiaryListOpen(true)}
-        />
-      )}
-
-      {diaryListOpen && (
-        <DiaryListModal
-          onClose={() => setDiaryListOpen(false)}
-          diaries={dailyDiaries}
-          onOpenSpread={openDiarySpread}
-        />
-      )}
-
-      {diarySpreadDate && (
-        <DiarySpreadModal
-          focusDate={diarySpreadDate}
-          diaries={dailyDiaries}
-          onClose={() => setDiarySpreadDate(null)}
-          onSave={saveDailyDiary}
-        />
-      )}
-
       {/* Mobile Tab Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden">
         <div className="mx-auto flex max-w-lg justify-around px-1" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
@@ -6206,18 +5819,15 @@ export default function Home() {
                 if (tab.id === "projects") {
                   if (!showProjects) return;
                   setMemoSheetOpen(false);
-                  setDiarySheetOpen(false);
                   setActiveProject(ALL_PROJECTS_LABEL);
                   setMobileTab("projects");
                 } else if (tab.id === "memo") {
-                  setDiarySheetOpen(false);
                   setMemoSheetOpen(true);
                 } else if (tab.id === "diary") {
                   setMemoSheetOpen(false);
                   router.push("/diary");
                 } else {
                   setMemoSheetOpen(false);
-                  setDiarySheetOpen(false);
                   setMobileTab(tab.id);
                   if (tab.id === "home") {
                     setCalendarPeekReset((n) => n + 1);
@@ -6227,9 +5837,7 @@ export default function Home() {
               className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-all duration-200 ${
                 tab.id === "memo"
                   ? memoSheetOpen
-                  : tab.id === "diary"
-                    ? diarySheetOpen
-                    : mobileTab === tab.id
+                  : mobileTab === tab.id
                   ? "text-[var(--gyokan-accent2)]"
                   : "text-gray-400"
               }`}

@@ -110,6 +110,16 @@ export function hasDiaryContent(diaries: AppDailyDiary[], date: string) {
   return !isJournalEntryEmpty(getDiaryEntryForDate(diaries, date));
 }
 
+export function getFilledDiaryDates(diaries: AppDailyDiary[]): string[] {
+  const dates = new Set<string>();
+  for (const diary of diaries) {
+    if (hasDiaryContent(diaries, diary.date)) {
+      dates.add(diary.date);
+    }
+  }
+  return [...dates].sort();
+}
+
 export const WEATHER_OPTIONS = ["☀️", "⛅", "☁️", "🌧️", "❄️", "🌈", "🌙"];
 
 export const MOOD_PRESETS: { emoji: string; label: string; color: string }[] = [

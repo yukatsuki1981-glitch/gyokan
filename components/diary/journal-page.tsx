@@ -209,18 +209,23 @@ export function JournalMobileDateNav({
   date,
   onPrev,
   onNext,
+  canGoPrev = true,
+  canGoNext = true,
 }: {
   date: string;
   onPrev: () => void;
   onNext: () => void;
+  canGoPrev?: boolean;
+  canGoNext?: boolean;
 }) {
   return (
     <div className="mb-3 flex items-center justify-center gap-4">
       <button
         type="button"
         onClick={onPrev}
-        className="rounded-lg px-2 py-1 text-[20px] text-[#8a7a68] hover:bg-black/[0.04]"
-        aria-label="前の日"
+        disabled={!canGoPrev}
+        className="rounded-lg px-2 py-1 text-[20px] text-[#8a7a68] hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-25"
+        aria-label="前の日記"
       >
         ‹
       </button>
@@ -234,8 +239,9 @@ export function JournalMobileDateNav({
       <button
         type="button"
         onClick={onNext}
-        className="rounded-lg px-2 py-1 text-[20px] text-[#8a7a68] hover:bg-black/[0.04]"
-        aria-label="次の日"
+        disabled={!canGoNext}
+        className="rounded-lg px-2 py-1 text-[20px] text-[#8a7a68] hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-25"
+        aria-label="次の日記"
       >
         ›
       </button>
