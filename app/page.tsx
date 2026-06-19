@@ -33,6 +33,7 @@ import {
 } from "@/lib/gyokan/task-completed-at";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
 import { hasDiaryContent } from "@/lib/gyokan/journal-entry";
+import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
 import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
@@ -593,6 +594,39 @@ function sortTasksByDateWithDoneLast(tasks: Task[], date: string) {
     if (activeIdx < active.length) return active[activeIdx++]!;
     return done[doneIdx++]!;
   });
+}
+
+function calendarDayNumberClass(
+  dayOfWeek: number,
+  inMonth: boolean,
+  isSelected: boolean,
+  isToday: boolean,
+  dayInfo: ReturnType<typeof getJapaneseCalendarDay>,
+) {
+  if (isSelected) return "text-white";
+  if (isToday && inMonth) return "text-blue-600";
+  if (!inMonth) return "text-gray-300";
+  if (dayInfo?.kind === "holiday") return "text-rose-600";
+  if (dayInfo?.kind === "commemorative") return "text-rose-500";
+  if (dayOfWeek === 0) return "text-rose-500";
+  if (dayOfWeek === 6) return "text-blue-500";
+  return "text-gray-700";
+}
+
+function mobileCalendarDayNumberClass(
+  dayOfWeek: number,
+  inMonth: boolean,
+  isSelected: boolean,
+  isToday: boolean,
+  dayInfo: ReturnType<typeof getJapaneseCalendarDay>,
+) {
+  if (!inMonth) return "text-gray-300";
+  if (dayInfo?.kind === "holiday") return "text-rose-600";
+  if (dayInfo?.kind === "commemorative") return "text-rose-500";
+  if (isSelected || isToday) return "text-gray-900";
+  if (dayOfWeek === 0) return "text-rose-500";
+  if (dayOfWeek === 6) return "text-blue-500";
+  return "text-gray-800";
 }
 
 function calendarDayCellClass(
@@ -3194,17 +3228,34 @@ function CalendarWidget({
           const isSelected = cellIso === selectedDate;
           const hasTask = (tasksByDate.get(cellIso) ?? []).length > 0;
           const dayOfWeek = i % 7;
+          const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cellIso) : null;
 
           return (
             <button
               key={`${i}-${cell.day}-${cell.inMonth}`}
               type="button"
               onClick={() => onSelectDate(cellIso)}
-              className={`relative flex h-7 items-center justify-center rounded-full text-[11px] font-medium leading-none transition-all duration-200 ${calendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
+              title={dayInfo?.label}
+              className={`relative flex min-h-7 flex-col items-center justify-start rounded-md px-0.5 py-0.5 text-center transition-all duration-200 ${calendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
             >
-              {cell.day}
+              <span
+                className={`text-[11px] font-medium leading-none ${calendarDayNumberClass(dayOfWeek, cell.inMonth, isSelected, isToday, dayInfo)}`}
+              >
+                {cell.day}
+              </span>
+              {dayInfo && cell.inMonth && (
+                <span
+                  className={`mt-0.5 max-w-full truncate text-[6px] leading-none ${
+                    dayInfo.kind === "holiday"
+                      ? "font-medium text-rose-600"
+                      : "text-rose-500"
+                  }`}
+                >
+                  {dayInfo.label}
+                </span>
+              )}
               {hasTask && !isSelected && (
-                <span className="absolute bottom-0.5 left-1/2 h-0.5 w-0.5 -translate-x-1/2 rounded-full bg-blue-500" />
+                <span className="absolute bottom-0 left-1/2 h-0.5 w-0.5 -translate-x-1/2 rounded-full bg-blue-500" />
               )}
             </button>
           );
@@ -3266,8 +3317,12 @@ function MobileCalendarDayCell({
   const isSelected = cellIso === selectedDate;
   const isToday = cellIso === todayISO();
   const dayOfWeek = cellIndex % 7;
-  const preview = dayTasks.slice(0, CALENDAR_TASK_PREVIEW_MAX);
-  const overflow = Math.max(0, dayTasks.length - CALENDAR_TASK_PREVIEW_MAX);
+  const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cellIso) : null;
+  const taskPreviewMax = dayInfo
+    ? Math.max(1, CALENDAR_TASK_PREVIEW_MAX - 1)
+    : CALENDAR_TASK_PREVIEW_MAX;
+  const preview = dayTasks.slice(0, taskPreviewMax);
+  const overflow = Math.max(0, dayTasks.length - taskPreviewMax);
 
   return (
     <button
@@ -3276,7 +3331,23 @@ function MobileCalendarDayCell({
       className={`relative flex flex-col border-b border-r border-black/[0.04] p-0.5 text-left transition-colors ${mobileCalendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
       style={{ height: CALENDAR_CELL_ROW_H, touchAction: "pan-x" }}
     >
-      <span className="shrink-0 px-0.5 text-[11px] font-semibold leading-none">{cell.day}</span>
+      <span
+        className={`shrink-0 px-0.5 text-[11px] font-semibold leading-none ${mobileCalendarDayNumberClass(dayOfWeek, cell.inMonth, isSelected, isToday, dayInfo)}`}
+      >
+        {cell.day}
+      </span>
+      {dayInfo && (
+        <span
+          className={`mt-0.5 shrink-0 truncate px-0.5 text-[7px] leading-[9px] ${
+            dayInfo.kind === "holiday"
+              ? "font-medium text-rose-600"
+              : "text-rose-500"
+          }`}
+          title={dayInfo.label}
+        >
+          {dayInfo.label}
+        </span>
+      )}
       {preview.length > 0 && (
         <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-px overflow-hidden">
           {preview.map((task, i) => {
@@ -4322,9 +4393,7 @@ function AddTaskModalForm({
 }) {
   const { showProjects, showCases, projectLabel, caseLabel } = useDisplaySettings();
   const [title, setTitle] = useState("");
-  const [underProjectDirect, setUnderProjectDirect] = useState(
-    () => showProjects && !showCases,
-  );
+  const [underProjectDirect, setUnderProjectDirect] = useState(() => showProjects);
   const [project, setProject] = useState(
     defaultProject ?? projectOptions[0] ?? "",
   );
@@ -4369,22 +4438,36 @@ function AddTaskModalForm({
       date,
       dateEnd: end,
     };
-    if (underProjectDirect || (showProjects && !showCases)) {
-      if (!project) return;
+
+    if (showCases && caseId) {
+      const linked = ongoingCases.find((c) => c.id === caseId);
+      if (!linked) return;
       onSubmit({
         ...payload,
-        project,
+        project: linked.project,
+        caseId,
+      });
+      onClose();
+      return;
+    }
+
+    if (showProjects) {
+      const effectiveProject = project || projectOptions[0] || "";
+      if (!effectiveProject) return;
+      onSubmit({
+        ...payload,
+        project: effectiveProject,
         caseId: undefined,
       });
-    } else {
-      const linked = caseId ? ongoingCases.find((c) => c.id === caseId) : undefined;
-      if (caseId && !linked) return;
-      onSubmit({
-        ...payload,
-        project: linked?.project ?? "",
-        caseId: caseId || undefined,
-      });
+      onClose();
+      return;
     }
+
+    onSubmit({
+      ...payload,
+      project: "",
+      caseId: undefined,
+    });
     onClose();
   };
 
@@ -4415,7 +4498,11 @@ function AddTaskModalForm({
           {showCases && (
           <select
             value={caseId}
-            onChange={(e) => setCaseId(e.target.value)}
+            onChange={(e) => {
+              const nextCaseId = e.target.value;
+              setCaseId(nextCaseId);
+              if (nextCaseId) setUnderProjectDirect(false);
+            }}
             disabled={underProjectDirect}
             className={`mb-2 w-full rounded-2xl border border-gray-100 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50 ${
               underProjectDirect

@@ -434,7 +434,8 @@ async function upsertTaskRow(
       isSchemaMismatchError(error) ||
       isMissingColumnError(error, "") ||
       (error.message?.toLowerCase().includes("null value") ?? false) ||
-      (error.message?.toLowerCase().includes("not-null") ?? false);
+      (error.message?.toLowerCase().includes("not-null") ?? false) ||
+      (error.message?.toLowerCase().includes("invalid input syntax") ?? false);
     if (!retryable) break;
   }
 

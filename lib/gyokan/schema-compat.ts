@@ -146,21 +146,52 @@ export type TaskUpsertRow = {
   sort_order: number;
 };
 
+/** Legacy `time` columns are typed as time — only send HH:MM values. */
+export function parseLegacyTimeValue(timeLabel: string): string | undefined {
+  const trimmed = timeLabel.trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return undefined;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return undefined;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 export function buildTaskUpsertAttempts(row: TaskUpsertRow): Row[] {
   const modern: Row = { ...row };
   const withDateAlias: Row = {
     ...modern,
     date: row.task_date,
-    time: row.time_label,
   };
-  const legacy = toLegacyTaskUpsert(row);
-  const attempts: Row[] = [modern, withDateAlias, legacy];
-
-  if (row.completed_at != null) {
-    const { completed_at: _completedAt, ...modernNoCompletedAt } = modern;
-    const { completed_at: _completedAt2, ...withDateAliasNoCompletedAt } = withDateAlias;
-    attempts.splice(1, 0, modernNoCompletedAt, withDateAliasNoCompletedAt);
+  const legacyTime = parseLegacyTimeValue(row.time_label);
+  if (legacyTime) {
+    withDateAlias.time = legacyTime;
   }
+
+  const legacy = toLegacyTaskUpsert(row);
+  const { completed_at: _completedAt, ...modernNoCompletedAt } = modern;
+  const { completed_at: _completedAt2, ...withDateAliasNoCompletedAt } = withDateAlias;
+  const {
+    starred: _starred,
+    sort_order: _sortOrder,
+    date_end: _dateEnd,
+    ...modernCore
+  } = modernNoCompletedAt;
+  const withDateAliasCore = {
+    ...modernCore,
+    date: row.task_date,
+    ...(legacyTime ? { time: legacyTime } : {}),
+  };
+
+  const attempts: Row[] = [
+    modern,
+    withDateAlias,
+    modernNoCompletedAt,
+    withDateAliasNoCompletedAt,
+    modernCore,
+    withDateAliasCore,
+    legacy,
+  ];
 
   if (row.project_id == null) {
     const { project_id: _p, ...modernNoProject } = modern;
@@ -207,9 +238,10 @@ export function toLegacyTaskUpsert(row: {
     project_id: row.project_id,
     title: row.title,
     date: row.task_date,
-    time: row.time_label,
     done: row.done,
   };
+  const legacyTime = parseLegacyTimeValue(row.time_label);
+  if (legacyTime) legacy.time = legacyTime;
   if (row.case_id != null) legacy.case_id = row.case_id;
   if (row.starred != null) legacy.starred = row.starred;
   if (row.sort_order != null) legacy.sort_order = row.sort_order;
