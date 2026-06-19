@@ -3185,6 +3185,15 @@ function CalendarWidget({
 
   const goPrev = () => setViewDate(new Date(year, month - 1, 1));
   const goNext = () => setViewDate(new Date(year, month + 1, 1));
+  const goToday = () => {
+    const today = todayISO();
+    onSelectDate(today);
+    setViewDate(new Date(today + "T12:00:00"));
+  };
+
+  useEffect(() => {
+    setViewDate(new Date(selectedDate + "T12:00:00"));
+  }, [selectedDate]);
 
   return (
     <div>
@@ -3197,7 +3206,16 @@ function CalendarWidget({
         >
           <Icon name="chevronLeft" className="h-3.5 w-3.5" />
         </button>
-        <span className="text-[12px] font-semibold text-gray-800">{monthLabel}</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={goToday}
+            className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-[var(--gyokan-accent2)] hover:bg-blue-50"
+          >
+            今日
+          </button>
+          <span className="text-[12px] font-semibold text-gray-800">{monthLabel}</span>
+        </div>
         <button
           type="button"
           onClick={goNext}
@@ -4959,7 +4977,6 @@ export default function Home() {
     projectNames,
     projects,
     projectColors,
-    lastViewDate,
     tasks,
     cases,
     memos,
@@ -5034,7 +5051,6 @@ export default function Home() {
   const [activeProject, setActiveProject] = useState<string>(ALL_PROJECTS_LABEL);
   const [viewDateISO, setViewDateISO] = useState(() => todayISO());
   const [calendarPeekReset, setCalendarPeekReset] = useState(0);
-  const viewDateInitialized = useRef(false);
 
   const viewDateLabel = formatDateJa(viewDateISO);
   const isAllProjects = activeProject === ALL_PROJECTS_LABEL;
@@ -5079,14 +5095,6 @@ export default function Home() {
   }, [showCases]);
 
   useEffect(() => {
-    if (!dataReady || viewDateInitialized.current) return;
-    if (lastViewDate) {
-      setViewDateISO(lastViewDate);
-    }
-    viewDateInitialized.current = true;
-  }, [dataReady, lastViewDate]);
-
-  useEffect(() => {
     if (!user || !dataReady) return;
     saveViewDate(viewDateISO);
   }, [viewDateISO, user, dataReady, saveViewDate]);
@@ -5096,11 +5104,6 @@ export default function Home() {
     useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 10 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-
-  const handleRefresh = useCallback(async () => {
-    const lastView = await reload();
-    if (lastView) setViewDateISO(lastView);
-  }, [reload]);
 
   const ongoingCases = useMemo(
     () => cases.filter((c) => !c.done),
@@ -5187,10 +5190,20 @@ export default function Home() {
     [caseById],
   );
 
+  const goToToday = useCallback(() => {
+    setViewDateISO(todayISO());
+    setCalendarPeekReset((n) => n + 1);
+  }, []);
+
   const goToDate = useCallback((iso: string) => {
     setViewDateISO(iso);
     setMobileTab("home");
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    await reload();
+    goToToday();
+  }, [reload, goToToday]);
 
   const reorderTasksInList = useCallback(
     (prev: Task[], visible: Task[], activeId: string | number, overId: string | number) => {
