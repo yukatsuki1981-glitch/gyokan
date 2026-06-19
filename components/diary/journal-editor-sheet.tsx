@@ -12,6 +12,7 @@ import {
   type JournalEntry,
 } from "@/lib/gyokan/journal-entry";
 import type { AppDailyDiary } from "@/lib/gyokan/types";
+import "./diary-journal.css";
 
 export function JournalEditorSheet({
   date,
@@ -96,10 +97,7 @@ export function JournalEditorSheet({
       >
         <header className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-4 py-3">
           <div>
-            <h2
-              className="text-[16px] font-semibold text-[#4a3f32]"
-              style={{ fontFamily: "var(--font-shippori-mincho), serif" }}
-            >
+            <h2 className="journal-body-text journal-date-row text-[16px]">
               {formatDateJa(date)}
             </h2>
             {saving && (
@@ -165,10 +163,9 @@ export function JournalEditorSheet({
                             },
                       )
                     }
-                    className="rounded-full px-2.5 py-1 text-[12px] transition-all"
+                    className="journal-body-text rounded-full px-2.5 py-1 text-[12px] transition-all"
                     style={{
                       background: active ? m.color : "rgba(255,255,255,0.5)",
-                      fontFamily: "var(--font-zen-maru-gothic), sans-serif",
                     }}
                   >
                     {m.emoji} {m.label}

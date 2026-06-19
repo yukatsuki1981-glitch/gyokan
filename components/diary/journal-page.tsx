@@ -15,16 +15,26 @@ import "./diary-journal.css";
 
 type PageSide = "single" | "left" | "right";
 
+export function JournalSpread({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="journal-spread min-h-0 flex-1">
+      <div className="journal-spread-scroll">{children}</div>
+    </div>
+  );
+}
+
 export function JournalPage({
   date,
   diaries,
   side,
+  inSpread = false,
   onCornerNext,
   onEdit,
 }: {
   date: string;
   diaries: AppDailyDiary[];
   side: PageSide;
+  inSpread?: boolean;
   onCornerNext?: () => void;
   onEdit?: () => void;
 }) {
@@ -37,9 +47,15 @@ export function JournalPage({
         ? "rounded-r-sm rounded-l-none"
         : "rounded-sm";
 
+  const paperClass = inSpread
+    ? `journal-paper--in-spread journal-paper--${side}`
+    : side === "single"
+      ? "journal-paper--single min-h-[min(72vh,640px)]"
+      : `journal-paper--${side} min-h-[min(72vh,640px)]`;
+
   return (
     <article
-      className={`journal-paper journal-paper-lines relative flex min-h-[min(72vh,640px)] flex-1 flex-col overflow-hidden ${rounded}`}
+      className={`journal-paper relative flex flex-1 flex-col overflow-hidden ${paperClass} ${rounded}`}
       onClick={empty ? onEdit : undefined}
       role={empty && onEdit ? "button" : undefined}
       tabIndex={empty && onEdit ? 0 : undefined}
@@ -61,42 +77,44 @@ export function JournalPage({
         ))}
       </div>
 
-      <header className="relative z-[1] shrink-0 px-5 pb-2 pt-5 pl-[var(--journal-margin-left)]">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <time
-            dateTime={date}
-            className="text-[15px] font-semibold tracking-tight text-[#4a3f32]"
-            style={{ fontFamily: "var(--font-shippori-mincho), serif" }}
-          >
-            {side === "single" ? formatDateShortJa(date) : formatDateJa(date)}
-          </time>
-          {entry.weather && (
-            <span className="text-[18px]" aria-label="天気">
-              {entry.weather}
-            </span>
+      <div
+        className={`journal-paper-lines relative z-[1] flex-1 ${inSpread ? "" : "min-h-0 overflow-y-auto"}`}
+      >
+        <div className="journal-lined-content">
+          {!empty && (
+            <>
+              <p className="journal-body-text journal-date-row">
+                <time dateTime={date}>
+                  {side === "single" ? formatDateShortJa(date) : formatDateJa(date)}
+                </time>
+                {entry.weather && (
+                  <span
+                    className="ml-2 inline-block align-middle text-[16px] leading-none"
+                    aria-label="天気"
+                  >
+                    {entry.weather}
+                  </span>
+                )}
+              </p>
+              {(entry.moodEmoji || entry.moodLabel) && (
+                <MoodLine entry={entry} />
+              )}
+            </>
+          )}
+          {empty ? (
+            <p className="journal-body-text text-[#a89880]">まだ日記がありません</p>
+          ) : (
+            <>
+              {entry.text.trim() ? (
+                <p className="journal-body-text">{entry.text}</p>
+              ) : null}
+              {entry.photos.length > 0 && (
+                <JournalPhotoStrip photos={entry.photos} />
+              )}
+              <div className="h-[var(--journal-line-h)]" aria-hidden title="スタンプ用の余白" />
+            </>
           )}
         </div>
-        {entry.moodEmoji || entry.moodLabel ? (
-          <MoodBadge entry={entry} />
-        ) : null}
-      </header>
-
-      <div className="relative z-[1] min-h-0 flex-1 overflow-y-auto px-5 pb-16 pl-[var(--journal-margin-left)]">
-        {empty ? (
-          <p className="journal-body-text pt-[var(--journal-line-h)] text-[#a89880]">
-            まだ日記がありません
-          </p>
-        ) : (
-          <>
-            {entry.text.trim() ? (
-              <p className="journal-body-text pt-1">{entry.text}</p>
-            ) : null}
-            {entry.photos.length > 0 && (
-              <JournalPhotoStrip photos={entry.photos} />
-            )}
-            <div className="mt-6 h-10" aria-hidden title="スタンプ用の余白" />
-          </>
-        )}
       </div>
 
       {!empty && onEdit && (
@@ -127,18 +145,12 @@ export function JournalPage({
   );
 }
 
-function MoodBadge({ entry }: { entry: JournalEntry }) {
+function MoodLine({ entry }: { entry: JournalEntry }) {
   return (
-    <span
-      className="mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] text-[#5a5048]"
-      style={{
-        background: "rgba(232, 220, 200, 0.55)",
-        fontFamily: "var(--font-zen-maru-gothic), sans-serif",
-      }}
-    >
-      {entry.moodEmoji && <span>{entry.moodEmoji}</span>}
-      {entry.moodLabel && <span>{entry.moodLabel}</span>}
-    </span>
+    <p className="journal-body-text text-[#5a5048]">
+      {entry.moodEmoji && <span>{entry.moodEmoji} </span>}
+      {entry.moodLabel}
+    </p>
   );
 }
 
@@ -229,12 +241,11 @@ export function JournalMobileDateNav({
       >
         ‹
       </button>
-      <span
-        className="min-w-[10rem] text-center text-[15px] font-medium text-[#4a3f32]"
-        style={{ fontFamily: "var(--font-shippori-mincho), serif" }}
-      >
+      <span className="journal-body-text journal-date-row min-w-[10rem] text-center">
         {formatDateShortJa(date)}
-        <span className="ml-1 text-[13px] text-[#9a8a78]">({weekdayJa(date)})</span>
+        <span className="ml-1 text-[13px] font-normal text-[#9a8a78]">
+          ({weekdayJa(date)})
+        </span>
       </span>
       <button
         type="button"

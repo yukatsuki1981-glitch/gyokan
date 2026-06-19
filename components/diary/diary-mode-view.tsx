@@ -15,6 +15,7 @@ import {
   JournalNavArrow,
   JournalPage,
   JournalSpine,
+  JournalSpread,
 } from "./journal-page";
 
 export function DiaryModeView({
@@ -116,10 +117,9 @@ export function DiaryModeView({
         </Link>
         <span className="text-[#d0c8bc]">/</span>
         <span
-          className="rounded-lg bg-[#f0e8dc] px-3 py-1.5 text-[13px] font-medium text-[#6a5a48]"
-          style={{ fontFamily: "var(--font-shippori-mincho), serif" }}
+          className="journal-body-text rounded-lg bg-[#f0e8dc] px-3 py-1.5 text-[13px] font-semibold text-[#6a5a48]"
         >
-          全ての日記
+          日記
         </span>
       </nav>
 
@@ -151,12 +151,13 @@ export function DiaryModeView({
               )}
 
               {isWide ? (
-                <div className="flex min-h-0 flex-1 items-stretch">
+                <JournalSpread>
                   {leftDate && (
                     <JournalPage
                       date={leftDate}
                       diaries={diaries}
                       side="left"
+                      inSpread
                       onEdit={() => openEditor(leftDate)}
                     />
                   )}
@@ -167,6 +168,7 @@ export function DiaryModeView({
                         date={rightDate}
                         diaries={diaries}
                         side="right"
+                        inSpread
                         onCornerNext={canGoNext ? goNext : undefined}
                         onEdit={() => openEditor(rightDate)}
                       />
@@ -177,7 +179,7 @@ export function DiaryModeView({
                       <div className="flex-1" aria-hidden />
                     </>
                   ) : null}
-                </div>
+                </JournalSpread>
               ) : (
                 mobileDate && (
                   <JournalPage

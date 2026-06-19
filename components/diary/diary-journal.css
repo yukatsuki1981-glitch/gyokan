@@ -1,17 +1,26 @@
-.journal-paper {
+/* Shared notebook grid — used on spread and single pages */
+.journal-paper,
+.journal-spread {
   --journal-line-h: 28px;
-  --journal-margin-left: 42px;
+  --journal-font-size: 16px;
+  --journal-margin-left: 44px;
+  --journal-pad-x: 20px;
+  --journal-paper: #faf7ee;
+}
+
+.journal-paper {
   position: relative;
-  background:
+  background-color: var(--journal-paper);
+  background-image:
     linear-gradient(
       180deg,
-      rgba(255, 252, 245, 0.92) 0%,
-      rgba(248, 242, 230, 0.96) 48%,
-      rgba(244, 236, 222, 0.98) 100%
+      rgba(255, 253, 248, 0.65) 0%,
+      rgba(250, 247, 238, 0.35) 45%,
+      rgba(245, 238, 224, 0.5) 100%
     );
   box-shadow:
-    inset 0 0 80px rgba(139, 109, 76, 0.04),
-    0 2px 12px rgba(60, 40, 20, 0.06);
+    inset 0 0 100px rgba(139, 109, 76, 0.035),
+    0 1px 0 rgba(255, 255, 255, 0.65) inset;
 }
 
 .journal-paper::before {
@@ -19,21 +28,49 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.35;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.42;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
   mix-blend-mode: multiply;
 }
 
+.journal-paper--left {
+  box-shadow:
+    inset 0 0 100px rgba(139, 109, 76, 0.035),
+    0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    4px 0 14px rgba(72, 52, 32, 0.07);
+}
+
+.journal-paper--right {
+  box-shadow:
+    inset 0 0 100px rgba(139, 109, 76, 0.035),
+    0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    -4px 0 14px rgba(72, 52, 32, 0.07);
+}
+
+.journal-paper--single {
+  box-shadow:
+    inset 0 0 100px rgba(139, 109, 76, 0.035),
+    0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    0 4px 20px rgba(72, 52, 32, 0.08);
+}
+
 .journal-paper-lines {
-  background-image:
-    linear-gradient(
-      to bottom,
-      transparent calc(var(--journal-line-h) - 1px),
-      rgba(160, 175, 195, 0.28) calc(var(--journal-line-h) - 1px),
-      rgba(160, 175, 195, 0.28) var(--journal-line-h)
-    );
+  background-image: linear-gradient(
+    to bottom,
+    transparent calc(var(--journal-line-h) - 1px),
+    rgba(196, 178, 152, 0.38) calc(var(--journal-line-h) - 1px),
+    rgba(196, 178, 152, 0.38) var(--journal-line-h)
+  );
   background-size: 100% var(--journal-line-h);
-  background-position: 0 56px;
+  background-position: 0 0;
+  background-attachment: local;
+}
+
+.journal-lined-content {
+  padding-top: var(--journal-line-h);
+  padding-bottom: calc(var(--journal-line-h) * 2);
+  padding-left: var(--journal-margin-left);
+  padding-right: var(--journal-pad-x);
 }
 
 .journal-margin-line {
@@ -45,48 +82,145 @@
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    rgba(220, 120, 110, 0.35) 4%,
-    rgba(220, 120, 110, 0.35) 96%,
+    rgba(214, 140, 128, 0.32) 3%,
+    rgba(214, 140, 128, 0.32) 97%,
     transparent 100%
   );
   pointer-events: none;
+  z-index: 2;
 }
 
 .journal-ring-holes {
   position: absolute;
-  top: 48px;
-  bottom: 24px;
-  left: 14px;
+  top: 0;
+  bottom: 0;
+  left: 16px;
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  justify-content: space-evenly;
+  padding-top: calc(var(--journal-line-h) * 2);
+  gap: calc(var(--journal-line-h) * 3);
   pointer-events: none;
 }
 
 .journal-ring-hole {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
   border-radius: 9999px;
-  background: radial-gradient(circle at 35% 35%, #fff 0%, #e8dfd0 45%, #c9b9a4 100%);
+  background: radial-gradient(circle at 38% 32%, #fff 0%, #ebe3d4 42%, #c8b8a0 100%);
   box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.15),
-    0 0 0 1px rgba(120, 90, 60, 0.12);
+    inset 0 1px 2px rgba(0, 0, 0, 0.14),
+    0 0 0 1px rgba(120, 90, 60, 0.1);
+}
+
+/* Two-page spread: one shared ruled grid behind both pages */
+.journal-spread {
+  position: relative;
+  display: flex;
+  min-height: min(72vh, 640px);
+  height: min(72vh, 640px);
+  flex: 1;
+  align-items: stretch;
+  border-radius: 4px;
+  background-color: var(--journal-paper);
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(255, 253, 248, 0.65) 0%,
+      rgba(250, 247, 238, 0.35) 45%,
+      rgba(245, 238, 224, 0.5) 100%
+    );
+  filter: drop-shadow(0 8px 24px rgba(72, 52, 32, 0.1));
+}
+
+.journal-spread::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.42;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+  z-index: 0;
+}
+
+
+.journal-spread-scroll {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  min-height: 100%;
+  flex: 1;
+  overflow-y: auto;
+  align-items: stretch;
+  background-image: linear-gradient(
+    to bottom,
+    transparent calc(var(--journal-line-h) - 1px),
+    rgba(196, 178, 152, 0.38) calc(var(--journal-line-h) - 1px),
+    rgba(196, 178, 152, 0.38) var(--journal-line-h)
+  );
+  background-size: 100% var(--journal-line-h);
+  background-position: 0 0;
+  background-attachment: local;
+}
+
+.journal-paper--in-spread {
+  min-height: min(72vh, 640px);
+  height: auto;
+  box-shadow: none;
+  background-color: transparent;
+  background-image: none;
+}
+
+.journal-paper--in-spread::before {
+  display: none;
+}
+
+.journal-paper--in-spread .journal-paper-lines {
+  background-image: none;
+}
+
+.journal-paper--in-spread.journal-paper--left {
+  box-shadow: inset -1px 0 0 rgba(196, 178, 152, 0.2);
+}
+
+.journal-paper--in-spread.journal-paper--right {
+  box-shadow: inset 1px 0 0 rgba(196, 178, 152, 0.2);
 }
 
 .journal-spine {
-  width: 14px;
+  position: relative;
+  z-index: 3;
+  width: 18px;
   flex-shrink: 0;
   background: linear-gradient(
     to right,
-    rgba(0, 0, 0, 0.02) 0%,
-    rgba(0, 0, 0, 0.1) 35%,
-    rgba(0, 0, 0, 0.16) 50%,
-    rgba(0, 0, 0, 0.1) 65%,
-    rgba(0, 0, 0, 0.02) 100%
+    rgba(72, 52, 32, 0.14) 0%,
+    rgba(72, 52, 32, 0.28) 22%,
+    rgba(48, 36, 24, 0.38) 50%,
+    rgba(72, 52, 32, 0.28) 78%,
+    rgba(72, 52, 32, 0.14) 100%
   );
   box-shadow:
-    inset 4px 0 8px rgba(0, 0, 0, 0.06),
-    inset -4px 0 8px rgba(0, 0, 0, 0.06);
+    inset 5px 0 10px rgba(0, 0, 0, 0.12),
+    inset -5px 0 10px rgba(0, 0, 0, 0.12),
+    0 0 12px rgba(48, 36, 24, 0.15);
+}
+
+.journal-spine::before {
+  content: "";
+  position: absolute;
+  inset: 8% 45%;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.08),
+    rgba(0, 0, 0, 0.18),
+    rgba(0, 0, 0, 0.08)
+  );
 }
 
 .journal-page-fold {
@@ -96,23 +230,35 @@
   width: 0;
   height: 0;
   border-style: solid;
-  border-width: 0 0 36px 36px;
-  border-color: transparent transparent rgba(180, 160, 130, 0.22) transparent;
+  border-width: 0 0 40px 40px;
+  border-color: transparent transparent rgba(168, 148, 118, 0.45) transparent;
   cursor: pointer;
-  transition: border-color 0.2s;
+  filter: drop-shadow(-2px 3px 4px rgba(72, 52, 32, 0.2));
+  transition:
+    border-color 0.2s,
+    filter 0.2s;
 }
 
 .journal-page-fold:hover {
-  border-color: transparent transparent rgba(160, 130, 90, 0.38) transparent;
+  border-color: transparent transparent rgba(148, 122, 88, 0.62) transparent;
+  filter: drop-shadow(-3px 4px 6px rgba(72, 52, 32, 0.28));
 }
 
-.journal-body-text {
-  font-family: var(--font-shippori-mincho), var(--font-noto-serif-jp), serif;
-  font-size: 15px;
+.journal-body-text,
+.journal-handwriting {
+  font-family: var(--font-klee-one), "Hiragino Maru Gothic ProN", cursive, sans-serif;
+  font-size: var(--journal-font-size);
   line-height: var(--journal-line-h);
+  color: #3a3228;
+  margin: 0;
+  padding: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #3d3428;
+}
+
+.journal-date-row {
+  font-weight: 600;
+  color: #4a3f32;
 }
 
 .journal-photo-polaroid {

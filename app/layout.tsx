@@ -3,6 +3,7 @@ import {
   DM_Mono,
   Geist,
   Geist_Mono,
+  Klee_One,
   Noto_Sans_JP,
   Noto_Serif_JP,
   Shippori_Mincho_B1,
@@ -52,6 +53,12 @@ const zenMaruGothic = Zen_Maru_Gothic({
   weight: ["400", "500", "700"],
 });
 
+const kleeOne = Klee_One({
+  variable: "--font-klee-one",
+  subsets: ["latin"],
+  weight: ["400", "600"],
+});
+
 const fontVariables = [
   geistSans.variable,
   geistMono.variable,
@@ -60,6 +67,7 @@ const fontVariables = [
   shipporiMincho.variable,
   dmMono.variable,
   zenMaruGothic.variable,
+  kleeOne.variable,
 ].join(" ");
 
 export const metadata: Metadata = {
