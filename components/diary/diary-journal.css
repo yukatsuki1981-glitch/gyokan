@@ -184,17 +184,7 @@
   min-width: 0;
   min-height: 100%;
   flex: 1;
-  overflow-y: auto;
   align-items: stretch;
-  background-image: linear-gradient(
-    to bottom,
-    transparent calc(var(--journal-line-h) - 1px),
-    rgba(196, 178, 152, 0.38) calc(var(--journal-line-h) - 1px),
-    rgba(196, 178, 152, 0.38) var(--journal-line-h)
-  );
-  background-size: 100% var(--journal-line-h);
-  background-position: 0 0;
-  background-attachment: local;
 }
 
 .journal-paper--in-spread {
@@ -210,9 +200,6 @@
   display: none;
 }
 
-.journal-paper--in-spread .journal-paper-lines {
-  background-image: none;
-}
 
 .journal-paper--in-spread.journal-paper--left {
   box-shadow: inset 8px 0 12px -6px rgba(72, 52, 32, 0.08);
