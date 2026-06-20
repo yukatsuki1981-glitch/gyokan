@@ -131,9 +131,8 @@ export function DiaryModeView({
           </p>
         ) : (
           <>
-            {!isWide && mobileDate && (
+            {!isWide && (
               <JournalMobileDateNav
-                date={mobileDate}
                 onPrev={goPrev}
                 onNext={goNext}
                 canGoPrev={canGoPrev}

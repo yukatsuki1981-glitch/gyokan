@@ -7,9 +7,7 @@ import {
   useRef,
 } from "react";
 import {
-  formatDateJa,
   formatDateShortJa,
-  weekdayJa,
 } from "@/lib/gyokan/iso-date";
 import {
   getDiaryEntryForDate,
@@ -26,6 +24,28 @@ export function JournalSpread({ children }: { children: React.ReactNode }) {
     <div className="journal-spread min-h-0 flex-1">
       <div className="journal-spread-scroll">{children}</div>
     </div>
+  );
+}
+
+function JournalPageDateHeader({
+  date,
+  weather,
+}: {
+  date: string;
+  weather?: string;
+}) {
+  return (
+    <header className="journal-page-date-header">
+      <time dateTime={date} className="journal-page-date">
+        {formatDateShortJa(date)}
+        {weather && (
+          <span className="journal-page-date-weather" aria-label="天気">
+            {weather}
+          </span>
+        )}
+      </time>
+      <div className="journal-page-date-rule" aria-hidden />
+    </header>
   );
 }
 
@@ -76,31 +96,15 @@ export function JournalPage({
           : undefined
       }
     >
+      <JournalPageDateHeader date={date} weather={empty ? undefined : entry.weather} />
       <div className="journal-margin-line" aria-hidden />
 
       <div
         className={`journal-paper-lines relative z-[1] flex-1 ${inSpread ? "" : "min-h-0 overflow-y-auto"}`}
       >
         <div className="journal-lined-content">
-          {!empty && (
-            <>
-              <p className="journal-body-text journal-date-row">
-                <time dateTime={date}>
-                  {side === "single" ? formatDateShortJa(date) : formatDateJa(date)}
-                </time>
-                {entry.weather && (
-                  <span
-                    className="ml-2 inline-block align-middle text-[16px] leading-none"
-                    aria-label="天気"
-                  >
-                    {entry.weather}
-                  </span>
-                )}
-              </p>
-              {(entry.moodEmoji || entry.moodLabel) && (
-                <MoodLine entry={entry} />
-              )}
-            </>
+          {!empty && (entry.moodEmoji || entry.moodLabel) && (
+            <MoodLine entry={entry} />
           )}
           {empty ? (
             <p className="journal-body-text text-[#a89880]">まだ日記がありません</p>
@@ -315,40 +319,32 @@ export function JournalMobilePager({
 }
 
 export function JournalMobileDateNav({
-  date,
   onPrev,
   onNext,
   canGoPrev = true,
   canGoNext = true,
 }: {
-  date: string;
   onPrev: () => void;
   onNext: () => void;
   canGoPrev?: boolean;
   canGoNext?: boolean;
 }) {
   return (
-    <div className="mb-3 flex items-center justify-center gap-4">
+    <div className="mb-3 flex items-center justify-center gap-10">
       <button
         type="button"
         onClick={onPrev}
         disabled={!canGoPrev}
-        className="rounded-lg px-2 py-1 text-[20px] text-[#8a7a68] hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-25"
+        className="rounded-lg px-3 py-1 text-[22px] text-[#8a7a68] hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-25"
         aria-label="前の日記"
       >
         ‹
       </button>
-      <span className="journal-body-text journal-date-row min-w-[10rem] text-center">
-        {formatDateShortJa(date)}
-        <span className="ml-1 text-[13px] font-normal text-[#9a8a78]">
-          ({weekdayJa(date)})
-        </span>
-      </span>
       <button
         type="button"
         onClick={onNext}
         disabled={!canGoNext}
-        className="rounded-lg px-2 py-1 text-[20px] text-[#8a7a68] hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-25"
+        className="rounded-lg px-3 py-1 text-[22px] text-[#8a7a68] hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-25"
         aria-label="次の日記"
       >
         ›

@@ -5827,7 +5827,7 @@ export default function Home() {
                 <div className="mb-1.5 flex items-center justify-between gap-4">
                   <div className="flex min-w-0 items-baseline gap-3">
                     <h3 className="shrink-0 text-[17px] font-semibold text-gray-900">進行中の{caseLabel}</h3>
-                    <span className="text-[13px] text-gray-400">
+                    <span className="hidden text-[13px] text-gray-400 lg:inline">
                       全{cases.length}件（進行中 {ongoingCases.length}件 · 完了 {completedCasesCount}件）
                     </span>
                   </div>
