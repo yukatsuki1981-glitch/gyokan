@@ -1,6 +1,12 @@
 "use client";
 
 import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
+import {
   formatDateJa,
   formatDateShortJa,
   weekdayJa,
@@ -209,6 +215,102 @@ export function JournalNavArrow({
         )}
       </svg>
     </button>
+  );
+}
+
+export function JournalMobilePager({
+  dates,
+  activeIndex,
+  onIndexChange,
+  diaries,
+  onEdit,
+}: {
+  dates: string[];
+  activeIndex: number;
+  onIndexChange: (index: number) => void;
+  diaries: AppDailyDiary[];
+  onEdit: (date: string) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const programmaticScrollRef = useRef(false);
+
+  const scrollToIndex = useCallback((index: number, behavior: ScrollBehavior = "auto") => {
+    const el = scrollRef.current;
+    if (!el || el.clientWidth <= 0) return;
+    programmaticScrollRef.current = true;
+    el.scrollTo({ left: index * el.clientWidth, behavior });
+    window.setTimeout(() => {
+      programmaticScrollRef.current = false;
+    }, behavior === "smooth" ? 400 : 0);
+  }, []);
+
+  const syncIndexFromScroll = useCallback(() => {
+    if (programmaticScrollRef.current) return;
+    const el = scrollRef.current;
+    if (!el || el.clientWidth <= 0) return;
+    const idx = Math.round(el.scrollLeft / el.clientWidth);
+    const clamped = Math.max(0, Math.min(dates.length - 1, idx));
+    if (clamped !== activeIndex) {
+      onIndexChange(clamped);
+    }
+  }, [activeIndex, dates.length, onIndexChange]);
+
+  useLayoutEffect(() => {
+    scrollToIndex(activeIndex, "auto");
+  }, [activeIndex, scrollToIndex]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      if (scrollRafRef.current !== null) return;
+      scrollRafRef.current = window.requestAnimationFrame(() => {
+        scrollRafRef.current = null;
+        syncIndexFromScroll();
+      });
+    };
+
+    const onScrollEnd = () => {
+      syncIndexFromScroll();
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("scrollend", onScrollEnd);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("scrollend", onScrollEnd);
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
+  }, [syncIndexFromScroll]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      scrollToIndex(activeIndex, "auto");
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [activeIndex, scrollToIndex]);
+
+  return (
+    <div ref={scrollRef} className="journal-mobile-pager scrollbar-none">
+      {dates.map((date, index) => (
+        <div key={date} className="journal-mobile-pager-slide">
+          <JournalPage
+            date={date}
+            diaries={diaries}
+            side="single"
+            onCornerNext={index < dates.length - 1 ? () => onIndexChange(index + 1) : undefined}
+            onEdit={() => onEdit(date)}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
 

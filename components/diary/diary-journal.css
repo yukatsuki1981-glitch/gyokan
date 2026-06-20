@@ -244,3 +244,37 @@
     0 3px 10px rgba(40, 30, 20, 0.12),
     0 1px 3px rgba(40, 30, 20, 0.08);
 }
+
+.journal-mobile-pager {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pinch-zoom;
+}
+
+.journal-mobile-pager-slide {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  min-width: 0;
+  height: min(72vh, 640px);
+}
+
+.journal-mobile-pager-slide .journal-paper {
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+.journal-mobile-pager-slide .journal-paper-lines {
+  touch-action: pan-y pinch-zoom;
+  overscroll-behavior-y: contain;
+}

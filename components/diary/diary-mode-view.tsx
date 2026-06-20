@@ -12,6 +12,7 @@ import { JournalEditorSheet } from "./journal-editor-sheet";
 import {
   JournalDotIndicator,
   JournalMobileDateNav,
+  JournalMobilePager,
   JournalNavArrow,
   JournalPage,
   JournalSpine,
@@ -140,7 +141,7 @@ export function DiaryModeView({
               />
             )}
 
-            <div className="flex flex-1 items-center gap-1 px-0 sm:px-2">
+            <div className="flex min-h-0 flex-1 items-center gap-1 px-0 sm:px-2">
               {isWide && (
                 <JournalNavArrow
                   direction="prev"
@@ -181,15 +182,13 @@ export function DiaryModeView({
                   ) : null}
                 </JournalSpread>
               ) : (
-                mobileDate && (
-                  <JournalPage
-                    date={mobileDate}
-                    diaries={diaries}
-                    side="single"
-                    onCornerNext={canGoNext ? goNext : undefined}
-                    onEdit={() => openEditor(mobileDate)}
-                  />
-                )
+                <JournalMobilePager
+                  dates={filledDates}
+                  activeIndex={spreadIndex}
+                  onIndexChange={setSpreadIndex}
+                  diaries={diaries}
+                  onEdit={openEditor}
+                />
               )}
 
               {isWide && (
