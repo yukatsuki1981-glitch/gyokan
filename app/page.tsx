@@ -5588,9 +5588,9 @@ export default function Home() {
       <ThemeDecorationLayer />
       <div className="relative z-[2]">
       <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
-      <div className="mx-auto flex min-h-screen max-w-[1480px]">
+      <div className="mx-auto flex min-h-screen max-w-[1480px] lg:h-screen lg:overflow-hidden">
         {/* Left Sidebar */}
-        <aside className={`gyokan-panel sticky top-0 hidden h-screen shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col ${showProjects ? "w-[168px]" : "w-[132px]"}`}>
+        <aside className={`gyokan-panel hidden shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col lg:h-full ${showProjects ? "w-[168px]" : "w-[132px]"}`}>
           <div className="mb-6 flex items-center justify-between gap-2 px-1">
             <button
               type="button"
@@ -5639,8 +5639,8 @@ export default function Home() {
         </aside>
 
         {/* Main + Right Panel */}
-        <div className="flex min-w-0 flex-1">
-        <main className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-0">
+        <div className="flex min-w-0 flex-1 lg:h-full lg:overflow-hidden">
+        <main className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:h-full lg:overflow-y-auto lg:pb-0">
           <div className="mx-auto max-w-3xl px-2.5 py-2 sm:px-4 lg:max-w-none lg:px-5 lg:pb-2 lg:pt-2">
             {loadError && (
               <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
@@ -5860,7 +5860,7 @@ export default function Home() {
         </main>
 
         {/* Right Panel - calendar and stats */}
-        <aside className="gyokan-panel hidden w-[280px] shrink-0 sticky top-0 h-screen overflow-y-auto border-l px-4 py-3 backdrop-blur-xl lg:block">
+        <aside className="gyokan-panel hidden w-[280px] shrink-0 border-l px-4 py-3 backdrop-blur-xl lg:block lg:h-full lg:overflow-y-auto">
           <Card className="mb-4 p-4">
             <CalendarWidget
               key={viewDateISO.slice(0, 7)}
