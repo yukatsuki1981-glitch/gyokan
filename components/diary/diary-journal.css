@@ -144,22 +144,6 @@
   padding-right: var(--journal-pad-x);
 }
 
-.journal-margin-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: var(--journal-margin-left);
-  width: 1px;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgba(214, 140, 128, 0.32) 3%,
-    rgba(214, 140, 128, 0.32) 97%,
-    transparent 100%
-  );
-  pointer-events: none;
-  z-index: 2;
-}
 
 /* Two-page spread: one shared ruled grid behind both pages */
 .journal-spread {
@@ -318,25 +302,18 @@
 }
 
 .journal-mobile-pager {
-  display: flex;
+  position: relative;
   min-width: 0;
   flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pinch-zoom;
+  overflow: hidden;
+  overscroll-behavior: none;
+  user-select: none;
 }
 
 .journal-mobile-pager-slide {
   display: flex;
   flex-direction: column;
-  flex: 0 0 100%;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
-  min-width: 0;
+  flex-shrink: 0;
   height: min(72vh, 640px);
 }
 
@@ -346,7 +323,8 @@
   flex: 1;
 }
 
+/* pan-y を明示することで、ブラウザは縦スクロールのみ自分で処理し、
+   横方向のタッチは JS ハンドラに委ねる */
 .journal-mobile-pager-slide .journal-paper-lines {
-  touch-action: pan-y pinch-zoom;
-  overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }

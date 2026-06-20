@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
 } from "react";
 import {
@@ -97,7 +95,6 @@ export function JournalPage({
       }
     >
       <JournalPageDateHeader date={date} weather={empty ? undefined : entry.weather} />
-      <div className="journal-margin-line" aria-hidden />
 
       <div
         className={`journal-paper-lines relative z-[1] flex-1 ${inSpread ? "" : "min-h-0 overflow-y-auto"}`}
@@ -235,85 +232,135 @@ export function JournalMobilePager({
   diaries: AppDailyDiary[];
   onEdit: (date: string) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollRafRef = useRef<number | null>(null);
-  const programmaticScrollRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const activeIndexRef = useRef(activeIndex);
+  const datesLengthRef = useRef(dates.length);
+  const onIndexChangeRef = useRef(onIndexChange);
 
-  const scrollToIndex = useCallback((index: number, behavior: ScrollBehavior = "auto") => {
-    const el = scrollRef.current;
-    if (!el || el.clientWidth <= 0) return;
-    programmaticScrollRef.current = true;
-    el.scrollTo({ left: index * el.clientWidth, behavior });
-    window.setTimeout(() => {
-      programmaticScrollRef.current = false;
-    }, behavior === "smooth" ? 400 : 0);
-  }, []);
+  useEffect(() => { activeIndexRef.current = activeIndex; }, [activeIndex]);
+  useEffect(() => { datesLengthRef.current = dates.length; }, [dates.length]);
+  useEffect(() => { onIndexChangeRef.current = onIndexChange; }, [onIndexChange]);
 
-  const syncIndexFromScroll = useCallback(() => {
-    if (programmaticScrollRef.current) return;
-    const el = scrollRef.current;
-    if (!el || el.clientWidth <= 0) return;
-    const idx = Math.round(el.scrollLeft / el.clientWidth);
-    const clamped = Math.max(0, Math.min(dates.length - 1, idx));
-    if (clamped !== activeIndex) {
-      onIndexChange(clamped);
-    }
-  }, [activeIndex, dates.length, onIndexChange]);
-
-  useLayoutEffect(() => {
-    scrollToIndex(activeIndex, "auto");
-  }, [activeIndex, scrollToIndex]);
-
+  // Sync track position when activeIndex changes externally
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
+    const track = trackRef.current;
+    if (!track || dates.length === 0) return;
+    const pct = 100 / dates.length;
+    track.style.transform = `translateX(-${activeIndex * pct}%)`;
+    track.style.transition = "transform 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94)";
+  }, [activeIndex, dates.length]);
 
-    const onScroll = () => {
-      if (scrollRafRef.current !== null) return;
-      scrollRafRef.current = window.requestAnimationFrame(() => {
-        scrollRafRef.current = null;
-        syncIndexFromScroll();
-      });
+  // Touch handling: detect intent first, then handle h/v independently
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let startX = 0;
+    let startY = 0;
+    let intent: "h" | "v" | null = null;
+    let liveDx = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      intent = null;
+      liveDx = 0;
+      if (trackRef.current) trackRef.current.style.transition = "none";
     };
 
-    const onScrollEnd = () => {
-      syncIndexFromScroll();
-    };
-
-    el.addEventListener("scroll", onScroll, { passive: true });
-    el.addEventListener("scrollend", onScrollEnd);
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      el.removeEventListener("scrollend", onScrollEnd);
-      if (scrollRafRef.current !== null) {
-        window.cancelAnimationFrame(scrollRafRef.current);
+    const onTouchMove = (e: TouchEvent) => {
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (intent === null) {
+        const adx = Math.abs(dx);
+        const ady = Math.abs(dy);
+        if (adx + ady < 3) return;
+        intent = adx >= ady ? "h" : "v";
+      }
+      if (intent === "h") {
+        e.preventDefault();
+        liveDx = dx;
+        const len = datesLengthRef.current;
+        if (!len || !trackRef.current) return;
+        const pct = 100 / len;
+        trackRef.current.style.transform =
+          `translateX(calc(-${activeIndexRef.current * pct}% + ${dx}px))`;
       }
     };
-  }, [syncIndexFromScroll]);
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      scrollToIndex(activeIndex, "auto");
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [activeIndex, scrollToIndex]);
+    const snap = (newIdx: number) => {
+      const len = datesLengthRef.current;
+      if (!len || !trackRef.current) return;
+      const pct = 100 / len;
+      trackRef.current.style.transform = `translateX(-${newIdx * pct}%)`;
+      trackRef.current.style.transition = "transform 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94)";
+    };
+
+    const onTouchEnd = () => {
+      if (intent === "h") {
+        const threshold = container.clientWidth * 0.25;
+        const curIdx = activeIndexRef.current;
+        const len = datesLengthRef.current;
+        let newIdx = curIdx;
+        if (liveDx < -threshold && curIdx < len - 1) newIdx = curIdx + 1;
+        else if (liveDx > threshold && curIdx > 0) newIdx = curIdx - 1;
+        snap(newIdx);
+        if (newIdx !== curIdx) onIndexChangeRef.current(newIdx);
+      } else {
+        snap(activeIndexRef.current);
+      }
+      intent = null;
+      liveDx = 0;
+    };
+
+    const onTouchCancel = () => {
+      snap(activeIndexRef.current);
+      intent = null;
+      liveDx = 0;
+    };
+
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: false });
+    container.addEventListener("touchend", onTouchEnd);
+    container.addEventListener("touchcancel", onTouchCancel);
+    return () => {
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
+      container.removeEventListener("touchend", onTouchEnd);
+      container.removeEventListener("touchcancel", onTouchCancel);
+    };
+  }, []);
+
+  const pct = dates.length > 0 ? 100 / dates.length : 100;
 
   return (
-    <div ref={scrollRef} className="journal-mobile-pager scrollbar-none">
-      {dates.map((date, index) => (
-        <div key={date} className="journal-mobile-pager-slide">
-          <JournalPage
-            date={date}
-            diaries={diaries}
-            side="single"
-            onCornerNext={index < dates.length - 1 ? () => onIndexChange(index + 1) : undefined}
-            onEdit={() => onEdit(date)}
-          />
-        </div>
-      ))}
+    <div ref={containerRef} className="journal-mobile-pager">
+      <div
+        ref={trackRef}
+        className="flex"
+        style={{
+          width: `${dates.length * 100}%`,
+          transform: `translateX(-${activeIndex * pct}%)`,
+          willChange: "transform",
+        }}
+      >
+        {dates.map((date, index) => (
+          <div
+            key={date}
+            className="journal-mobile-pager-slide"
+            style={{ width: `${pct}%` }}
+          >
+            <JournalPage
+              date={date}
+              diaries={diaries}
+              side="single"
+              onCornerNext={index < dates.length - 1 ? () => onIndexChange(index + 1) : undefined}
+              onEdit={() => onEdit(date)}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

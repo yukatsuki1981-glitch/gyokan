@@ -11,7 +11,6 @@ import type { AppDailyDiary } from "@/lib/gyokan/types";
 import { JournalEditorSheet } from "./journal-editor-sheet";
 import {
   JournalDotIndicator,
-  JournalMobileDateNav,
   JournalMobilePager,
   JournalNavArrow,
   JournalPage,
@@ -131,15 +130,6 @@ export function DiaryModeView({
           </p>
         ) : (
           <>
-            {!isWide && (
-              <JournalMobileDateNav
-                onPrev={goPrev}
-                onNext={goNext}
-                canGoPrev={canGoPrev}
-                canGoNext={canGoNext}
-              />
-            )}
-
             <div className="flex min-h-0 flex-1 items-center gap-1 px-0 sm:px-2">
               {isWide && (
                 <JournalNavArrow
