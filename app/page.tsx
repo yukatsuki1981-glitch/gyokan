@@ -607,7 +607,6 @@ function calendarDayNumberClass(
   if (isToday && inMonth) return "text-blue-600";
   if (!inMonth) return "text-gray-300";
   if (dayInfo?.kind === "holiday") return "text-rose-600";
-  if (dayInfo?.kind === "commemorative") return "text-rose-500";
   if (dayOfWeek === 0) return "text-rose-500";
   if (dayOfWeek === 6) return "text-blue-500";
   return "text-gray-700";
@@ -622,7 +621,6 @@ function mobileCalendarDayNumberClass(
 ) {
   if (!inMonth) return "text-gray-300";
   if (dayInfo?.kind === "holiday") return "text-rose-600";
-  if (dayInfo?.kind === "commemorative") return "text-rose-500";
   if (isSelected || isToday) return "text-gray-900";
   if (dayOfWeek === 0) return "text-rose-500";
   if (dayOfWeek === 6) return "text-blue-500";
@@ -3266,7 +3264,7 @@ function CalendarWidget({
                   className={`mt-0.5 max-w-full truncate text-[6px] leading-none ${
                     dayInfo.kind === "holiday"
                       ? "font-medium text-rose-600"
-                      : "text-rose-500"
+                      : "font-medium text-gray-500"
                   }`}
                 >
                   {dayInfo.label}
@@ -3359,7 +3357,7 @@ function MobileCalendarDayCell({
           className={`mt-0.5 shrink-0 truncate px-0.5 text-[7px] leading-[9px] ${
             dayInfo.kind === "holiday"
               ? "font-medium text-rose-600"
-              : "text-rose-500"
+              : "font-medium text-gray-500"
           }`}
           title={dayInfo.label}
         >
@@ -5629,17 +5627,7 @@ export default function Home() {
           </button>
           )}
 
-          <div className="mt-auto space-y-2 border-t border-black/[0.06] pt-4">
-            <Link
-              href="/diary"
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] font-medium text-[#6a5a48] transition-all duration-200 hover:bg-[#f0e8dc]/80"
-            >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-[#a08060]" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M6 4h9l3 3v13a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
-                <path d="M15 4v4h4M8 13h8M8 17h6" />
-              </svg>
-              全ての日記
-            </Link>
+          <div className="mt-auto border-t border-black/[0.06] pt-4">
             <button
               type="button"
               onClick={() => void signOut()}

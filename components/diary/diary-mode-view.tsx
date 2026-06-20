@@ -140,7 +140,7 @@ export function DiaryModeView({
               />
             )}
 
-            <div className="flex flex-1 items-stretch gap-1 px-0 sm:px-2">
+            <div className="flex flex-1 items-center gap-1 px-0 sm:px-2">
               {isWide && (
                 <JournalNavArrow
                   direction="prev"

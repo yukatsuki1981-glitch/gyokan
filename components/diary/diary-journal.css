@@ -90,30 +90,6 @@
   z-index: 2;
 }
 
-.journal-ring-holes {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 16px;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  padding-top: calc(var(--journal-line-h) * 2);
-  gap: calc(var(--journal-line-h) * 3);
-  pointer-events: none;
-}
-
-.journal-ring-hole {
-  width: 9px;
-  height: 9px;
-  flex-shrink: 0;
-  border-radius: 9999px;
-  background: radial-gradient(circle at 38% 32%, #fff 0%, #ebe3d4 42%, #c8b8a0 100%);
-  box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.14),
-    0 0 0 1px rgba(120, 90, 60, 0.1);
-}
-
 /* Two-page spread: one shared ruled grid behind both pages */
 .journal-spread {
   position: relative;

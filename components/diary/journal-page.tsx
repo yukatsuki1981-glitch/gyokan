@@ -71,11 +71,6 @@ export function JournalPage({
       }
     >
       <div className="journal-margin-line" aria-hidden />
-      <div className="journal-ring-holes" aria-hidden>
-        {Array.from({ length: 8 }).map((_, i) => (
-          <span key={i} className="journal-ring-hole" />
-        ))}
-      </div>
 
       <div
         className={`journal-paper-lines relative z-[1] flex-1 ${inSpread ? "" : "min-h-0 overflow-y-auto"}`}
