@@ -5860,7 +5860,7 @@ export default function Home() {
         </main>
 
         {/* Right Panel - calendar and stats */}
-        <aside className="gyokan-panel hidden w-[280px] shrink-0 self-start border-l px-4 py-3 backdrop-blur-xl lg:block">
+        <aside className="gyokan-panel hidden w-[280px] shrink-0 sticky top-0 h-screen overflow-y-auto border-l px-4 py-3 backdrop-blur-xl lg:block">
           <Card className="mb-4 p-4">
             <CalendarWidget
               key={viewDateISO.slice(0, 7)}
