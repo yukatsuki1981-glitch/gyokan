@@ -4727,10 +4727,6 @@ function TaskListPanel({
       {displayedTasks.length > 0 && renderTaskList(displayedTasks, "today")}
       {incompleteOtherTasks.length > 0 && (
         <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
-          <div className="mb-1.5 flex items-center justify-between px-1">
-            <span className="text-[11px] font-medium text-gray-400">未完了のタスク</span>
-            <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
-          </div>
           {renderTaskList(incompleteOtherTasks, "range", { showOriginalDeadline: true })}
         </div>
       )}
@@ -4770,10 +4766,6 @@ function PrivateTaskListPanel({
         renderTaskList(displayedTasks, "private-today", { subdued: true })}
       {incompleteOtherTasks.length > 0 && (
         <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
-          <div className="mb-1.5 flex items-center justify-between px-1">
-            <span className="text-[11px] font-medium text-gray-400">未完了のタスク</span>
-            <span className="text-[11px] text-gray-300">{incompleteOtherTasks.length}件</span>
-          </div>
           {renderTaskList(incompleteOtherTasks, "private-range", {
             showOriginalDeadline: true,
             subdued: true,
@@ -5915,9 +5907,11 @@ export default function Home() {
               className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-all duration-200 ${
                 tab.id === "memo"
                   ? memoSheetOpen
+                    ? "text-[var(--gyokan-accent2)]"
+                    : "text-gray-500"
                   : mobileTab === tab.id
                   ? "text-[var(--gyokan-accent2)]"
-                  : "text-gray-400"
+                  : "text-gray-500"
               }`}
             >
               <Icon name={tab.icon} className="h-5 w-5" />
