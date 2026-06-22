@@ -5612,6 +5612,13 @@ export default function Home() {
           )}
 
           <div className="mt-auto border-t border-black/[0.06] pt-4">
+            <Link
+              href="/diary"
+              className="mb-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] text-gray-500 transition-all duration-200 hover:bg-black/[0.02]"
+            >
+              <Icon name="diary" className="h-3.5 w-3.5 text-gray-400" />
+              日記
+            </Link>
             <button
               type="button"
               onClick={() => void signOut()}
