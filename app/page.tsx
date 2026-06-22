@@ -2261,7 +2261,6 @@ function HomeCaseGridRows({
 
 function HomeCasesByProjectGrid({
   ongoingCases,
-  completedCases,
   projectOrder,
   onToggle,
   onOpen,
@@ -2269,7 +2268,6 @@ function HomeCasesByProjectGrid({
   onDragEnd,
 }: {
   ongoingCases: CaseItem[];
-  completedCases: CaseItem[];
   projectOrder: string[];
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
@@ -2279,10 +2277,6 @@ function HomeCasesByProjectGrid({
   const ongoingGroups = useMemo(
     () => groupCasesByProjectOrder(ongoingCases, projectOrder),
     [ongoingCases, projectOrder],
-  );
-  const completedGroups = useMemo(
-    () => groupCasesByProjectOrder(completedCases, projectOrder),
-    [completedCases, projectOrder],
   );
   const ongoingDisplayIds = useMemo(
     () =>
@@ -2305,16 +2299,6 @@ function HomeCasesByProjectGrid({
           />
         </SortableContext>
       </DndContext>
-      {completedGroups.length > 0 && (
-        <div className="mt-2 border-t border-black/[0.04] pt-2">
-          <HomeCaseGridRows
-            groups={completedGroups}
-            projectOrder={projectOrder}
-            onToggle={onToggle}
-            onOpen={onOpen}
-          />
-        </div>
-      )}
     </>
   );
 }
@@ -5843,7 +5827,6 @@ export default function Home() {
                 </div>
                 <HomeCasesByProjectGrid
                   ongoingCases={orderedOngoingCases}
-                  completedCases={orderedCompletedCases}
                   projectOrder={projectNames}
                   onToggle={toggleCase}
                   onOpen={setSelectedCase}
