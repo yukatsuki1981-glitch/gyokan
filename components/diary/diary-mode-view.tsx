@@ -117,7 +117,7 @@ export function DiaryModeView({
         </Link>
         <span className="text-[#d0c8bc]">/</span>
         <span
-          className="journal-body-text rounded-lg bg-[#f0e8dc] px-3 py-1.5 text-[13px] font-semibold text-[#6a5a48]"
+          className="rounded-lg bg-[#f0e8dc] px-3 py-1.5 text-[13px] font-semibold text-[#6a5a48]"
         >
           日記
         </span>
