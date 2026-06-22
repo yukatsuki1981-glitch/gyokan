@@ -484,6 +484,7 @@ async function upsertCaseRow(
     });
     if (!error) {
       await syncCaseTitleAndName(supabase, row.id, row.title);
+      await syncCaseDone(supabase, row.id, row.done, row.completed_at);
       return;
     }
     lastError = error;
@@ -504,6 +505,21 @@ async function syncCaseTitleAndName(
     const { error } = await supabase.from("cases").update(payload).eq("id", id);
     if (!error) return;
     if (isAuthOrPolicyError(error) || !isSchemaMismatchError(error)) return;
+  }
+}
+
+async function syncCaseDone(
+  supabase: SupabaseClient,
+  id: string,
+  done: boolean,
+  completedAt: string | null,
+) {
+  const { error } = await supabase
+    .from("cases")
+    .update({ done, completed_at: completedAt })
+    .eq("id", id);
+  if (error && !isSchemaMismatchError(error) && !isMissingColumnError(error, "done")) {
+    console.warn("syncCaseDone failed:", error.message);
   }
 }
 
