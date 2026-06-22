@@ -5605,16 +5605,16 @@ export default function Home() {
           )}
 
           {showProjects && (
-          <button type="button" className="mt-3 flex w-full items-center gap-2 rounded-lg border border-black/[0.05] px-2 py-2 text-[11px] text-gray-500 transition-all duration-200 hover:bg-black/[0.02]">
+          <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-lg border border-black/[0.05] px-2 py-1.5 text-[11px] text-gray-500 transition-all duration-200 hover:bg-black/[0.02]">
             <Icon name="folder" className="h-3.5 w-3.5 text-gray-400" />
             完了済み
           </button>
           )}
 
-          <div className="mt-auto border-t border-black/[0.06] pt-4">
+          <div className="mt-auto border-t border-black/[0.06] pt-2">
             <Link
               href="/diary"
-              className="mb-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-[11px] text-gray-500 transition-all duration-200 hover:bg-black/[0.02]"
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] text-gray-500 transition-all duration-200 hover:bg-black/[0.02]"
             >
               <Icon name="diary" className="h-3.5 w-3.5 text-gray-400" />
               日記
@@ -5622,7 +5622,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => void signOut()}
-              className="w-full rounded-lg border border-black/[0.08] px-3 py-2 text-center text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.02]"
+              className="mt-1 w-full rounded-lg border border-black/[0.08] px-3 py-1 text-center text-[10px] font-medium text-gray-600 transition-colors hover:bg-black/[0.02]"
             >
               ログアウト
             </button>
