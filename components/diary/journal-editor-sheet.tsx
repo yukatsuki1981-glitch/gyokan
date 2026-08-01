@@ -30,12 +30,16 @@ export function JournalEditorSheet({
   const [saving, setSaving] = useState(false);
   const baselineRef = useRef(serializeJournalEntry(serverEntry));
   const fileRef = useRef<HTMLInputElement>(null);
+  const composingRef = useRef(false);
+  const diariesRef = useRef(diaries);
+  useEffect(() => { diariesRef.current = diaries; }, [diaries]);
 
   useEffect(() => {
-    const next = getDiaryEntryForDate(diaries, date);
+    const next = getDiaryEntryForDate(diariesRef.current, date);
     setEntry(next);
     baselineRef.current = serializeJournalEntry(next);
-  }, [date, diaries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
   const flush = useCallback(async () => {
     const serialized = serializeJournalEntry(entry);
@@ -179,7 +183,16 @@ export function JournalEditorSheet({
             <span className="mb-1.5 block text-[11px] font-medium text-[#9a8a78]">本文</span>
             <textarea
               value={entry.text}
-              onChange={(e) => setEntry((prev) => ({ ...prev, text: e.target.value }))}
+              onChange={(e) => {
+                if (!composingRef.current) {
+                  setEntry((prev) => ({ ...prev, text: e.target.value }));
+                }
+              }}
+              onCompositionStart={() => { composingRef.current = true; }}
+              onCompositionEnd={(e) => {
+                composingRef.current = false;
+                setEntry((prev) => ({ ...prev, text: (e.target as HTMLTextAreaElement).value }));
+              }}
               rows={8}
               placeholder="今日のことを書いてみましょう…"
               className="journal-body-text w-full resize-none rounded-xl border border-black/[0.06] bg-white/70 px-3 py-2.5 outline-none focus:border-[#c4a882] focus:ring-2 focus:ring-[#e8dcc8]"

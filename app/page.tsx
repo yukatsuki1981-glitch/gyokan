@@ -37,6 +37,7 @@ import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
 import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
+import { StoryMessageOverlay } from "@/components/story-message-overlay";
 import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
 import {
   DisplaySettingsProvider,
@@ -4393,7 +4394,9 @@ function AddTaskModalForm({
 }) {
   const { showProjects, showCases, projectLabel, caseLabel } = useDisplaySettings();
   const [title, setTitle] = useState("");
-  const [underProjectDirect, setUnderProjectDirect] = useState(() => showProjects);
+  const [underProjectDirect, setUnderProjectDirect] = useState(
+    () => (showProjects && !showCases) || (!defaultCaseId && !!defaultProject),
+  );
   const [project, setProject] = useState(
     defaultProject ?? projectOptions[0] ?? "",
   );
@@ -4439,7 +4442,16 @@ function AddTaskModalForm({
       dateEnd: end,
     };
 
-    if (showCases && caseId) {
+    if (showCases && !underProjectDirect) {
+      if (!caseId) {
+        onSubmit({
+          ...payload,
+          project: "",
+          caseId: undefined,
+        });
+        onClose();
+        return;
+      }
       const linked = ongoingCases.find((c) => c.id === caseId);
       if (!linked) return;
       onSubmit({
@@ -5562,6 +5574,7 @@ export default function Home() {
         aria-hidden
       />
       <ThemeDecorationLayer />
+      <StoryMessageOverlay tasks={tasks} dataReady={dataReady} isAuthenticated={!!user} />
       <div className="relative z-[2]">
       <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
       <div className="mx-auto flex min-h-screen max-w-[1480px] lg:h-screen lg:overflow-hidden">

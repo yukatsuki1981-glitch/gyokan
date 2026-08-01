@@ -275,8 +275,8 @@ export function JournalMobilePager({
       if (intent === null) {
         const adx = Math.abs(dx);
         const ady = Math.abs(dy);
-        if (adx + ady < 3) return;
-        intent = adx >= ady ? "h" : "v";
+        if (adx + ady < 5) return;
+        intent = adx > ady * 1.5 && adx > 8 ? "h" : "v";
       }
       if (intent === "h") {
         e.preventDefault();
