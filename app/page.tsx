@@ -1183,7 +1183,7 @@ function DetailOverlay({
 }: {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title?: string;
   children: ReactNode;
 }) {
   useEffect(() => {
@@ -1208,8 +1208,14 @@ function DetailOverlay({
         className="modal-pop relative w-full max-w-md overflow-hidden rounded-3xl border border-white/60 bg-white/85 shadow-[0_24px_80px_rgba(0,0,0,0.18)] backdrop-blur-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-black/[0.05] px-6 py-4">
-          <h3 className="text-[17px] font-semibold tracking-tight text-gray-900">{title}</h3>
+        <div
+          className={`flex items-center ${
+            title
+              ? "justify-between border-b border-black/[0.05] px-6 py-4"
+              : "justify-end px-4 py-2"
+          }`}
+        >
+          {title && <h3 className="text-[17px] font-semibold tracking-tight text-gray-900">{title}</h3>}
           <button
             type="button"
             onClick={onClose}
@@ -1228,13 +1234,15 @@ function DetailOverlay({
 function DetailField({
   label,
   children,
+  compact = false,
 }: {
   label: string;
   children: ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <label className="mb-4 block last:mb-0">
-      <span className="mb-1.5 block text-[12px] font-medium text-gray-400">{label}</span>
+    <label className={`block last:mb-0 ${compact ? "mb-2.5" : "mb-4"}`}>
+      <span className={`block text-[12px] font-medium text-gray-400 ${compact ? "mb-1" : "mb-1.5"}`}>{label}</span>
       {children}
     </label>
   );
@@ -1590,17 +1598,17 @@ function TaskDetailEditor({
 
   return (
     <div>
-      <DetailField label="タスク名">
+      <DetailField label="タスク名" compact>
         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={fieldInputClass} />
       </DetailField>
       {(showCases || showProjects) && (
-        <DetailField label={showCases ? caseLabel : projectLabel}>
+        <DetailField label={showCases ? caseLabel : projectLabel} compact>
           {showCases && (
             <select
               value={caseId}
               onChange={(e) => setCaseId(e.target.value)}
               disabled={underProjectDirect}
-              className={`${fieldInputClass} mb-2 ${
+              className={`${fieldInputClass} mb-1.5 ${
                 underProjectDirect ? "cursor-not-allowed bg-gray-100 text-gray-400 opacity-60" : ""
               }`}
             >
@@ -1619,7 +1627,7 @@ function TaskDetailEditor({
             </select>
           )}
           {showProjects && showCases && (
-            <label className="mb-2 flex cursor-pointer items-center gap-2 text-[13px] text-gray-600">
+            <label className="mb-1.5 flex cursor-pointer items-center gap-2 text-[13px] text-gray-600">
               <input
                 type="checkbox"
                 checked={underProjectDirect}
@@ -1649,11 +1657,11 @@ function TaskDetailEditor({
         </DetailField>
       )}
       {!useRange && (
-        <DetailField label="期限">
+        <DetailField label="期限" compact>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={fieldInputClass} />
         </DetailField>
       )}
-      <label className="mb-3 flex items-center gap-2 text-[13px] text-gray-600">
+      <label className="mb-2 flex items-center gap-2 text-[13px] text-gray-600">
         <input
           type="checkbox"
           checked={useRange}
@@ -1669,7 +1677,7 @@ function TaskDetailEditor({
         実施期間を選択
       </label>
       {useRange && (
-        <DetailField label="実施期間">
+        <DetailField label="実施期間" compact>
           <div className="flex items-center gap-2">
             <input
               type="date"
@@ -1687,16 +1695,16 @@ function TaskDetailEditor({
           </div>
         </DetailField>
       )}
-      <DetailField label="メモ">
+      <DetailField label="メモ" compact>
         <textarea
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
-          rows={4}
+          rows={3}
           placeholder="メモを入力"
           className={`${fieldInputClass} resize-none`}
         />
       </DetailField>
-      <div className="mt-5 flex justify-end gap-2">
+      <div className="mt-3 flex justify-end gap-2">
         <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
         <button type="button" onClick={save} className="rounded-xl bg-[var(--gyokan-accent2)] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
       </div>
@@ -6029,7 +6037,6 @@ export default function Home() {
       <DetailOverlay
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)}
-        title="タスクを編集"
       >
         {selectedTask && (
           <TaskDetailEditor
