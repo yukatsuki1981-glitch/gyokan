@@ -1221,7 +1221,7 @@ function DetailOverlay({
             </button>
           </div>
         )}
-        <div className="max-h-[min(80vh,640px)] overflow-y-auto px-6 py-5">{children}</div>
+        <div className="max-h-[min(90vh,760px)] overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   );
@@ -1594,24 +1594,25 @@ function TaskDetailEditor({
 
   return (
     <div>
-      <DetailField label="タスク名" compact>
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className={`${fieldInputClass} min-w-0 flex-1`}
-          />
+      <div className="mb-2.5">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="text-[12px] font-medium text-gray-400">タスク名</span>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/[0.04] text-gray-500 transition-colors hover:bg-black/[0.08]"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black/[0.04] text-gray-500 transition-colors hover:bg-black/[0.08]"
             aria-label="閉じる"
           >
-            <Icon name="x" className="h-4 w-4" />
+            <Icon name="x" className="h-3.5 w-3.5" />
           </button>
         </div>
-      </DetailField>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className={fieldInputClass}
+        />
+      </div>
       {(showCases || showProjects) && (
         <DetailField label={showCases ? caseLabel : projectLabel} compact>
           {showCases && (
