@@ -55,6 +55,8 @@ import {
   DEFAULT_CASE_LABEL,
   DEFAULT_DISPLAY_SETTINGS,
   DEFAULT_PROJECT_LABEL,
+  MAX_HOME_CASE_COLUMNS,
+  MIN_HOME_CASE_COLUMNS,
   readDisplaySettings,
   writeDisplaySettings,
 } from "@/lib/gyokan/display-settings";
@@ -1895,6 +1897,17 @@ function SortableCaseCard({
 
 const HOME_CASE_MAX_COLS = 4;
 
+const HOME_CASE_GRID_COLS_CLASS: Record<number, string> = {
+  1: "lg:grid-cols-1",
+  2: "lg:grid-cols-2",
+  3: "lg:grid-cols-3",
+  4: "lg:grid-cols-4",
+};
+
+function homeCaseGridColsClass(cols: number) {
+  return HOME_CASE_GRID_COLS_CLASS[cols] ?? HOME_CASE_GRID_COLS_CLASS[HOME_CASE_MAX_COLS];
+}
+
 function groupCasesByProjectOrder(
   cases: CaseItem[],
   projectOrder: string[],
@@ -2021,16 +2034,19 @@ type HomeCaseCellConnections = {
   left: boolean;
 };
 
-function buildHomeCaseCellGrid(rows: HomeCaseRowSegment[][]): (HomeCaseGridCell | null)[][] {
+function buildHomeCaseCellGrid(
+  rows: HomeCaseRowSegment[][],
+  cols: number,
+): (HomeCaseGridCell | null)[][] {
   return rows.map((row) => {
     const cells: (HomeCaseGridCell | null)[] = Array.from(
-      { length: HOME_CASE_MAX_COLS },
+      { length: cols },
       () => null,
     );
     let col = 0;
     for (const segment of row) {
       segment.cases.forEach((caseItem, index) => {
-        if (col + index < HOME_CASE_MAX_COLS) {
+        if (col + index < cols) {
           cells[col + index] = {
             caseItem,
             project: segment.project,
@@ -2048,6 +2064,7 @@ function getHomeCaseCellConnections(
   grid: (HomeCaseGridCell | null)[][],
   row: number,
   col: number,
+  cols: number,
 ): HomeCaseCellConnections {
   const cell = grid[row]?.[col];
   if (!cell) return { top: false, right: false, bottom: false, left: false };
@@ -2055,7 +2072,7 @@ function getHomeCaseCellConnections(
   const sameProject = (r: number, c: number) => grid[r]?.[c]?.project === project;
   return {
     top: sameProject(row - 1, col),
-    right: col + 1 < HOME_CASE_MAX_COLS && sameProject(row, col + 1),
+    right: col + 1 < cols && sameProject(row, col + 1),
     bottom: sameProject(row + 1, col),
     left: col > 0 && sameProject(row, col - 1),
   };
@@ -2206,34 +2223,36 @@ function HomeCaseProjectBlock({
 function HomeCaseGridRows({
   groups,
   projectOrder,
+  cols,
   sortable,
   onToggle,
   onOpen,
 }: {
   groups: { project: string; cases: CaseItem[] }[];
   projectOrder: string[];
+  cols: number;
   sortable?: boolean;
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
 }) {
   const rows = useMemo(
-    () => packProjectGroupsIntoRows(groups, projectOrder, HOME_CASE_MAX_COLS),
-    [groups, projectOrder],
+    () => packProjectGroupsIntoRows(groups, projectOrder, cols),
+    [groups, projectOrder, cols],
   );
-  const grid = useMemo(() => buildHomeCaseCellGrid(rows), [rows]);
+  const grid = useMemo(() => buildHomeCaseCellGrid(rows, cols), [rows, cols]);
 
   if (rows.length === 0) return null;
 
   return (
     <div className="flex w-full flex-col gap-1">
-      <div className="hidden w-full lg:grid lg:grid-cols-4 lg:gap-0">
+      <div className={`hidden w-full lg:grid lg:gap-0 ${homeCaseGridColsClass(cols)}`}>
         {grid.map((row, rowIndex) =>
           row.map((cell, colIndex) =>
             cell ? (
               <HomeCaseGridCell
                 key={cell.caseItem.id}
                 cell={cell}
-                connections={getHomeCaseCellConnections(grid, rowIndex, colIndex)}
+                connections={getHomeCaseCellConnections(grid, rowIndex, colIndex, cols)}
                 sortable={sortable}
                 onToggle={onToggle}
                 onOpen={onOpen}
@@ -2263,6 +2282,7 @@ function HomeCaseGridRows({
 function HomeCasesByProjectGrid({
   ongoingCases,
   projectOrder,
+  cols,
   onToggle,
   onOpen,
   sensors,
@@ -2270,6 +2290,7 @@ function HomeCasesByProjectGrid({
 }: {
   ongoingCases: CaseItem[];
   projectOrder: string[];
+  cols: number;
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
   sensors: ReturnType<typeof useSensors>;
@@ -2282,9 +2303,9 @@ function HomeCasesByProjectGrid({
   const ongoingDisplayIds = useMemo(
     () =>
       flattenPackedCaseIds(
-        packProjectGroupsIntoRows(ongoingGroups, projectOrder, HOME_CASE_MAX_COLS),
+        packProjectGroupsIntoRows(ongoingGroups, projectOrder, cols),
       ),
-    [ongoingGroups, projectOrder],
+    [ongoingGroups, projectOrder, cols],
   );
 
   return (
@@ -2294,6 +2315,7 @@ function HomeCasesByProjectGrid({
           <HomeCaseGridRows
             groups={ongoingGroups}
             projectOrder={projectOrder}
+            cols={cols}
             sortable
             onToggle={onToggle}
             onOpen={onOpen}
@@ -4851,10 +4873,12 @@ function AppSettingsPanel({
     showCases,
     projectLabel,
     caseLabel,
+    homeCaseColumns,
     setShowProjects,
     setShowCases,
     setProjectLabel,
     setCaseLabel,
+    setHomeCaseColumns,
   } = useDisplaySettings();
 
   return (
@@ -4920,6 +4944,29 @@ function AppSettingsPanel({
                 className="w-full rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[13px] font-medium text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
               />
             </label>
+          </li>
+          <li className="rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
+            <span className="gyokan-muted mb-2 block">進行中の{caseLabel}の列数</span>
+            <div className="flex gap-1.5">
+              {Array.from(
+                { length: MAX_HOME_CASE_COLUMNS - MIN_HOME_CASE_COLUMNS + 1 },
+                (_, i) => MIN_HOME_CASE_COLUMNS + i,
+              ).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setHomeCaseColumns(n)}
+                  aria-pressed={homeCaseColumns === n}
+                  className={`flex h-9 flex-1 items-center justify-center rounded-lg text-[13px] font-medium transition-colors ${
+                    homeCaseColumns === n
+                      ? "bg-[var(--gyokan-accent2)] text-white"
+                      : "bg-white/80 text-[var(--gyokan-text)] hover:bg-white"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
           </li>
           {[
             ["通知", "オン"],
@@ -5021,7 +5068,7 @@ export default function Home() {
     [user?.id],
   );
 
-  const { showProjects, showCases, projectLabel, caseLabel } = displaySettings;
+  const { showProjects, showCases, projectLabel, caseLabel, homeCaseColumns } = displaySettings;
 
   const handleAppTitleChange = useCallback(
     (title: string) => {
@@ -5840,6 +5887,7 @@ export default function Home() {
                 <HomeCasesByProjectGrid
                   ongoingCases={orderedOngoingCases}
                   projectOrder={projectNames}
+                  cols={homeCaseColumns}
                   onToggle={toggleCase}
                   onOpen={setSelectedCase}
                   sensors={sensors}

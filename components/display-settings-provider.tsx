@@ -22,6 +22,7 @@ type DisplaySettingsContextValue = DisplaySettings & {
   setShowCases: (value: boolean) => void;
   setProjectLabel: (value: string) => void;
   setCaseLabel: (value: string) => void;
+  setHomeCaseColumns: (value: number) => void;
 };
 
 const DisplaySettingsContext = createContext<DisplaySettingsContextValue | null>(null);
@@ -72,6 +73,7 @@ export function DisplaySettingsProvider({
       setShowCases: (showCases) => updateSettings({ showCases }),
       setProjectLabel: (projectLabel) => updateSettings({ projectLabel }),
       setCaseLabel: (caseLabel) => updateSettings({ caseLabel }),
+      setHomeCaseColumns: (homeCaseColumns) => updateSettings({ homeCaseColumns }),
     }),
     [settings, updateSettings],
   );
@@ -88,6 +90,7 @@ const FALLBACK: DisplaySettingsContextValue = {
   setShowCases: () => {},
   setProjectLabel: () => {},
   setCaseLabel: () => {},
+  setHomeCaseColumns: () => {},
 };
 
 export function useDisplaySettings() {
