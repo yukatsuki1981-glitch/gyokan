@@ -1208,23 +1208,19 @@ function DetailOverlay({
         className="modal-pop relative w-full max-w-md overflow-hidden rounded-3xl border border-white/60 bg-white/85 shadow-[0_24px_80px_rgba(0,0,0,0.18)] backdrop-blur-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className={`flex items-center ${
-            title
-              ? "justify-between border-b border-black/[0.05] px-6 py-4"
-              : "justify-end px-4 py-2"
-          }`}
-        >
-          {title && <h3 className="text-[17px] font-semibold tracking-tight text-gray-900">{title}</h3>}
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-gray-500 transition-colors hover:bg-black/[0.08]"
-            aria-label="閉じる"
-          >
-            <Icon name="x" className="h-4 w-4" />
-          </button>
-        </div>
+        {title && (
+          <div className="flex items-center justify-between border-b border-black/[0.05] px-6 py-4">
+            <h3 className="text-[17px] font-semibold tracking-tight text-gray-900">{title}</h3>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-gray-500 transition-colors hover:bg-black/[0.08]"
+              aria-label="閉じる"
+            >
+              <Icon name="x" className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         <div className="max-h-[min(80vh,640px)] overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
@@ -1599,7 +1595,22 @@ function TaskDetailEditor({
   return (
     <div>
       <DetailField label="タスク名" compact>
-        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className={fieldInputClass} />
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className={`${fieldInputClass} min-w-0 flex-1`}
+          />
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/[0.04] text-gray-500 transition-colors hover:bg-black/[0.08]"
+            aria-label="閉じる"
+          >
+            <Icon name="x" className="h-4 w-4" />
+          </button>
+        </div>
       </DetailField>
       {(showCases || showProjects) && (
         <DetailField label={showCases ? caseLabel : projectLabel} compact>
