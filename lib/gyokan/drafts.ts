@@ -104,7 +104,7 @@ export function mergeTasksWithDrafts(
         caseId: (draft.caseId || item.caseId) || undefined,
         date: draft.date,
         dateEnd,
-        memo: draft.memo,
+        memo: draft.memo ?? item.memo,
       },
       caseById,
     );
@@ -150,7 +150,7 @@ export function taskDraftDiffers(item: AppTask, draft: TaskDraftFields) {
     (item.caseId ?? "") !== draft.caseId ||
     item.date !== draft.date ||
     (item.dateEnd ?? undefined) !== dateEnd ||
-    (item.memo ?? "") !== draft.memo
+    (item.memo ?? "") !== (draft.memo ?? "")
   );
 }
 

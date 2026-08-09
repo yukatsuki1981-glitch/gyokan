@@ -198,7 +198,7 @@ export function useGyokanData() {
           caseId: draft.caseId || item.caseId,
           date: draft.date,
           dateEnd,
-          memo: draft.memo,
+          memo: draft.memo ?? item.memo,
         },
         buildCaseById(casesRef.current),
       );
