@@ -21,6 +21,7 @@ export type TaskDraftFields = {
   date: string;
   dateEnd?: string;
   useRange: boolean;
+  memo: string;
 };
 
 export type MemoDraftFields = {
@@ -103,6 +104,7 @@ export function mergeTasksWithDrafts(
         caseId: (draft.caseId || item.caseId) || undefined,
         date: draft.date,
         dateEnd,
+        memo: draft.memo,
       },
       caseById,
     );
@@ -147,7 +149,8 @@ export function taskDraftDiffers(item: AppTask, draft: TaskDraftFields) {
     item.title !== draft.title ||
     (item.caseId ?? "") !== draft.caseId ||
     item.date !== draft.date ||
-    (item.dateEnd ?? undefined) !== dateEnd
+    (item.dateEnd ?? undefined) !== dateEnd ||
+    (item.memo ?? "") !== draft.memo
   );
 }
 

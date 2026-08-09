@@ -73,6 +73,7 @@ export function mapDbTask(row: DbTask, idToName: Record<string, string>): AppTas
     caseId: row.case_id ?? undefined,
     starred: row.starred,
     sortOrder: row.sort_order ?? 0,
+    memo: row.memo ?? "",
   };
 }
 
@@ -153,6 +154,7 @@ export function mapTaskToDb(
     ...(completedAt ? { completed_at: completedAt } : {}),
     starred: normalized.starred ?? false,
     sort_order: normalized.sortOrder,
+    memo: normalized.memo ?? "",
   };
 }
 

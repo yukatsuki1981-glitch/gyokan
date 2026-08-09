@@ -19,6 +19,7 @@ export type DbTask = {
   completed_at: string | null;
   starred: boolean;
   sort_order: number;
+  memo: string;
 };
 
 export type DbCase = {
@@ -81,6 +82,7 @@ export type AppTask = {
   caseId?: string;
   starred?: boolean;
   sortOrder: number;
+  memo?: string;
 };
 
 export type AppCase = {

@@ -110,6 +110,7 @@ type Task = {
   caseId?: string;
   starred?: boolean;
   sortOrder: number;
+  memo?: string;
 };
 
 type CaseItem = {
@@ -1480,6 +1481,7 @@ function TaskDetailEditor({
       date: string;
       dateEnd?: string;
       project?: string;
+      memo?: string;
     },
   ) => void | boolean | Promise<void | boolean>;
   onClose: () => void;
@@ -1503,6 +1505,7 @@ function TaskDetailEditor({
     date: source.date,
     dateEnd: source.dateEnd ?? "",
     useRange: isRangeTask(source),
+    memo: source.memo ?? "",
   }), []);
 
   const initialDraft = readDraft<TaskDraftFields>("task", item.id);
@@ -1516,6 +1519,7 @@ function TaskDetailEditor({
   const [date, setDate] = useState(initialDraft?.date ?? item.date);
   const [dateEnd, setDateEnd] = useState(initialDraft?.dateEnd ?? item.dateEnd ?? "");
   const [useRange, setUseRange] = useState(initialDraft?.useRange ?? isRangeTask(item));
+  const [memo, setMemo] = useState(initialDraft?.memo ?? item.memo ?? "");
 
   useEffect(() => {
     if (item.id === itemIdRef.current) return;
@@ -1529,6 +1533,7 @@ function TaskDetailEditor({
     setDate(next.date);
     setDateEnd(next.dateEnd ?? "");
     setUseRange(next.useRange);
+    setMemo(next.memo ?? "");
   }, [item, loadTaskFields]);
 
   const formValues = useMemo((): TaskDraftFields => ({
@@ -1537,7 +1542,8 @@ function TaskDetailEditor({
       date,
     dateEnd,
     useRange,
-  }), [title, caseId, date, dateEnd, useRange]);
+    memo,
+  }), [title, caseId, date, dateEnd, useRange, memo]);
 
   const formBaseline = useMemo((): TaskDraftFields => ({
     title: item.title,
@@ -1545,6 +1551,7 @@ function TaskDetailEditor({
     date: item.date,
     dateEnd: item.dateEnd ?? "",
     useRange: isRangeTask(item),
+    memo: item.memo ?? "",
   }), [item]);
 
   const persistTask = useCallback(
@@ -1561,6 +1568,7 @@ function TaskDetailEditor({
         date: values.date,
       dateEnd: end,
         project: direct ? projectName : values.caseId ? undefined : "",
+        memo: values.memo,
       });
     },
     [onSave, item.id],
@@ -1679,6 +1687,15 @@ function TaskDetailEditor({
           </div>
         </DetailField>
       )}
+      <DetailField label="メモ">
+        <textarea
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          rows={4}
+          placeholder="メモを入力"
+          className={`${fieldInputClass} resize-none`}
+        />
+      </DetailField>
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-[13px] font-medium text-gray-500 hover:bg-black/[0.04]">キャンセル</button>
         <button type="button" onClick={save} className="rounded-xl bg-[var(--gyokan-accent2)] px-4 py-2 text-[13px] font-medium text-white hover:bg-blue-600">保存</button>
@@ -1782,70 +1799,6 @@ function CaseCard({
         <StatusBadge label={item.status} tone={item.statusTone} />
       )}
     </article>
-  );
-}
-
-function CasesListSection({
-  cases,
-  onToggle,
-  onOpen,
-  onBack,
-  sensors,
-  onDragEnd,
-}: {
-  cases: CaseItem[];
-  onToggle: (id: string) => void;
-  onOpen: (item: CaseItem) => void;
-  onBack: () => void;
-  sensors: ReturnType<typeof useSensors>;
-  onDragEnd: (event: DragEndEvent) => void;
-}) {
-  const ongoing = cases.filter((c) => !c.done);
-  const completed = cases.filter((c) => c.done);
-
-  return (
-    <section>
-      <div className="mb-4 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-black/[0.04]"
-          aria-label="戻る"
-        >
-          <Icon name="chevronLeft" className="h-5 w-5" />
-        </button>
-        <div>
-          <h2 className="text-[17px] font-semibold text-gray-900">案件一覧</h2>
-          <p className="text-[13px] text-gray-400">
-            全{cases.length}件（進行中 {ongoing.length}件 · 完了 {completed.length}件）
-          </p>
-        </div>
-      </div>
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
-        <SortableContext items={ongoing.map((c) => c.id)} strategy={rectSortingStrategy}>
-          <div className="grid grid-cols-3 gap-2">
-            {ongoing.map((c) => (
-              <SortableCaseCard
-                key={c.id}
-                item={c}
-                onToggle={onToggle}
-                onOpen={onOpen}
-                showProjectTag
-              />
-            ))}
-            {completed.map((c) => (
-              <CaseCard
-                key={c.id}
-                item={c}
-                onToggle={onToggle}
-                onOpen={onOpen}
-                showProjectTag
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
-    </section>
   );
 }
 
@@ -2130,7 +2083,7 @@ function HomeCaseGridCell({
       />
       {showProjects && cell.showProjectLabel && (
         <span
-          className="absolute top-[3px] left-2 z-20 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
+          className="absolute top-[3px] left-2 -translate-y-1/2 z-20 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
           style={{ backgroundColor: cellBg }}
           title={cell.project}
         >
@@ -2183,7 +2136,7 @@ function HomeCaseProjectBlock({
     >
       {showProjects && (
         <span
-          className="absolute top-[3px] left-2 z-10 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
+          className="absolute top-[3px] left-2 -translate-y-1/2 z-10 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
           style={{ backgroundColor: cellBg }}
           title={project}
         >
@@ -2409,10 +2362,12 @@ function DetailCaseCard({
   item,
   onToggle,
   onOpen,
+  showProjectTag = false,
 }: {
   item: CaseItem;
   onToggle: (id: string) => void;
   onOpen: (item: CaseItem) => void;
+  showProjectTag?: boolean;
 }) {
   const { colors } = useProjectColors();
   const accent = getProjectColor(colors[item.project]).accent;
@@ -2448,6 +2403,7 @@ function DetailCaseCard({
       >
         {item.title}
       </h4>
+      {showProjectTag && <ProjectNameTag name={item.project} muted={item.done} />}
     </article>
   );
 }
@@ -4939,28 +4895,28 @@ function AppSettingsPanel({
                 className="w-full rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[13px] font-medium text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
               />
             </label>
-          </li>
-          <li className="rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
-            <span className="gyokan-muted mb-2 block">進行中の{caseLabel}の列数</span>
-            <div className="flex gap-1.5">
-              {Array.from(
-                { length: MAX_HOME_CASE_COLUMNS - MIN_HOME_CASE_COLUMNS + 1 },
-                (_, i) => MIN_HOME_CASE_COLUMNS + i,
-              ).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setHomeCaseColumns(n)}
-                  aria-pressed={homeCaseColumns === n}
-                  className={`flex h-9 flex-1 items-center justify-center rounded-lg text-[13px] font-medium transition-colors ${
-                    homeCaseColumns === n
-                      ? "bg-[var(--gyokan-accent2)] text-white"
-                      : "bg-white/80 text-[var(--gyokan-text)] hover:bg-white"
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
+            <div className="mt-3">
+              <span className="gyokan-muted mb-2 block">進行中の{caseLabel}の列数</span>
+              <div className="flex gap-1.5">
+                {Array.from(
+                  { length: MAX_HOME_CASE_COLUMNS - MIN_HOME_CASE_COLUMNS + 1 },
+                  (_, i) => MIN_HOME_CASE_COLUMNS + i,
+                ).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setHomeCaseColumns(n)}
+                    aria-pressed={homeCaseColumns === n}
+                    className={`flex h-9 flex-1 items-center justify-center rounded-lg text-[13px] font-medium transition-colors ${
+                      homeCaseColumns === n
+                        ? "bg-[var(--gyokan-accent2)] text-white"
+                        : "bg-white/80 text-[var(--gyokan-text)] hover:bg-white"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
             </div>
           </li>
           {[
@@ -5046,6 +5002,7 @@ export default function Home() {
   const [memoSheetOpen, setMemoSheetOpen] = useState(false);
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [allCasesListOpen, setAllCasesListOpen] = useState(false);
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
   const [displaySettings, setDisplaySettings] = useState(DEFAULT_DISPLAY_SETTINGS);
 
@@ -5145,11 +5102,6 @@ export default function Home() {
 
   const orderedOngoingCases = useMemo(
     () => orderedCases.filter((c) => !c.done),
-    [orderedCases],
-  );
-
-  const orderedCompletedCases = useMemo(
-    () => orderedCases.filter((c) => c.done),
     [orderedCases],
   );
 
@@ -5869,7 +5821,14 @@ export default function Home() {
                       全{cases.length}件（進行中 {ongoingCases.length}件 · 完了 {completedCasesCount}件）
                     </span>
                   </div>
-                  <div className="flex shrink-0 items-center">
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setAllCasesListOpen(true)}
+                      className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
+                    >
+                      {caseLabel}一覧
+                    </button>
                     <button
                       type="button"
                       onClick={() => openAddCaseModal()}
@@ -6004,6 +5963,35 @@ export default function Home() {
       />
 
       <ThemePickerModal open={themePickerOpen} onClose={() => setThemePickerOpen(false)} />
+
+      <DetailOverlay
+        open={showCases && allCasesListOpen}
+        onClose={() => setAllCasesListOpen(false)}
+        title={`${caseLabel}一覧`}
+      >
+        <div className="max-h-[min(80vh,640px)] overflow-y-auto px-6 py-4">
+          {orderedCases.length === 0 ? (
+            <p className="py-6 text-center text-[13px] text-gray-400">
+              {caseLabel}はまだありません
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {orderedCases.map((c) => (
+                <DetailCaseCard
+                  key={c.id}
+                  item={c}
+                  onToggle={toggleCase}
+                  onOpen={(caseItem) => {
+                    setAllCasesListOpen(false);
+                    setSelectedCase(caseItem);
+                  }}
+                  showProjectTag
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </DetailOverlay>
 
       <DetailOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)} title="設定">
         <div className="max-h-[min(80vh,640px)] overflow-y-auto px-6 py-4">
