@@ -2103,14 +2103,14 @@ function HomeCaseGridCell({
       />
       {showProjects && cell.showProjectLabel && (
         <span
-          className="absolute top-[2px] left-2 -translate-y-1/2 z-20 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
+          className="absolute top-[4px] left-2 z-20 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
           style={{ backgroundColor: cellBg }}
           title={cell.project}
         >
           {cell.project}
         </span>
       )}
-      <div className="relative z-10 px-1.5 py-1">
+      <div className="relative z-10 px-1.5 pt-4 pb-1">
       {sortable ? (
         <SortableCaseCard
           item={cell.caseItem}
@@ -2151,12 +2151,12 @@ function HomeCaseProjectBlock({
 
   return (
     <div
-      className="relative min-w-0 rounded-lg border border-black/[0.06] px-1.5 py-1"
+      className="relative min-w-0 rounded-lg border border-black/[0.06] px-1.5 pt-4 pb-1"
       style={{ backgroundColor: cellBg }}
     >
       {showProjects && (
         <span
-          className="absolute top-[2px] left-2 -translate-y-1/2 z-10 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
+          className="absolute top-[4px] left-2 z-10 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
           style={{ backgroundColor: cellBg }}
           title={project}
         >
