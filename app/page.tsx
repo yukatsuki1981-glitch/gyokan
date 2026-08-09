@@ -2062,10 +2062,10 @@ function homeCaseCellMarginClass(connections: HomeCaseCellConnections): string {
 
 function homeCaseCellBgClass(connections: HomeCaseCellConnections): string {
   const parts = ["absolute border border-black/[0.06]"];
-  if (!connections.top && !connections.left) parts.push("rounded-tl-xl");
-  if (!connections.top && !connections.right) parts.push("rounded-tr-xl");
-  if (!connections.bottom && !connections.left) parts.push("rounded-bl-xl");
-  if (!connections.bottom && !connections.right) parts.push("rounded-br-xl");
+  if (!connections.top && !connections.left) parts.push("rounded-tl-lg");
+  if (!connections.top && !connections.right) parts.push("rounded-tr-lg");
+  if (!connections.bottom && !connections.left) parts.push("rounded-bl-lg");
+  if (!connections.bottom && !connections.right) parts.push("rounded-br-lg");
   if (connections.top) parts.push("border-t-0 -top-0.5");
   else parts.push("top-0");
   if (connections.bottom) parts.push("border-b-0 -bottom-0.5");
@@ -2103,14 +2103,14 @@ function HomeCaseGridCell({
       />
       {showProjects && cell.showProjectLabel && (
         <span
-          className="absolute top-[3px] left-2 z-20 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
+          className="absolute top-[2px] left-2 -translate-y-1/2 z-20 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
           style={{ backgroundColor: cellBg }}
           title={cell.project}
         >
           {cell.project}
         </span>
       )}
-      <div className="relative z-10 p-1.5">
+      <div className="relative z-10 px-1.5 py-1">
       {sortable ? (
         <SortableCaseCard
           item={cell.caseItem}
@@ -2151,12 +2151,12 @@ function HomeCaseProjectBlock({
 
   return (
     <div
-      className="relative min-w-0 rounded-xl border border-black/[0.06] p-1.5"
+      className="relative min-w-0 rounded-lg border border-black/[0.06] px-1.5 py-1"
       style={{ backgroundColor: cellBg }}
     >
       {showProjects && (
         <span
-          className="absolute top-[3px] left-2 z-10 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
+          className="absolute top-[2px] left-2 -translate-y-1/2 z-10 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
           style={{ backgroundColor: cellBg }}
           title={project}
         >
