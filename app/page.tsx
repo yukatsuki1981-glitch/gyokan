@@ -2104,13 +2104,6 @@ function homeCaseCellBgClass(connections: HomeCaseCellConnections): string {
   return parts.join(" ");
 }
 
-function homeCaseCellContentClass(connections: HomeCaseCellConnections): string {
-  // Keep label row aligned across a grid row: disconnected cells use mt-0.5 + pt-1.5 (8px).
-  return connections.top
-    ? "relative z-10 px-1.5 pb-1.5 pt-2"
-    : "relative z-10 p-1.5";
-}
-
 function HomeCaseGridCell({
   cell,
   connections,
@@ -2127,24 +2120,24 @@ function HomeCaseGridCell({
   const { colors } = useProjectColors();
   const { showProjects } = useDisplaySettings();
   const { bg } = tagColor(cell.project, colors);
+  const cellBg = showProjects ? bg : "rgba(255,255,255,0.55)";
 
   return (
     <div className={homeCaseCellMarginClass(connections)}>
       <div
         className={homeCaseCellBgClass(connections)}
-        style={{ backgroundColor: showProjects ? bg : "rgba(255,255,255,0.55)" }}
+        style={{ backgroundColor: cellBg }}
       />
-      <div className={homeCaseCellContentClass(connections)}>
-      {showProjects && cell.showProjectLabel ? (
-        <p
-          className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
+      {showProjects && cell.showProjectLabel && (
+        <span
+          className="absolute -top-[7px] left-2 z-20 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-tight text-gray-500"
+          style={{ backgroundColor: cellBg }}
           title={cell.project}
         >
           {cell.project}
-        </p>
-      ) : (
-        <div className="mb-1 h-[14px]" aria-hidden />
+        </span>
       )}
+      <div className="relative z-10 p-1.5">
       {sortable ? (
         <SortableCaseCard
           item={cell.caseItem}
@@ -2181,19 +2174,21 @@ function HomeCaseProjectBlock({
   const { colors } = useProjectColors();
   const { showProjects } = useDisplaySettings();
   const { bg } = tagColor(project, colors);
+  const cellBg = showProjects ? bg : "rgba(255,255,255,0.55)";
 
   return (
     <div
-      className="min-w-0 rounded-xl border border-black/[0.06] p-1.5"
-      style={{ backgroundColor: showProjects ? bg : "rgba(255,255,255,0.55)" }}
+      className="relative min-w-0 rounded-xl border border-black/[0.06] p-1.5"
+      style={{ backgroundColor: cellBg }}
     >
       {showProjects && (
-      <p
-        className="mb-1 truncate px-0.5 text-[10px] font-semibold leading-tight text-gray-500"
-        title={project}
-      >
-        {project}
-      </p>
+        <span
+          className="absolute -top-[7px] left-2 z-10 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-tight text-gray-500"
+          style={{ backgroundColor: cellBg }}
+          title={project}
+        >
+          {project}
+        </span>
       )}
       <div className="grid w-full grid-cols-1 gap-1">
         {cases.map((caseItem) =>
