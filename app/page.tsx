@@ -1219,7 +1219,7 @@ function DetailOverlay({
             <Icon name="x" className="h-4 w-4" />
           </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="max-h-[min(80vh,640px)] overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   );
@@ -5969,45 +5969,41 @@ export default function Home() {
         onClose={() => setAllCasesListOpen(false)}
         title={`${caseLabel}一覧`}
       >
-        <div className="max-h-[min(80vh,640px)] overflow-y-auto px-6 py-4">
-          {orderedCases.length === 0 ? (
-            <p className="py-6 text-center text-[13px] text-gray-400">
-              {caseLabel}はまだありません
-            </p>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              {orderedCases.map((c) => (
-                <DetailCaseCard
-                  key={c.id}
-                  item={c}
-                  onToggle={toggleCase}
-                  onOpen={(caseItem) => {
-                    setAllCasesListOpen(false);
-                    setSelectedCase(caseItem);
-                  }}
-                  showProjectTag
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {orderedCases.length === 0 ? (
+          <p className="py-6 text-center text-[13px] text-gray-400">
+            {caseLabel}はまだありません
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {orderedCases.map((c) => (
+              <DetailCaseCard
+                key={c.id}
+                item={c}
+                onToggle={toggleCase}
+                onOpen={(caseItem) => {
+                  setAllCasesListOpen(false);
+                  setSelectedCase(caseItem);
+                }}
+                showProjectTag
+              />
+            ))}
+          </div>
+        )}
       </DetailOverlay>
 
       <DetailOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)} title="設定">
-        <div className="max-h-[min(80vh,640px)] overflow-y-auto px-6 py-4">
-          <AppSettingsPanel
-            userEmail={user.email}
-            loadError={loadError}
-            caseSaveError={caseSaveError}
-            appTitle={appTitle}
-            onAppTitleChange={handleAppTitleChange}
-            onOpenTheme={() => {
-              setSettingsOpen(false);
-              setThemePickerOpen(true);
-            }}
-            onSignOut={() => void signOut()}
-          />
-        </div>
+        <AppSettingsPanel
+          userEmail={user.email}
+          loadError={loadError}
+          caseSaveError={caseSaveError}
+          appTitle={appTitle}
+          onAppTitleChange={handleAppTitleChange}
+          onOpenTheme={() => {
+            setSettingsOpen(false);
+            setThemePickerOpen(true);
+          }}
+          onSignOut={() => void signOut()}
+        />
       </DetailOverlay>
 
       <DetailOverlay
