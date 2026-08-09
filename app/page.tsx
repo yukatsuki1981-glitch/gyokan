@@ -2103,7 +2103,7 @@ function HomeCaseGridCell({
       />
       {showProjects && cell.showProjectLabel && (
         <span
-          className="absolute top-[3px] left-2 -translate-y-1/2 z-20 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
+          className="absolute top-[3px] left-2 z-20 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
           style={{ backgroundColor: cellBg }}
           title={cell.project}
         >
@@ -2156,7 +2156,7 @@ function HomeCaseProjectBlock({
     >
       {showProjects && (
         <span
-          className="absolute top-[3px] left-2 -translate-y-1/2 z-10 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
+          className="absolute top-[3px] left-2 z-10 max-w-[calc(100%-16px)] truncate rounded-[3px] px-1 text-[9px] font-semibold leading-none text-gray-500"
           style={{ backgroundColor: cellBg }}
           title={project}
         >
