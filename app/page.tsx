@@ -5825,14 +5825,14 @@ export default function Home() {
                 className={
                   showProjects && !isAllProjects
                     ? "order-3 lg:order-3"
-                    : "order-2 lg:order-3"
+                    : "order-2 lg:order-1"
                 }
               />
             )}
 
             {showCases && effectiveAllProjects && (
               <section
-                className={`order-3 mt-3 mb-2 lg:order-1 lg:mb-3 lg:mt-0 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
+                className={`order-3 mt-3 mb-2 lg:order-3 lg:mb-3 lg:mt-0 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
               >
                 <div className="mb-1.5 flex items-center justify-between gap-4">
                   <div className="flex min-w-0 items-baseline gap-3">
