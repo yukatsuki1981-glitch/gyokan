@@ -76,6 +76,7 @@ export function normalizeTaskRow(row: Row, index: number): DbTask {
     starred: Boolean(row.starred ?? false),
     sort_order: Number(row.sort_order ?? index),
     memo: String(row.memo ?? ""),
+    color: (row.color as string | null | undefined) ?? null,
   };
 }
 
@@ -146,6 +147,7 @@ export type TaskUpsertRow = {
   starred?: boolean;
   sort_order: number;
   memo?: string;
+  color?: string | null;
 };
 
 /** Legacy `time` columns are typed as time — only send HH:MM values. */
@@ -178,6 +180,7 @@ export function buildTaskUpsertAttempts(row: TaskUpsertRow): Row[] {
     sort_order: _sortOrder,
     date_end: _dateEnd,
     memo: _memo,
+    color: _color,
     ...modernCore
   } = modernNoCompletedAt;
   const withDateAliasCore = {

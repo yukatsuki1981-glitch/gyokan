@@ -74,6 +74,7 @@ export function mapDbTask(row: DbTask, idToName: Record<string, string>): AppTas
     starred: row.starred,
     sortOrder: row.sort_order ?? 0,
     memo: row.memo ?? "",
+    color: row.color === "red" || row.color === "yellow" ? row.color : undefined,
   };
 }
 
@@ -155,6 +156,7 @@ export function mapTaskToDb(
     starred: normalized.starred ?? false,
     sort_order: normalized.sortOrder,
     memo: normalized.memo ?? "",
+    color: normalized.color ?? null,
   };
 }
 

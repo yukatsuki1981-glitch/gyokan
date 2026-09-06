@@ -22,6 +22,7 @@ export type TaskDraftFields = {
   dateEnd?: string;
   useRange: boolean;
   memo: string;
+  color?: "red" | "yellow";
 };
 
 export type MemoDraftFields = {
@@ -105,6 +106,7 @@ export function mergeTasksWithDrafts(
         date: draft.date,
         dateEnd,
         memo: draft.memo ?? item.memo,
+        color: draft.color ?? item.color,
       },
       caseById,
     );
@@ -150,7 +152,8 @@ export function taskDraftDiffers(item: AppTask, draft: TaskDraftFields) {
     (item.caseId ?? "") !== draft.caseId ||
     item.date !== draft.date ||
     (item.dateEnd ?? undefined) !== dateEnd ||
-    (item.memo ?? "") !== (draft.memo ?? "")
+    (item.memo ?? "") !== (draft.memo ?? "") ||
+    (item.color ?? undefined) !== (draft.color ?? undefined)
   );
 }
 

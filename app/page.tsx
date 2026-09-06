@@ -111,6 +111,7 @@ type Task = {
   starred?: boolean;
   sortOrder: number;
   memo?: string;
+  color?: "red" | "yellow";
 };
 
 type CaseItem = {
@@ -1486,6 +1487,7 @@ function TaskDetailEditor({
       dateEnd?: string;
       project?: string;
       memo?: string;
+      color?: "red" | "yellow";
     },
   ) => void | boolean | Promise<void | boolean>;
   onClose: () => void;
@@ -1510,6 +1512,7 @@ function TaskDetailEditor({
     dateEnd: source.dateEnd ?? "",
     useRange: isRangeTask(source),
     memo: source.memo ?? "",
+    color: source.color,
   }), []);
 
   const initialDraft = readDraft<TaskDraftFields>("task", item.id);
@@ -1524,6 +1527,7 @@ function TaskDetailEditor({
   const [dateEnd, setDateEnd] = useState(initialDraft?.dateEnd ?? item.dateEnd ?? "");
   const [useRange, setUseRange] = useState(initialDraft?.useRange ?? isRangeTask(item));
   const [memo, setMemo] = useState(initialDraft?.memo ?? item.memo ?? "");
+  const [color, setColor] = useState<Task["color"]>(initialDraft?.color ?? item.color);
 
   useEffect(() => {
     if (item.id === itemIdRef.current) return;
@@ -1538,6 +1542,7 @@ function TaskDetailEditor({
     setDateEnd(next.dateEnd ?? "");
     setUseRange(next.useRange);
     setMemo(next.memo ?? "");
+    setColor(next.color);
   }, [item, loadTaskFields]);
 
   const formValues = useMemo((): TaskDraftFields => ({
@@ -1547,7 +1552,8 @@ function TaskDetailEditor({
     dateEnd,
     useRange,
     memo,
-  }), [title, caseId, date, dateEnd, useRange, memo]);
+    color,
+  }), [title, caseId, date, dateEnd, useRange, memo, color]);
 
   const formBaseline = useMemo((): TaskDraftFields => ({
     title: item.title,
@@ -1556,6 +1562,7 @@ function TaskDetailEditor({
     dateEnd: item.dateEnd ?? "",
     useRange: isRangeTask(item),
     memo: item.memo ?? "",
+    color: item.color,
   }), [item]);
 
   const persistTask = useCallback(
@@ -1573,6 +1580,7 @@ function TaskDetailEditor({
       dateEnd: end,
         project: direct ? projectName : values.caseId ? undefined : "",
         memo: values.memo,
+        color: values.color,
       });
     },
     [onSave, item.id],
@@ -1613,6 +1621,32 @@ function TaskDetailEditor({
           className={fieldInputClass}
         />
       </div>
+      <DetailField label="バーの色" compact>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setColor((prev) => (prev === "red" ? undefined : "red"))}
+            aria-label="赤"
+            aria-pressed={color === "red"}
+            className={`h-7 w-7 rounded-full bg-red-400 transition-all ${
+              color === "red"
+                ? "ring-2 ring-red-500 ring-offset-2"
+                : "ring-1 ring-black/10 hover:ring-black/20"
+            }`}
+          />
+          <button
+            type="button"
+            onClick={() => setColor((prev) => (prev === "yellow" ? undefined : "yellow"))}
+            aria-label="黄色"
+            aria-pressed={color === "yellow"}
+            className={`h-7 w-7 rounded-full bg-yellow-300 transition-all ${
+              color === "yellow"
+                ? "ring-2 ring-yellow-500 ring-offset-2"
+                : "ring-1 ring-black/10 hover:ring-black/20"
+            }`}
+          />
+        </div>
+      </DetailField>
       {(showCases || showProjects) && (
         <DetailField label={showCases ? caseLabel : projectLabel} compact>
           {showCases && (
@@ -2921,6 +2955,17 @@ function TodayTasksSection({
 
 /* ─── Sortable Task Row ─── */
 
+function taskColorRowClasses(color: Task["color"], displayDone: boolean): string | null {
+  if (!color) return null;
+  const palette =
+    color === "red"
+      ? { border: "border-red-200", bg: "bg-red-50", hover: "hover:bg-red-100/70" }
+      : { border: "border-yellow-200", bg: "bg-yellow-50", hover: "hover:bg-yellow-100/70" };
+  return displayDone
+    ? `cursor-pointer ${palette.border} ${palette.bg} opacity-60`
+    : `cursor-pointer ${palette.border} ${palette.bg} shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)] ${palette.hover}`;
+}
+
 function TaskRowContent({
   task,
   viewDateISO,
@@ -2952,13 +2997,14 @@ function TaskRowContent({
       className={`group flex w-full items-center gap-1.5 rounded-xl border px-2.5 py-1.5 transition-all duration-300 ${
         isDragging
           ? "z-50 scale-[1.04] border-blue-200/60 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.12)] ring-1 ring-blue-200/40"
-          : displayDone
-            ? subdued
-              ? "cursor-pointer border-black/[0.03] bg-gray-100/70 opacity-55"
-              : "cursor-pointer border-black/[0.05] bg-black/[0.02] opacity-60"
-            : subdued
-              ? "cursor-pointer border-black/[0.03] bg-gray-100/50 hover:bg-gray-100/80"
-              : "cursor-pointer border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]"
+          : taskColorRowClasses(task.color, displayDone) ??
+            (displayDone
+              ? subdued
+                ? "cursor-pointer border-black/[0.03] bg-gray-100/70 opacity-55"
+                : "cursor-pointer border-black/[0.05] bg-black/[0.02] opacity-60"
+              : subdued
+                ? "cursor-pointer border-black/[0.03] bg-gray-100/50 hover:bg-gray-100/80"
+                : "cursor-pointer border-black/[0.05] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.06)]")
       } ${sortable ? "select-none" : ""}`}
     >
       <button
@@ -4650,10 +4696,18 @@ function AddTaskModal({
 
 /* ─── Main Page ─── */
 
+function taskColorPriority(task: Task) {
+  return task.color === "red" ? 0 : task.color === "yellow" ? 1 : 2;
+}
+
+function sortByColorPriority(list: Task[]) {
+  return [...list].sort((a, b) => taskColorPriority(a) - taskColorPriority(b));
+}
+
 function sortTasksForViewDate(list: Task[], viewDateISO: string) {
   const active = list.filter((t) => !isTaskDoneOnViewDate(t, viewDateISO));
   const done = list.filter((t) => isTaskDoneOnViewDate(t, viewDateISO));
-  return [...active, ...done];
+  return [...sortByColorPriority(active), ...sortByColorPriority(done)];
 }
 
 function buildTaskViewBuckets(
@@ -4795,7 +4849,7 @@ function PrivateTaskListPanel({
 function sortTasksActiveFirst(list: Task[]) {
   const active = list.filter((t) => !t.done);
   const done = list.filter((t) => t.done);
-  return [...active, ...done];
+  return [...sortByColorPriority(active), ...sortByColorPriority(done)];
 }
 
 function useIsClient() {
@@ -5396,6 +5450,8 @@ export default function Home() {
         date: string;
         dateEnd?: string;
         project?: string;
+        memo?: string;
+        color?: "red" | "yellow";
       },
     ) => {
       const linked = data.caseId ? caseById[data.caseId] : undefined;
@@ -5409,6 +5465,8 @@ export default function Home() {
             project: linked?.project ?? (data.project !== undefined ? data.project : t.project),
             date: data.date,
             dateEnd: data.dateEnd,
+            memo: data.memo,
+            color: data.color,
           };
           if (isRangeTask(next)) {
             next.time = formatRangeTaskDeadline(next);

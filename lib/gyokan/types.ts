@@ -20,6 +20,7 @@ export type DbTask = {
   starred: boolean;
   sort_order: number;
   memo: string;
+  color: string | null;
 };
 
 export type DbCase = {
@@ -83,6 +84,7 @@ export type AppTask = {
   starred?: boolean;
   sortOrder: number;
   memo?: string;
+  color?: "red" | "yellow";
 };
 
 export type AppCase = {

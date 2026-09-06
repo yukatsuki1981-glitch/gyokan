@@ -35,6 +35,7 @@ create table if not exists public.tasks (
   starred boolean not null default false,
   sort_order integer not null default 0,
   memo text not null default '',
+  color text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
