@@ -39,6 +39,7 @@ import { ThemePickerModal } from "@/components/theme-picker";
 import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
 import { StoryMessageOverlay } from "@/components/story-message-overlay";
 import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
+import { PrivateModeSection } from "@/components/private/PrivateModeSection";
 import {
   DisplaySettingsProvider,
   SettingsToggle,
@@ -5079,6 +5080,7 @@ export default function Home() {
   const [allCasesListOpen, setAllCasesListOpen] = useState(false);
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
   const [displaySettings, setDisplaySettings] = useState(DEFAULT_DISPLAY_SETTINGS);
+  const [appMode, setAppMode] = useState<"tasks" | "private">("tasks");
 
   useEffect(() => {
     if (!user?.id) return;
@@ -5726,15 +5728,28 @@ export default function Home() {
             <header className="mb-2 lg:mb-3">
               <div className="mb-2 flex justify-center lg:justify-start">
                 <div className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/[0.04] p-0.5">
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-gray-900 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setAppMode("tasks")}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      appMode === "tasks"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
                     タスク管理
-                  </span>
-                  <Link
-                    href="/private"
-                    className="rounded-full px-2.5 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-900"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAppMode("private")}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      appMode === "private"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
                   >
                     プライベート
-                  </Link>
+                  </button>
                 </div>
               </div>
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
@@ -5771,7 +5786,9 @@ export default function Home() {
               </div>
             </header>
 
-            {showProjects && mobileTab === "projects" ? (
+            {appMode === "private" ? (
+              <PrivateModeSection onExit={() => setAppMode("tasks")} />
+            ) : showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
                   projects={projects}
@@ -5985,7 +6002,7 @@ export default function Home() {
       )}
 
       {/* Mobile Tab Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden">
+      <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden ${appMode === "private" ? "hidden" : ""}`}>
         <div className="mx-auto flex max-w-lg justify-around px-1" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
           {mobileTabs.map((tab) => (
             <button
