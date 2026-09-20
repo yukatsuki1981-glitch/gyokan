@@ -5635,30 +5635,27 @@ export default function Home() {
   const showTasks = mobileTab === "home";
 
   const modeToggle = (
-    <div className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/[0.04] p-0.5">
-      <button
-        type="button"
-        onClick={() => setAppMode("tasks")}
-        className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-          appMode === "tasks"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-500 hover:text-gray-900"
-        }`}
-      >
-        タスク管理
-      </button>
-      <button
-        type="button"
-        onClick={() => setAppMode("private")}
-        className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-          appMode === "private"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-500 hover:text-gray-900"
-        }`}
-      >
-        プライベート
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={() => setAppMode(appMode === "tasks" ? "private" : "tasks")}
+      aria-label={appMode === "tasks" ? "プライベートモードに切り替え" : "タスク管理モードに切り替え"}
+      className="flex shrink-0 items-center gap-1 rounded-full bg-black/[0.08] p-0.5 transition-colors"
+    >
+      {appMode === "tasks" && (
+        <span className="h-5 w-5 shrink-0 rounded-full bg-white shadow-sm transition-transform" />
+      )}
+      <span className="relative grid place-items-center px-1">
+        <span className="invisible col-start-1 row-start-1 whitespace-nowrap text-[11px] font-medium">
+          プライベート
+        </span>
+        <span className="col-start-1 row-start-1 whitespace-nowrap text-[11px] font-medium text-gray-700">
+          {appMode === "tasks" ? "プライベート" : "タスク管理"}
+        </span>
+      </span>
+      {appMode === "private" && (
+        <span className="h-5 w-5 shrink-0 rounded-full bg-white shadow-sm transition-transform" />
+      )}
+    </button>
   );
 
   return (
