@@ -5634,6 +5634,33 @@ export default function Home() {
   const showHomeCaseGrid = mobileTab === "home";
   const showTasks = mobileTab === "home";
 
+  const modeToggle = (
+    <div className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/[0.04] p-0.5">
+      <button
+        type="button"
+        onClick={() => setAppMode("tasks")}
+        className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+          appMode === "tasks"
+            ? "bg-white text-gray-900 shadow-sm"
+            : "text-gray-500 hover:text-gray-900"
+        }`}
+      >
+        タスク管理
+      </button>
+      <button
+        type="button"
+        onClick={() => setAppMode("private")}
+        className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+          appMode === "private"
+            ? "bg-white text-gray-900 shadow-sm"
+            : "text-gray-500 hover:text-gray-900"
+        }`}
+      >
+        プライベート
+      </button>
+    </div>
+  );
+
   return (
     <GyokanThemeProvider isPaidMember={isPaidMember}>
     <DisplaySettingsProvider
@@ -5726,34 +5753,12 @@ export default function Home() {
               </p>
             )}
             <header className="mb-2 lg:mb-3">
-              <div className="mb-2 flex justify-center lg:justify-start">
-                <div className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/[0.04] p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setAppMode("tasks")}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      appMode === "tasks"
-                        ? "bg-white text-gray-900 shadow-sm"
-                        : "text-gray-500 hover:text-gray-900"
-                    }`}
-                  >
-                    タスク管理
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAppMode("private")}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      appMode === "private"
-                        ? "bg-white text-gray-900 shadow-sm"
-                        : "text-gray-500 hover:text-gray-900"
-                    }`}
-                  >
-                    プライベート
-                  </button>
-                </div>
+              <div className="mb-2 hidden lg:flex lg:justify-start">
+                {modeToggle}
               </div>
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
                 <button type="button" className="shrink-0 rounded-xl p-2 text-gray-500 hover:bg-white"><Icon name="menu" className="h-5 w-5" /></button>
+                {modeToggle}
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
                   {!isAllProjects && showProjects && <ProjectColorHeaderLink project={activeProject} />}
