@@ -1042,10 +1042,8 @@ function PullToRefresh({
   useEffect(() => {
     if (!enabled) return;
 
-    // The page itself no longer scrolls (fixed header/footer shell) — the
-    // task content scrolls inside its own container instead.
     const getScrollTop = () =>
-      document.querySelector("[data-app-scroll-container]")?.scrollTop ?? 0;
+      window.scrollY || document.documentElement.scrollTop || document.body.scrollTop;
 
     const reset = () => {
       dragging.current = false;
@@ -3422,51 +3420,6 @@ function MobileCalendarDayCell({
   );
 }
 
-// Standard cubic-bezier solver (Newton-Raphson with bisection fallback).
-// Used for the calendar's month-swipe release animation so it can match an
-// exact easing curve/duration that native smooth-scroll can't guarantee.
-function makeCubicBezierEasing(p1x: number, p1y: number, p2x: number, p2y: number) {
-  const a = (x1: number, x2: number) => 1 - 3 * x2 + 3 * x1;
-  const b = (x1: number, x2: number) => 3 * x2 - 6 * x1;
-  const c = (x1: number) => 3 * x1;
-
-  const calcBezier = (t: number, x1: number, x2: number) =>
-    ((a(x1, x2) * t + b(x1, x2)) * t + c(x1)) * t;
-  const getSlope = (t: number, x1: number, x2: number) =>
-    3 * a(x1, x2) * t * t + 2 * b(x1, x2) * t + c(x1);
-
-  const getTForX = (x: number) => {
-    let t = x;
-    for (let i = 0; i < 4; i++) {
-      const slope = getSlope(t, p1x, p2x);
-      if (slope === 0) break;
-      t -= (calcBezier(t, p1x, p2x) - x) / slope;
-    }
-    if (Math.abs(calcBezier(t, p1x, p2x) - x) > 1e-4) {
-      let lo = 0;
-      let hi = 1;
-      t = x;
-      for (let i = 0; i < 12; i++) {
-        const current = calcBezier(t, p1x, p2x);
-        if (Math.abs(current - x) < 1e-6) break;
-        if (current < x) lo = t;
-        else hi = t;
-        t = (lo + hi) / 2;
-      }
-    }
-    return t;
-  };
-
-  return (x: number) => {
-    if (x <= 0) return 0;
-    if (x >= 1) return 1;
-    return calcBezier(getTForX(x), p1y, p2y);
-  };
-}
-
-const MONTH_SNAP_EASING = makeCubicBezierEasing(0.22, 1, 0.36, 1);
-const MONTH_SNAP_DURATION_MS = 300;
-
 function MobileCalendarWidget({
   tasks,
   selectedDate,
@@ -3487,12 +3440,19 @@ function MobileCalendarWidget({
   const peekSuppressClickRef = useRef(false);
   const lastScrolledMonthRef = useRef<string | null>(null);
   const gestureStartMonthIdxRef = useRef(0);
+  const gestureStartScrollLeftRef = useRef(0);
   const gestureDeltaXRef = useRef(0);
   const isSnappingRef = useRef(false);
-  // Cancels the in-flight month-snap release animation, if any.
-  const snapAnimCancelRef = useRef<(() => void) | null>(null);
+  const isPeekRef = useRef(false);
+  // Set while a swipe-driven smooth scroll-to-month is in flight (from
+  // touchend to scroll settle). The month index that drives the shell's
+  // height is only committed once that settles, so the height never
+  // animates mid-swipe — see commitPendingHeightIdx below.
+  const pendingVisibleIdxRef = useRef<number | null>(null);
+  const pendingSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isPeek = peekMode && !peekEngaged;
+  isPeekRef.current = isPeek;
   const PEEK_WEEKS = 2;
   const PEEK_GRID_H = CALENDAR_CELL_ROW_H * PEEK_WEEKS;
   const PEEK_HEADER_H = 58;
@@ -3526,12 +3486,19 @@ function MobileCalendarWidget({
   }, []);
 
   // Instantly (no CSS transition) commits the month index that drives the
-  // shell's height, once the snap-release animation has actually finished.
-  const commitSnap = useCallback((idx: number) => {
+  // shell's height, once a swipe-driven scroll has actually settled.
+  const commitPendingHeightIdx = useCallback(() => {
+    if (pendingSettleTimeoutRef.current) {
+      clearTimeout(pendingSettleTimeoutRef.current);
+      pendingSettleTimeoutRef.current = null;
+    }
+    const idx = pendingVisibleIdxRef.current;
+    isSnappingRef.current = false;
+    if (idx == null) return;
+    pendingVisibleIdxRef.current = null;
     const shell = shellRef.current;
     if (shell) shell.style.transition = "none";
     setVisibleMonthIdx(idx);
-    isSnappingRef.current = false;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (shell) shell.style.transition = "";
@@ -3539,72 +3506,35 @@ function MobileCalendarWidget({
     });
   }, []);
 
-  // Instant, non-animated jump — used for programmatic navigation (today
-  // button, initial mount, syncing to a selected date) where no release
-  // animation is wanted.
   const scrollToMonthIndex = useCallback(
-    (idx: number) => {
+    (idx: number, behavior: ScrollBehavior = "auto") => {
       const strip = horizontalRef.current;
       if (!strip || strip.clientWidth <= 0) return;
       const clamped = Math.max(0, Math.min(months.length - 1, idx));
-      setVisibleMonthIdx(clamped);
-      strip.scrollLeft = clamped * strip.clientWidth;
-    },
-    [months.length],
-  );
-
-  // Eased release animation for a swipe's commit/bounce-back — 1:1 finger
-  // tracking during the drag comes from native scrolling; this only drives
-  // the settle after the finger lifts, decelerating into place over
-  // MONTH_SNAP_DURATION_MS. The month index (and the height it drives) is
-  // only committed once this finishes, so height never animates mid-swipe.
-  const animateSnapTo = useCallback(
-    (targetIdx: number) => {
-      snapAnimCancelRef.current?.();
-      snapAnimCancelRef.current = null;
-
-      const strip = horizontalRef.current;
-      const clamped = Math.max(0, Math.min(months.length - 1, targetIdx));
-      if (!strip || strip.clientWidth <= 0) {
-        commitSnap(clamped);
-        return;
+      const left = clamped * strip.clientWidth;
+      if (behavior === "smooth") {
+        // Height must not animate mid-swipe: defer committing the index
+        // (and the height it drives) until the scroll actually settles —
+        // via the native `scrollend` event, with a timeout fallback for
+        // browsers that don't fire it.
+        pendingVisibleIdxRef.current = clamped;
+        if (pendingSettleTimeoutRef.current) clearTimeout(pendingSettleTimeoutRef.current);
+        pendingSettleTimeoutRef.current = setTimeout(commitPendingHeightIdx, 500);
+        strip.scrollTo({ left, behavior: "smooth" });
+      } else {
+        pendingVisibleIdxRef.current = null;
+        setVisibleMonthIdx(clamped);
+        strip.scrollLeft = left;
       }
-
-      const targetLeft = clamped * strip.clientWidth;
-      const startLeft = strip.scrollLeft;
-      const delta = targetLeft - startLeft;
-      if (Math.abs(delta) < 1) {
-        strip.scrollLeft = targetLeft;
-        commitSnap(clamped);
-        return;
-      }
-
-      const startTime = performance.now();
-      let cancelled = false;
-      const step = (now: number) => {
-        if (cancelled) return;
-        const progress = Math.min(1, (now - startTime) / MONTH_SNAP_DURATION_MS);
-        strip.scrollLeft = startLeft + delta * MONTH_SNAP_EASING(progress);
-        if (progress < 1) {
-          requestAnimationFrame(step);
-        } else {
-          snapAnimCancelRef.current = null;
-          commitSnap(clamped);
-        }
-      };
-      snapAnimCancelRef.current = () => {
-        cancelled = true;
-      };
-      requestAnimationFrame(step);
     },
-    [months.length, commitSnap],
+    [months.length, commitPendingHeightIdx],
   );
 
   const scrollToMonth = useCallback(
-    (iso: string) => {
+    (iso: string, behavior: ScrollBehavior = "auto") => {
       const idx = getMonthIndexInRange(iso, months);
       if (idx < 0) return;
-      scrollToMonthIndex(idx);
+      scrollToMonthIndex(idx, behavior);
     },
     [months, scrollToMonthIndex],
   );
@@ -3625,17 +3555,20 @@ function MobileCalendarWidget({
     return Math.max(0, Math.min(months.length - 1, startIdx + dir));
   }, [months.length]);
 
-  const snapToGestureMonth = useCallback(() => {
-    if (isSnappingRef.current) return;
-    isSnappingRef.current = true;
-    const targetIdx = resolveGestureTargetMonth();
-    if (peekMode && !peekEngaged) {
-      setPeekEngaged(true);
-    }
-    requestAnimationFrame(() => {
-      animateSnapTo(targetIdx);
-    });
-  }, [peekMode, peekEngaged, resolveGestureTargetMonth, animateSnapTo]);
+  const snapToGestureMonth = useCallback(
+    (behavior: ScrollBehavior = "smooth") => {
+      if (isSnappingRef.current) return;
+      isSnappingRef.current = true;
+      const targetIdx = resolveGestureTargetMonth();
+      if (peekMode && !peekEngaged) {
+        setPeekEngaged(true);
+      }
+      requestAnimationFrame(() => {
+        scrollToMonthIndex(targetIdx, behavior);
+      });
+    },
+    [peekMode, peekEngaged, resolveGestureTargetMonth, scrollToMonthIndex],
+  );
 
   const goToday = useCallback(() => {
     const today = todayISO();
@@ -3659,7 +3592,7 @@ function MobileCalendarWidget({
     const idx = getMonthIndexInRange(calendarAnchorISO, months);
     if (idx < 0) return;
     setVisibleMonthIdx(idx);
-    scrollToMonthIndex(idx);
+    scrollToMonthIndex(idx, "auto");
   }, [calendarAnchorISO, months, scrollToMonthIndex]);
 
   useLayoutEffect(() => {
@@ -3718,6 +3651,7 @@ function MobileCalendarWidget({
       peekSuppressClickRef.current = false;
       gestureDeltaXRef.current = 0;
       gestureStartMonthIdxRef.current = getMonthIndexFromScroll();
+      gestureStartScrollLeftRef.current = strip.scrollLeft;
     };
 
     const onTouchMove = (e: TouchEvent) => {
@@ -3742,10 +3676,10 @@ function MobileCalendarWidget({
       tracking = false;
 
       if (didDrag && Math.abs(gestureDeltaXRef.current) >= SWIPE_MONTH_THRESHOLD_PX) {
-        snapToGestureMonth();
+        snapToGestureMonth("smooth");
         window.setTimeout(() => {
           peekSuppressClickRef.current = false;
-        }, MONTH_SNAP_DURATION_MS + 50);
+        }, 300);
       } else {
         peekSuppressClickRef.current = false;
       }
@@ -3753,6 +3687,7 @@ function MobileCalendarWidget({
 
     const onPointerDown = () => {
       gestureStartMonthIdxRef.current = getMonthIndexFromScroll();
+      gestureStartScrollLeftRef.current = strip.scrollLeft;
       gestureDeltaXRef.current = 0;
       isSnappingRef.current = false;
     };
@@ -3760,8 +3695,22 @@ function MobileCalendarWidget({
     strip.addEventListener("pointerdown", onPointerDown, { passive: true });
     strip.addEventListener("touchstart", onTouchStart, { passive: true });
     strip.addEventListener("touchmove", onTouchMove, { passive: true });
+    const onScrollEnd = () => {
+      if (tracking) return;
+      if (pendingVisibleIdxRef.current != null) {
+        // The swipe-driven smooth scroll just settled — commit the height
+        // it drives now, instantly (no transition).
+        commitPendingHeightIdx();
+        return;
+      }
+      if (isPeekRef.current || isSnappingRef.current) return;
+      const idx = getMonthIndexFromScroll();
+      scrollToMonthIndex(idx, "smooth");
+    };
+
     strip.addEventListener("touchend", onTouchEnd, { passive: true });
     strip.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    strip.addEventListener("scrollend", onScrollEnd);
 
     return () => {
       strip.removeEventListener("pointerdown", onPointerDown);
@@ -3769,8 +3718,9 @@ function MobileCalendarWidget({
       strip.removeEventListener("touchmove", onTouchMove);
       strip.removeEventListener("touchend", onTouchEnd);
       strip.removeEventListener("touchcancel", onTouchEnd);
+      strip.removeEventListener("scrollend", onScrollEnd);
     };
-  }, [getMonthIndexFromScroll, snapToGestureMonth]);
+  }, [getMonthIndexFromScroll, scrollToMonthIndex, snapToGestureMonth, commitPendingHeightIdx]);
 
   const renderDayButton = (
     cell: CalendarCell,
@@ -5181,7 +5131,7 @@ export default function Home() {
     [user?.id],
   );
 
-  const { showProjects, showCases, caseLabel, homeCaseColumns } = displaySettings;
+  const { showProjects, showCases, projectLabel, caseLabel, homeCaseColumns } = displaySettings;
 
   const handleAppTitleChange = useCallback(
     (title: string) => {
@@ -5640,6 +5590,23 @@ export default function Home() {
     [deleteCase],
   );
 
+  const mobileTabs = useMemo(() => {
+    const tabs: {
+      id: MobileTab;
+      label: string;
+      icon: "home" | "folder" | "memo" | "diary" | "settings";
+    }[] = [{ id: "home", label: "ホーム", icon: "home" }];
+    if (showProjects) {
+      tabs.push({ id: "projects", label: projectLabel, icon: "folder" });
+    }
+    tabs.push(
+      { id: "memo", label: "メモ", icon: "memo" },
+      { id: "diary", label: "日記", icon: "diary" },
+      { id: "more", label: "設定", icon: "settings" },
+    );
+    return tabs;
+  }, [showProjects, projectLabel]);
+
   if (!isClient || !authReady || (user && !dataReady)) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--gyokan-bg)] px-6">
@@ -5699,6 +5666,7 @@ export default function Home() {
     />
   );
 
+  const showHomeCaseGrid = mobileTab === "home";
   const showTasks = mobileTab === "home";
 
   const modeToggle = (
@@ -5733,7 +5701,11 @@ export default function Home() {
       onSettingsChange={handleDisplaySettingsChange}
     >
     <ProjectColorsContext.Provider value={projectColorsValue}>
-    <div className="gyokan-app relative h-[100dvh] overflow-hidden text-[var(--gyokan-text)] antialiased">
+    <div
+      className={`gyokan-app relative min-h-screen text-[var(--gyokan-text)] antialiased ${
+        appMode === "private" ? "max-lg:h-[100dvh] max-lg:overflow-hidden" : ""
+      }`}
+    >
       <div
         className="pointer-events-none fixed inset-0 z-0 bg-[var(--gyokan-bg)]"
         aria-hidden
@@ -5741,8 +5713,12 @@ export default function Home() {
       <ThemeDecorationLayer />
       <StoryMessageOverlay tasks={tasks} dataReady={dataReady} isAuthenticated={!!user} />
       <div className="relative z-[2]">
-      <PullToRefresh enabled={isClient} onRefresh={handleRefresh} />
-      <div className="mx-auto flex h-full max-w-[1480px] overflow-hidden">
+      <PullToRefresh enabled={isClient && appMode !== "private"} onRefresh={handleRefresh} />
+      <div
+        className={`mx-auto flex min-h-screen max-w-[1480px] lg:h-screen lg:overflow-hidden ${
+          appMode === "private" ? "max-lg:h-full max-lg:overflow-hidden" : ""
+        }`}
+      >
         {/* Left Sidebar */}
         <aside className={`gyokan-panel hidden shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col lg:h-full ${showProjects ? "w-[168px]" : "w-[132px]"}`}>
           <div className="mb-6 flex items-center justify-between gap-2 px-1">
@@ -5800,9 +5776,19 @@ export default function Home() {
         </aside>
 
         {/* Main + Right Panel */}
-        <div className="flex h-full min-w-0 flex-1 overflow-hidden">
-        <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="mx-auto w-full shrink-0 max-w-3xl px-2.5 pt-2 sm:px-4 lg:max-w-none lg:px-5 lg:pt-2">
+        <div
+          className={`flex min-w-0 flex-1 lg:h-full lg:overflow-hidden ${
+            appMode === "private" ? "max-lg:h-full max-lg:overflow-hidden" : ""
+          }`}
+        >
+        <main
+          className={`min-w-0 flex-1 lg:h-full lg:overflow-y-auto lg:pb-0 ${
+            appMode === "private"
+              ? "max-lg:flex max-lg:h-full max-lg:flex-col max-lg:overflow-hidden max-lg:pb-0"
+              : "pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+          }`}
+        >
+          <div className="mx-auto w-full max-lg:shrink-0 max-w-3xl px-2.5 pt-2 sm:px-4 lg:max-w-none lg:px-5 lg:pt-2">
             {loadError && (
               <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
                 データの読み込みに問題があります: {loadError}
@@ -5856,8 +5842,13 @@ export default function Home() {
             </header>
           </div>
 
-          <div data-app-scroll-container className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto h-full max-w-3xl px-2.5 pb-3 sm:px-4 lg:max-w-none lg:px-5 lg:pb-3">
+          <div
+            className={`mx-auto max-w-3xl px-2.5 pb-2 sm:px-4 lg:max-w-none lg:px-5 lg:pb-2 ${
+              appMode === "private"
+                ? "max-lg:h-full max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden max-lg:pb-0"
+                : ""
+            }`}
+          >
 
             {appMode === "private" ? (
               <PrivateModeSection />
@@ -5993,7 +5984,7 @@ export default function Home() {
 
             {showCases && effectiveAllProjects && (
               <section
-                className="order-3 mt-3 mb-2 hidden lg:order-3 lg:mb-3 lg:mt-0 lg:block"
+                className={`order-3 mt-3 mb-2 lg:order-3 lg:mb-3 lg:mt-0 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
               >
                 <div className="mb-1.5 flex items-center justify-between gap-4">
                   <div className="flex min-w-0 items-baseline gap-3">
@@ -6035,33 +6026,32 @@ export default function Home() {
               </>
             )}
           </div>
-          </div>
 
-          {/* Mobile footer — same design as the previous 5-icon tab bar,
-              trimmed to the icons currently wired up. More will return. */}
-          <footer
-            className="shrink-0 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden"
-            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-          >
-            <div className="mx-auto flex max-w-lg justify-around px-1">
-              <button
-                type="button"
-                onClick={() => router.push("/diary")}
-                className="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-gray-500 transition-all duration-200"
-              >
-                <Icon name="diary" className="h-5 w-5" />
-                <span className="text-[9px] font-medium">日記</span>
-              </button>
-              <button
-                type="button"
-                onClick={openSettings}
-                className="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-gray-500 transition-all duration-200"
-              >
-                <Icon name="settings" className="h-5 w-5" />
-                <span className="text-[9px] font-medium">設定</span>
-              </button>
-            </div>
-          </footer>
+          {appMode === "private" && (
+            <footer
+              className="shrink-0 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden"
+              style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+            >
+              <div className="mx-auto flex max-w-lg justify-around px-1">
+                <button
+                  type="button"
+                  onClick={() => router.push("/diary")}
+                  className="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-gray-500 transition-all duration-200"
+                >
+                  <Icon name="diary" className="h-5 w-5" />
+                  <span className="text-[9px] font-medium">日記</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openSettings}
+                  className="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-gray-500 transition-all duration-200"
+                >
+                  <Icon name="settings" className="h-5 w-5" />
+                  <span className="text-[9px] font-medium">設定</span>
+                </button>
+              </div>
+            </footer>
+          )}
         </main>
 
         {/* Right Panel - calendar and stats */}
@@ -6100,6 +6090,49 @@ export default function Home() {
           onSave={saveDailyMemo}
         />
       )}
+
+      {/* Mobile Tab Bar */}
+      <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden ${appMode === "private" ? "hidden" : ""}`}>
+        <div className="mx-auto flex max-w-lg justify-around px-1" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
+          {mobileTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                if (tab.id === "projects") {
+                  if (!showProjects) return;
+                  setMemoSheetOpen(false);
+                  setActiveProject(ALL_PROJECTS_LABEL);
+                  setMobileTab("projects");
+                } else if (tab.id === "memo") {
+                  setMemoSheetOpen(true);
+                } else if (tab.id === "diary") {
+                  setMemoSheetOpen(false);
+                  router.push("/diary");
+                } else {
+                  setMemoSheetOpen(false);
+                  setMobileTab(tab.id);
+                  if (tab.id === "home") {
+                    setCalendarPeekReset((n) => n + 1);
+                  }
+                }
+              }}
+              className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-all duration-200 ${
+                tab.id === "memo"
+                  ? memoSheetOpen
+                    ? "text-[var(--gyokan-accent2)]"
+                    : "text-gray-500"
+                  : mobileTab === tab.id
+                  ? "text-[var(--gyokan-accent2)]"
+                  : "text-gray-500"
+              }`}
+            >
+              <Icon name={tab.icon} className="h-5 w-5" />
+              <span className="text-[9px] font-medium">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
 
       <AddTaskModal
         open={taskModalOpen}

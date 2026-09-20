@@ -6,14 +6,15 @@ import { PrivateCalendar } from "./PrivateCalendar";
 /**
  * Embedded private-mode calendar.
  *
- * The header (menu, mode switch, date, refresh) and the mobile footer are
- * the same shared elements used in tasks mode — this component never
- * renders its own. It sits inside the app's fixed header/footer shell, so
- * `h-full` here resolves against that shell's own bounded height: on
- * mobile it fills the remaining space exactly, and on desktop it renders
- * inline at a fixed height inside the middle column where "今日のタスク"
- * normally shows, leaving the left project sidebar and the right-hand
- * calendar/memo panel untouched.
+ * The header (menu, mode switch, date, refresh) is the same shared
+ * <header> used in tasks mode — this component never renders its own.
+ * On mobile the surrounding page shell becomes a fixed, non-scrolling
+ * flex column (header / this content area / the private-mode footer)
+ * whenever appMode is "private", so `h-full` here resolves against that
+ * shell's own bounded height. On desktop it renders inline at a fixed
+ * height inside the middle column where "今日のタスク" normally shows,
+ * leaving the left project sidebar and the right-hand calendar/memo
+ * panel untouched.
  */
 export function PrivateModeSection() {
   const { authReady, dataReady, loadError, events, addEvent, updateEvent, deleteEvent, replaceEvents } =
