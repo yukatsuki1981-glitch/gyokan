@@ -6,11 +6,13 @@ import {
   mapDbCase,
   mapDbDailyDiary,
   mapDbDailyMemo,
+  mapDbEvent,
   mapDbMemo,
   mapDbProject,
   mapDbTask,
   mapDailyDiaryToDb,
   mapDailyMemoToDb,
+  mapEventToDb,
   mapMemoToDb,
   mapProjectToDb,
   mapTaskToDb,
@@ -36,12 +38,14 @@ import type {
   AppCase,
   AppDailyDiary,
   AppDailyMemo,
+  AppEvent,
   AppMemo,
   AppProject,
   AppTask,
   DbCase,
   DbDailyDiary,
   DbDailyMemo,
+  DbEvent,
   DbMemo,
   DbProject,
   DbTask,
@@ -702,4 +706,57 @@ export function projectsToColorMap(projects: AppProject[]): Record<string, strin
 
 export function assignSortOrders<T extends { sortOrder: number }>(items: T[]): T[] {
   return items.map((item, index) => ({ ...item, sortOrder: index }));
+}
+
+async function fetchEventRows(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<DbEvent[]> {
+  const res = await supabase
+    .from("events")
+    .select("*")
+    .eq("user_id", userId)
+    .order("sort_order");
+  if (res.error) {
+    if (isMissingTableError(res.error)) {
+      console.warn("events unavailable (run migration if needed):", res.error.message);
+      return [];
+    }
+    throw res.error;
+  }
+  return (res.data as DbEvent[] | null) ?? [];
+}
+
+export async function fetchGyokanEvents(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<AppEvent[]> {
+  const rows = await fetchEventRows(supabase, userId);
+  return rows.map(mapDbEvent);
+}
+
+export async function upsertEvent(
+  supabase: SupabaseClient,
+  event: AppEvent,
+  userId: string,
+) {
+  const row = mapEventToDb(event, userId);
+  const { error } = await supabase.from("events").upsert(row);
+  if (error) throw error;
+}
+
+export async function upsertEventsBatch(
+  supabase: SupabaseClient,
+  items: AppEvent[],
+  userId: string,
+) {
+  if (items.length === 0) return;
+  const rows = items.map((item) => mapEventToDb(item, userId));
+  const { error } = await supabase.from("events").upsert(rows);
+  if (error) throw error;
+}
+
+export async function deleteEventDb(supabase: SupabaseClient, id: string) {
+  const { error } = await supabase.from("events").delete().eq("id", id);
+  if (error) throw error;
 }

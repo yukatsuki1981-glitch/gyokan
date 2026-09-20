@@ -1,10 +1,16 @@
 import { enrichTaskWithCase, buildCaseById } from "./task-case";
-import type { AppCase, AppMemo, AppTask } from "./types";
+import type { AppCase, AppEvent, AppMemo, AppTask } from "./types";
 import { formatCaseDeadlineForInput, parseCaseDeadlineInput } from "./date-format";
+import {
+  applyEventDraft,
+  eventDraftFieldsDiffer,
+  type EventDraftFields,
+} from "./events";
 
 const DRAFT_PREFIX = "gyokan-draft-v1";
 
-export type DraftKind = "case" | "task" | "memo";
+export type DraftKind = "case" | "task" | "memo" | "event";
+export type { EventDraftFields };
 
 export type CaseDraftFields = {
   title: string;
@@ -159,4 +165,16 @@ export function taskDraftDiffers(item: AppTask, draft: TaskDraftFields) {
 
 export function memoDraftDiffers(item: AppMemo, draft: MemoDraftFields) {
   return item.date !== draft.date || item.body !== draft.body;
+}
+
+export function mergeEventsWithDrafts(events: AppEvent[]): AppEvent[] {
+  return events.map((item) => {
+    const draft = readDraft<EventDraftFields>("event", item.id);
+    if (!draft) return item;
+    return applyEventDraft(item, draft);
+  });
+}
+
+export function eventDraftDiffers(item: AppEvent, draft: EventDraftFields) {
+  return eventDraftFieldsDiffer(item, draft);
 }

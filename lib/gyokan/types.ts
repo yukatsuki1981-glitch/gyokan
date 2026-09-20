@@ -71,6 +71,18 @@ export type DbUserPreferences = {
   last_view_date: string | null;
 };
 
+export type DbEvent = {
+  id: string;
+  user_id: string;
+  title: string;
+  start_time: string;
+  end_time: string | null;
+  memo: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AppTask = {
   id: string;
   title: string;
@@ -130,6 +142,15 @@ export type AppProject = {
   id: string;
   name: string;
   accentColor: string;
+  sortOrder: number;
+};
+
+export type AppEvent = {
+  id: string;
+  title: string;
+  startTime: string;
+  endTime: string | null;
+  memo: string;
   sortOrder: number;
 };
 

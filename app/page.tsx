@@ -5724,6 +5724,19 @@ export default function Home() {
               </p>
             )}
             <header className="mb-2 lg:mb-3">
+              <div className="mb-2 flex justify-center lg:justify-start">
+                <div className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/[0.04] p-0.5">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-gray-900 shadow-sm">
+                    タスク管理
+                  </span>
+                  <Link
+                    href="/private"
+                    className="rounded-full px-2.5 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-900"
+                  >
+                    プライベート
+                  </Link>
+                </div>
+              </div>
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
                 <button type="button" className="shrink-0 rounded-xl p-2 text-gray-500 hover:bg-white"><Icon name="menu" className="h-5 w-5" /></button>
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2">

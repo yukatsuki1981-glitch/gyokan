@@ -2,12 +2,14 @@ import type {
   AppCase,
   AppDailyDiary,
   AppDailyMemo,
+  AppEvent,
   AppMemo,
   AppProject,
   AppTask,
   DbCase,
   DbDailyDiary,
   DbDailyMemo,
+  DbEvent,
   DbMemo,
   DbProject,
   DbTask,
@@ -233,6 +235,29 @@ export function mapMemoToDb(
     project_id: projectId,
     memo_date: memo.date,
     body: memo.body,
+  };
+}
+
+export function mapDbEvent(row: DbEvent): AppEvent {
+  return {
+    id: row.id,
+    title: row.title,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    memo: row.memo ?? "",
+    sortOrder: row.sort_order ?? 0,
+  };
+}
+
+export function mapEventToDb(event: AppEvent, userId: string) {
+  return {
+    id: event.id,
+    user_id: userId,
+    title: event.title,
+    start_time: event.startTime,
+    end_time: event.endTime,
+    memo: event.memo ?? "",
+    sort_order: event.sortOrder,
   };
 }
 
