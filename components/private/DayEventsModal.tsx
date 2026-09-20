@@ -139,9 +139,9 @@ export function DayEventsModal({
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
   onClose: () => void;
 }) {
-  const [view, setView] = useState<{ kind: "list" } | { kind: "add" } | { kind: "edit"; event: AppEvent }>({
-    kind: "list",
-  });
+  const [view, setView] = useState<{ kind: "list" } | { kind: "add" } | { kind: "edit"; event: AppEvent }>(
+    () => (dayEvents.length === 0 ? { kind: "add" } : { kind: "list" }),
+  );
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),

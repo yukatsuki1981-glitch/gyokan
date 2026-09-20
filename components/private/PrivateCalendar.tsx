@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type TouchEvent } from "react";
 import type { AppEvent } from "@/lib/gyokan/types";
 import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
 import { DayEventsModal } from "./DayEventsModal";
@@ -149,6 +149,26 @@ export function PrivateCalendar({
     setCursor({ year: d.getFullYear(), month: d.getMonth() });
   };
 
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const SWIPE_THRESHOLD = 48;
+
+  const handleTouchStart = (e: TouchEvent) => {
+    const t = e.touches[0];
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleTouchEnd = (e: TouchEvent) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      goToMonth(dx < 0 ? 1 : -1);
+    }
+  };
+
   const selectedDayEvents = selectedDate ? eventsByDate.get(selectedDate) ?? [] : [];
   const selectedDateLabel = selectedDate
     ? (() => {
@@ -191,34 +211,40 @@ export function PrivateCalendar({
         </button>
       </div>
 
-      <div className="grid shrink-0 grid-cols-7 border-b border-t border-black/[0.06]">
-        {WEEKDAY_LABELS.map((label, i) => (
-          <div
-            key={label}
-            className={`py-1 text-center text-[11px] font-medium ${
-              i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-500"
-            }`}
-          >
-            {label}
-          </div>
-        ))}
-      </div>
-
       <div
-        className="grid min-h-0 flex-1 grid-cols-7"
-        style={{ gridTemplateRows: `repeat(${weekCount}, 1fr)` }}
+        className="flex min-h-0 flex-1 flex-col"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
       >
-        {grid.map((cell, i) => (
-          <DayCell
-            key={i}
-            cell={cell}
-            cellIndex={i}
-            year={cursor.year}
-            month={cursor.month}
-            dayEvents={eventsByDate.get(getGridCellIso(cursor.year, cursor.month, i)) ?? []}
-            onSelect={setSelectedDate}
-          />
-        ))}
+        <div className="grid shrink-0 grid-cols-7 border-b border-t border-black/[0.06]">
+          {WEEKDAY_LABELS.map((label, i) => (
+            <div
+              key={label}
+              className={`py-1 text-center text-[11px] font-medium ${
+                i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-500"
+              }`}
+            >
+              {label}
+            </div>
+          ))}
+        </div>
+
+        <div
+          className="grid min-h-0 flex-1 grid-cols-7"
+          style={{ gridTemplateRows: `repeat(${weekCount}, 1fr)` }}
+        >
+          {grid.map((cell, i) => (
+            <DayCell
+              key={i}
+              cell={cell}
+              cellIndex={i}
+              year={cursor.year}
+              month={cursor.month}
+              dayEvents={eventsByDate.get(getGridCellIso(cursor.year, cursor.month, i)) ?? []}
+              onSelect={setSelectedDate}
+            />
+          ))}
+        </div>
       </div>
 
       {selectedDate && (
