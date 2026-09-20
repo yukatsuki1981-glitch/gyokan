@@ -3436,6 +3436,7 @@ function MobileCalendarWidget({
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
   const [peekEngaged, setPeekEngaged] = useState(!peekMode);
   const horizontalRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const peekSuppressClickRef = useRef(false);
   const lastScrolledMonthRef = useRef<string | null>(null);
   const gestureStartMonthIdxRef = useRef(0);
@@ -3443,6 +3444,12 @@ function MobileCalendarWidget({
   const gestureDeltaXRef = useRef(0);
   const isSnappingRef = useRef(false);
   const isPeekRef = useRef(false);
+  // Set while a swipe-driven smooth scroll-to-month is in flight (from
+  // touchend to scroll settle). The month index that drives the shell's
+  // height is only committed once that settles, so the height never
+  // animates mid-swipe — see commitPendingHeightIdx below.
+  const pendingVisibleIdxRef = useRef<number | null>(null);
+  const pendingSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isPeek = peekMode && !peekEngaged;
   isPeekRef.current = isPeek;
@@ -3453,6 +3460,9 @@ function MobileCalendarWidget({
   const PEEK_WRAP_H = PEEK_HEADER_H + PEEK_GRID_H + MONTH_PANEL_Y_PAD;
   const SWIPE_MONTH_THRESHOLD_PX = 8;
   const TAP_SLOP_PX = 10;
+  // Fraction of the calendar's width a swipe must cross to commit to the
+  // next/previous month; short of this it bounces back to the current one.
+  const SWIPE_COMMIT_RATIO = 0.3;
 
   const calendarAnchorISO = useMemo(() => {
     const d = new Date(selectedDate + "T12:00:00");
@@ -3475,20 +3485,49 @@ function MobileCalendarWidget({
     return Math.round(strip.scrollLeft / strip.clientWidth);
   }, []);
 
+  // Instantly (no CSS transition) commits the month index that drives the
+  // shell's height, once a swipe-driven scroll has actually settled.
+  const commitPendingHeightIdx = useCallback(() => {
+    if (pendingSettleTimeoutRef.current) {
+      clearTimeout(pendingSettleTimeoutRef.current);
+      pendingSettleTimeoutRef.current = null;
+    }
+    const idx = pendingVisibleIdxRef.current;
+    isSnappingRef.current = false;
+    if (idx == null) return;
+    pendingVisibleIdxRef.current = null;
+    const shell = shellRef.current;
+    if (shell) shell.style.transition = "none";
+    setVisibleMonthIdx(idx);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (shell) shell.style.transition = "";
+      });
+    });
+  }, []);
+
   const scrollToMonthIndex = useCallback(
     (idx: number, behavior: ScrollBehavior = "auto") => {
       const strip = horizontalRef.current;
       if (!strip || strip.clientWidth <= 0) return;
       const clamped = Math.max(0, Math.min(months.length - 1, idx));
-      setVisibleMonthIdx(clamped);
       const left = clamped * strip.clientWidth;
       if (behavior === "smooth") {
+        // Height must not animate mid-swipe: defer committing the index
+        // (and the height it drives) until the scroll actually settles —
+        // via the native `scrollend` event, with a timeout fallback for
+        // browsers that don't fire it.
+        pendingVisibleIdxRef.current = clamped;
+        if (pendingSettleTimeoutRef.current) clearTimeout(pendingSettleTimeoutRef.current);
+        pendingSettleTimeoutRef.current = setTimeout(commitPendingHeightIdx, 500);
         strip.scrollTo({ left, behavior: "smooth" });
       } else {
+        pendingVisibleIdxRef.current = null;
+        setVisibleMonthIdx(clamped);
         strip.scrollLeft = left;
       }
     },
-    [months.length],
+    [months.length, commitPendingHeightIdx],
   );
 
   const scrollToMonth = useCallback(
@@ -3500,30 +3539,20 @@ function MobileCalendarWidget({
     [months, scrollToMonthIndex],
   );
 
+  // Below this fraction of the calendar's width, a swipe bounces back to
+  // the current month instead of committing to the next/previous one.
   const resolveGestureTargetMonth = useCallback(() => {
     const strip = horizontalRef.current;
     if (!strip) return gestureStartMonthIdxRef.current;
 
     const startIdx = gestureStartMonthIdxRef.current;
     const touchDx = gestureDeltaXRef.current;
-    const scrollDelta = strip.scrollLeft - gestureStartScrollLeftRef.current;
+    const threshold = Math.max(40, strip.clientWidth * SWIPE_COMMIT_RATIO);
 
-    let dir = 0;
-    if (Math.abs(touchDx) >= SWIPE_MONTH_THRESHOLD_PX) {
-      dir = touchDx > 0 ? 1 : -1;
-    } else if (Math.abs(scrollDelta) >= SWIPE_MONTH_THRESHOLD_PX) {
-      dir = scrollDelta > 0 ? 1 : -1;
-    } else if (touchDx !== 0 || scrollDelta !== 0) {
-      dir = (touchDx || scrollDelta) > 0 ? 1 : -1;
-    }
+    if (Math.abs(touchDx) < threshold) return startIdx;
 
-    if (dir === 0) return startIdx;
-
-    const targetIdx = Math.max(
-      0,
-      Math.min(months.length - 1, Math.max(startIdx - 1, Math.min(startIdx + 1, startIdx + dir))),
-    );
-    return targetIdx;
+    const dir = touchDx > 0 ? 1 : -1;
+    return Math.max(0, Math.min(months.length - 1, startIdx + dir));
   }, [months.length]);
 
   const snapToGestureMonth = useCallback(
@@ -3536,9 +3565,6 @@ function MobileCalendarWidget({
       }
       requestAnimationFrame(() => {
         scrollToMonthIndex(targetIdx, behavior);
-        window.setTimeout(() => {
-          isSnappingRef.current = false;
-        }, 400);
       });
     },
     [peekMode, peekEngaged, resolveGestureTargetMonth, scrollToMonthIndex],
@@ -3670,7 +3696,14 @@ function MobileCalendarWidget({
     strip.addEventListener("touchstart", onTouchStart, { passive: true });
     strip.addEventListener("touchmove", onTouchMove, { passive: true });
     const onScrollEnd = () => {
-      if (tracking || isPeekRef.current || isSnappingRef.current) return;
+      if (tracking) return;
+      if (pendingVisibleIdxRef.current != null) {
+        // The swipe-driven smooth scroll just settled — commit the height
+        // it drives now, instantly (no transition).
+        commitPendingHeightIdx();
+        return;
+      }
+      if (isPeekRef.current || isSnappingRef.current) return;
       const idx = getMonthIndexFromScroll();
       scrollToMonthIndex(idx, "smooth");
     };
@@ -3687,7 +3720,7 @@ function MobileCalendarWidget({
       strip.removeEventListener("touchcancel", onTouchEnd);
       strip.removeEventListener("scrollend", onScrollEnd);
     };
-  }, [getMonthIndexFromScroll, scrollToMonthIndex, snapToGestureMonth]);
+  }, [getMonthIndexFromScroll, scrollToMonthIndex, snapToGestureMonth, commitPendingHeightIdx]);
 
   const renderDayButton = (
     cell: CalendarCell,
@@ -3760,17 +3793,19 @@ function MobileCalendarWidget({
 
   return (
     <div
+      ref={shellRef}
       data-mobile-calendar
       className="relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04] transition-[height,max-height] duration-300 ease-out"
       style={{
         height: `${calendarShellH}px`,
         maxHeight: `${calendarShellH}px`,
         touchAction: "pan-x pinch-zoom",
+        overscrollBehavior: "contain",
       }}
     >
       <div
         ref={horizontalRef}
-        className={`flex h-full w-full overscroll-x-contain scrollbar-none ${
+        className={`flex h-full w-full overscroll-contain scrollbar-none ${
           isPeek ? "overflow-x-hidden" : "overflow-x-auto"
         }`}
         style={{
