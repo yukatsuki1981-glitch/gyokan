@@ -1,36 +1,66 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import { useGyokanEvents } from "@/lib/gyokan/use-gyokan-events";
 import { PrivateCalendar } from "./PrivateCalendar";
+
+// Tailwind's default `lg` breakpoint — below this, the calendar fills the
+// remaining viewport height under the shared header instead of sitting in
+// a fixed-height desktop card.
+const LG_BREAKPOINT = 1024;
 
 /**
  * Embedded private-mode calendar.
  *
- * On mobile it takes over the whole viewport (a fixed overlay, since the
- * project sidebar and right-hand calendar panel are already hidden below
- * the `lg` breakpoint). On desktop it renders in place, sized to sit inside
- * the middle column where "今日のタスク" normally shows, leaving the left
- * project sidebar and the right-hand calendar/memo panel untouched.
+ * The header (menu, mode switch, date, refresh) is the same shared
+ * <header> used in tasks mode — this component never renders its own. On
+ * mobile it measures the space remaining below that header and fills it
+ * exactly, so it reads as full-screen without needing to overlay/hide the
+ * header. On desktop it renders inline at a fixed height inside the middle
+ * column where "今日のタスク" normally shows, leaving the left project
+ * sidebar and the right-hand calendar/memo panel untouched.
  */
-export function PrivateModeSection({ onExit }: { onExit: () => void }) {
+export function PrivateModeSection() {
   const { authReady, dataReady, loadError, events, addEvent, updateEvent, deleteEvent, replaceEvents } =
     useGyokanEvents();
 
   const ready = authReady && dataReady;
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#fafafa] lg:static lg:inset-auto lg:z-auto lg:h-[640px] lg:overflow-hidden lg:rounded-2xl lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-sm">
-      <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] bg-white px-3 py-2.5 lg:hidden">
-        <span className="text-[14px] font-semibold text-gray-900">プライベート</span>
-        <button
-          type="button"
-          onClick={onExit}
-          className="rounded-full bg-black/[0.04] px-3 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.08]"
-        >
-          タスク管理に戻る
-        </button>
-      </div>
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [mobileHeightPx, setMobileHeightPx] = useState<number | null>(null);
 
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+
+    const update = () => {
+      if (window.innerWidth >= LG_BREAKPOINT) {
+        setMobileHeightPx(null);
+        return;
+      }
+      const top = el.getBoundingClientRect().top;
+      setMobileHeightPx(Math.max(320, window.innerHeight - top));
+    };
+
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    // Mobile browsers resize the visual viewport (toolbar show/hide)
+    // without always firing a plain `resize` event.
+    window.visualViewport?.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={rootRef}
+      className="flex flex-col overflow-hidden bg-[#fafafa] lg:h-[640px] lg:rounded-2xl lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-sm"
+      style={mobileHeightPx != null ? { height: mobileHeightPx, paddingBottom: "env(safe-area-inset-bottom)" } : undefined}
+    >
       {!ready ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />

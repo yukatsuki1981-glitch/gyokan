@@ -5734,7 +5734,7 @@ export default function Home() {
 
         {/* Main + Right Panel */}
         <div className="flex min-w-0 flex-1 lg:h-full lg:overflow-hidden">
-        <main className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:h-full lg:overflow-y-auto lg:pb-0">
+        <main className={`min-w-0 flex-1 lg:h-full lg:overflow-y-auto lg:pb-0 ${appMode === "private" ? "pb-0" : "pb-[calc(5.5rem+env(safe-area-inset-bottom))]"}`}>
           <div className="mx-auto max-w-3xl px-2.5 py-2 sm:px-4 lg:max-w-none lg:px-5 lg:pb-2 lg:pt-2">
             {loadError && (
               <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
@@ -5789,7 +5789,7 @@ export default function Home() {
             </header>
 
             {appMode === "private" ? (
-              <PrivateModeSection onExit={() => setAppMode("tasks")} />
+              <PrivateModeSection />
             ) : showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList

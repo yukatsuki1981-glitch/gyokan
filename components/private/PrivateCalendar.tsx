@@ -20,8 +20,11 @@ function getCalendarGrid(year: number, month: number): CalendarCell[] {
   for (let d = 1; d <= last.getDate(); d++) {
     cells.push({ day: d, inMonth: true });
   }
+  // Private mode always shows 6 rows (unlike the tasks calendar, which
+  // varies 4-6 rows by month) so a short month's leftover rows show next
+  // month's dates grayed out, and the grid height never jumps.
   let next = 1;
-  while (cells.length % 7 !== 0) {
+  while (cells.length < 42) {
     cells.push({ day: next++, inMonth: false });
   }
   return cells;
@@ -180,7 +183,7 @@ export function PrivateCalendar({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2 sm:px-4">
+      <div className="relative flex shrink-0 items-center justify-between gap-2 px-3 py-2 sm:px-4">
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -205,10 +208,13 @@ export function PrivateCalendar({
         <button
           type="button"
           onClick={goToToday}
-          className="rounded-lg border border-black/[0.08] px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-black/[0.03]"
+          className="relative z-10 rounded-lg border border-black/[0.08] px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-black/[0.03]"
         >
           今日
         </button>
+        <span className="pointer-events-none absolute right-12 top-1/2 -translate-y-1/2 select-none text-[4.5rem] font-bold leading-none text-gray-100">
+          {cursor.month + 1}
+        </span>
       </div>
 
       <div
