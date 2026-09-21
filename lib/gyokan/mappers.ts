@@ -77,6 +77,7 @@ export function mapDbTask(row: DbTask, idToName: Record<string, string>): AppTas
     sortOrder: row.sort_order ?? 0,
     memo: row.memo ?? "",
     color: row.color === "red" || row.color === "yellow" ? row.color : undefined,
+    scope: row.scope === "private" ? "private" : "work",
   };
 }
 
@@ -159,6 +160,7 @@ export function mapTaskToDb(
     sort_order: normalized.sortOrder,
     memo: normalized.memo ?? "",
     color: normalized.color ?? null,
+    scope: normalized.scope ?? "work",
   };
 }
 
@@ -246,6 +248,7 @@ export function mapDbEvent(row: DbEvent): AppEvent {
     endTime: row.end_time,
     memo: row.memo ?? "",
     sortOrder: row.sort_order ?? 0,
+    scope: row.scope === "work" ? "work" : "private",
   };
 }
 
@@ -258,6 +261,7 @@ export function mapEventToDb(event: AppEvent, userId: string) {
     end_time: event.endTime,
     memo: event.memo ?? "",
     sort_order: event.sortOrder,
+    scope: event.scope ?? "private",
   };
 }
 

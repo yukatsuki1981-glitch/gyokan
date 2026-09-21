@@ -175,6 +175,7 @@ export function useGyokanEvents() {
       endTime: data.endTime ?? null,
       memo: data.memo ?? "",
       sortOrder: 0,
+      scope: "private",
     };
     setEvents((prev) => {
       const next = assignSortOrders([...prev, event]);

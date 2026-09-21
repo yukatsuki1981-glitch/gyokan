@@ -596,6 +596,7 @@ export function useGyokanData() {
           project,
           caseId,
           sortOrder: 0,
+          scope: "work",
         },
         caseById,
       ),

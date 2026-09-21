@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import type { AppTask } from "@/lib/gyokan/types";
 import { useGyokanEvents } from "@/lib/gyokan/use-gyokan-events";
 import { PrivateCalendar } from "./PrivateCalendar";
 
@@ -15,12 +17,25 @@ import { PrivateCalendar } from "./PrivateCalendar";
  * height inside the middle column where "今日のタスク" normally shows,
  * leaving the left project sidebar and the right-hand calendar/memo
  * panel untouched.
+ *
+ * Tasks are threaded down from useGyokanData() (via Home()) rather than
+ * fetched again here, so both modes stay in sync off one source of truth.
  */
-export function PrivateModeSection() {
+export function PrivateModeSection({
+  tasks,
+  onToggleTask,
+  onReplaceTasks,
+}: {
+  tasks: AppTask[];
+  onToggleTask: (id: string) => void;
+  onReplaceTasks: (updater: (prev: AppTask[]) => AppTask[]) => void;
+}) {
   const { authReady, dataReady, loadError, events, addEvent, updateEvent, deleteEvent, replaceEvents } =
     useGyokanEvents();
 
   const ready = authReady && dataReady;
+  const privateEvents = useMemo(() => events.filter((e) => (e.scope ?? "private") === "private"), [events]);
+  const privateTasks = useMemo(() => tasks.filter((t) => (t.scope ?? "work") === "private"), [tasks]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[#fafafa] lg:h-[640px] lg:rounded-2xl lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-sm">
@@ -36,11 +51,14 @@ export function PrivateModeSection() {
             </p>
           )}
           <PrivateCalendar
-            events={events}
+            events={privateEvents}
+            tasks={privateTasks}
             onAddEvent={addEvent}
             onUpdateEvent={updateEvent}
             onDeleteEvent={deleteEvent}
             onReplaceEvents={replaceEvents}
+            onToggleTask={onToggleTask}
+            onReplaceTasks={onReplaceTasks}
           />
         </>
       )}

@@ -77,6 +77,7 @@ export function normalizeTaskRow(row: Row, index: number): DbTask {
     sort_order: Number(row.sort_order ?? index),
     memo: String(row.memo ?? ""),
     color: (row.color as string | null | undefined) ?? null,
+    scope: row.scope === "private" ? "private" : "work",
   };
 }
 
@@ -181,6 +182,7 @@ export function buildTaskUpsertAttempts(row: TaskUpsertRow): Row[] {
     date_end: _dateEnd,
     memo: _memo,
     color: _color,
+    scope: _scope,
     ...modernCore
   } = modernNoCompletedAt;
   const withDateAliasCore = {

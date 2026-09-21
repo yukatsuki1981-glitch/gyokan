@@ -19,18 +19,19 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { AppEvent } from "@/lib/gyokan/types";
+import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import type { EventDraftFields } from "@/lib/gyokan/drafts";
-import { localTimeHHMMFromTimestamp } from "@/lib/gyokan/events";
+import { isAllDayEvent, localTimeHHMMFromTimestamp } from "@/lib/gyokan/events";
+import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
 import { AddEventForm, EditEventForm } from "./EventForm";
 import { GripIcon, PlusIcon, XIcon } from "./icons";
 
-function reorderEventsInList(
-  prev: AppEvent[],
-  visible: AppEvent[],
+function reorderById<T extends { id: string }>(
+  prev: T[],
+  visible: T[],
   activeId: string | number,
   overId: string | number,
-): AppEvent[] {
+): T[] {
   const oldIndex = visible.findIndex((e) => e.id === activeId);
   const newIndex = visible.findIndex((e) => e.id === overId);
   if (oldIndex === -1 || newIndex === -1) return prev;
@@ -42,9 +43,21 @@ function reorderEventsInList(
 }
 
 function timeRangeLabel(event: AppEvent) {
+  if (isAllDayEvent(event)) return "終日";
   const start = localTimeHHMMFromTimestamp(event.startTime);
   if (!event.endTime) return start;
   return `${start}〜${localTimeHHMMFromTimestamp(event.endTime)}`;
+}
+
+/** Rounded-square stand-in for a checkbox, marking that events have no
+ * "done" concept (unlike tasks, which use a round checkbox). */
+function EventMarker() {
+  return (
+    <span
+      aria-hidden
+      className="h-[18px] w-[18px] shrink-0 rounded-[5px] border-[1.5px] border-emerald-300 bg-emerald-50"
+    />
+  );
 }
 
 function EventRowContent({
@@ -77,6 +90,7 @@ function EventRowContent({
       >
         <GripIcon className="h-3.5 w-3.5" />
       </button>
+      <EventMarker />
       <span className="w-[92px] shrink-0 text-[11px] font-medium text-gray-500">
         {timeRangeLabel(event)}
       </span>
@@ -117,19 +131,100 @@ function SortableEventRow({
   );
 }
 
+function TaskRowContent({
+  task,
+  onToggle,
+  isDragging = false,
+  dragHandleProps,
+}: {
+  task: AppTask;
+  onToggle: (id: string) => void;
+  isDragging?: boolean;
+  dragHandleProps?: Record<string, unknown>;
+}) {
+  return (
+    <div
+      className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 transition-all duration-200 ${
+        isDragging
+          ? "z-50 scale-[1.02] border-blue-200/60 bg-white shadow-[0_16px_32px_rgba(0,0,0,0.12)] ring-1 ring-blue-200/40"
+          : "border-black/[0.06] bg-white/90 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+      }`}
+    >
+      <button
+        type="button"
+        aria-label="並び替え"
+        style={{ touchAction: "none" }}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-300 hover:text-gray-500"
+        {...dragHandleProps}
+      >
+        <GripIcon className="h-3.5 w-3.5" />
+      </button>
+      <ThemedTaskCheckbox
+        done={task.done}
+        size="sm"
+        onClick={() => onToggle(task.id)}
+        aria-label={task.done ? "未完了に戻す" : "完了にする"}
+      />
+      <p
+        className={`min-w-0 flex-1 truncate text-[13px] font-medium ${
+          task.done ? "text-gray-400 line-through" : "text-gray-900"
+        }`}
+      >
+        {task.title}
+      </p>
+    </div>
+  );
+}
+
+function SortableTaskRow({
+  task,
+  onToggle,
+}: {
+  task: AppTask;
+  onToggle: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: task.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="min-w-0"
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: isDragging ? undefined : transition,
+        zIndex: isDragging ? 50 : undefined,
+      }}
+    >
+      <TaskRowContent
+        task={task}
+        onToggle={onToggle}
+        isDragging={isDragging}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
 export function DayEventsModal({
   dateISO,
   dateLabel,
   dayEvents,
+  dayTasks,
+  taskSectionLabel,
   onAddEvent,
   onUpdateEvent,
   onDeleteEvent,
   onReplaceEvents,
+  onToggleTask,
+  onReplaceTasks,
   onClose,
 }: {
   dateISO: string;
   dateLabel: string;
   dayEvents: AppEvent[];
+  dayTasks: AppTask[];
+  taskSectionLabel: string;
   onAddEvent: (data: { title: string; startTime: string; endTime?: string | null; memo?: string }) => void;
   onUpdateEvent: (
     id: string,
@@ -137,6 +232,8 @@ export function DayEventsModal({
   ) => void | Promise<boolean>;
   onDeleteEvent: (id: string) => void;
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
+  onToggleTask: (id: string) => void;
+  onReplaceTasks: (updater: (prev: AppTask[]) => AppTask[]) => void;
   onClose: () => void;
 }) {
   const [view, setView] = useState<{ kind: "list" } | { kind: "add" } | { kind: "edit"; event: AppEvent }>(
@@ -149,10 +246,16 @@ export function DayEventsModal({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleEventDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    onReplaceEvents((prev) => reorderEventsInList(prev, dayEvents, active.id, over.id));
+    onReplaceEvents((prev) => reorderById(prev, dayEvents, active.id, over.id));
+  };
+
+  const handleTaskDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    onReplaceTasks((prev) => reorderById(prev, dayTasks, active.id, over.id));
   };
 
   const combineTimeToISO = (hhmm: string): string => {
@@ -164,8 +267,8 @@ export function DayEventsModal({
   const handleAdd = (values: EventDraftFields) => {
     onAddEvent({
       title: values.title,
-      startTime: combineTimeToISO(values.startTime),
-      endTime: values.endTime ? combineTimeToISO(values.endTime) : null,
+      startTime: values.allDay ? combineTimeToISO("00:00") : combineTimeToISO(values.startTime),
+      endTime: values.allDay ? null : values.endTime ? combineTimeToISO(values.endTime) : null,
       memo: values.memo,
     });
   };
@@ -173,8 +276,8 @@ export function DayEventsModal({
   const handleSave = async (id: string, values: EventDraftFields) => {
     return onUpdateEvent(id, {
       title: values.title,
-      startTime: combineTimeToISO(values.startTime),
-      endTime: values.endTime ? combineTimeToISO(values.endTime) : null,
+      startTime: values.allDay ? combineTimeToISO("00:00") : combineTimeToISO(values.startTime),
+      endTime: values.allDay ? null : values.endTime ? combineTimeToISO(values.endTime) : null,
       memo: values.memo,
     });
   };
@@ -203,24 +306,42 @@ export function DayEventsModal({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-              {dayEvents.length === 0 ? (
-                <p className="py-6 text-center text-[12px] text-gray-400">
-                  この日の予定はまだありません
-                </p>
-              ) : (
-                <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
-                  <SortableContext items={dayEvents.map((e) => e.id)} strategy={verticalListSortingStrategy}>
-                    <div className="flex flex-col gap-1.5">
-                      {dayEvents.map((event) => (
-                        <SortableEventRow
-                          key={event.id}
-                          event={event}
-                          onOpen={(e) => setView({ kind: "edit", event: e })}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
+              <section className="mb-4">
+                <h3 className="mb-1.5 text-[11px] font-semibold text-gray-400">予定</h3>
+                {dayEvents.length === 0 ? (
+                  <p className="py-3 text-center text-[12px] text-gray-400">
+                    この日の予定はまだありません
+                  </p>
+                ) : (
+                  <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleEventDragEnd}>
+                    <SortableContext items={dayEvents.map((e) => e.id)} strategy={verticalListSortingStrategy}>
+                      <div className="flex flex-col gap-1.5">
+                        {dayEvents.map((event) => (
+                          <SortableEventRow
+                            key={event.id}
+                            event={event}
+                            onOpen={(e) => setView({ kind: "edit", event: e })}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                )}
+              </section>
+
+              {dayTasks.length > 0 && (
+                <section>
+                  <h3 className="mb-1.5 text-[11px] font-semibold text-gray-400">{taskSectionLabel}</h3>
+                  <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleTaskDragEnd}>
+                    <SortableContext items={dayTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                      <div className="flex flex-col gap-1.5">
+                        {dayTasks.map((task) => (
+                          <SortableTaskRow key={task.id} task={task} onToggle={onToggleTask} />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
+                </section>
               )}
             </div>
 
@@ -236,7 +357,7 @@ export function DayEventsModal({
             </div>
           </>
         ) : (
-          <div className="px-4 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             {view.kind === "add" ? (
               <AddEventForm onAdd={handleAdd} onClose={() => setView({ kind: "list" })} />
             ) : (

@@ -54,7 +54,15 @@ export type EventDraftFields = {
   startTime: string;
   endTime: string;
   memo: string;
+  allDay: boolean;
 };
+
+const ALL_DAY_TIME = "00:00";
+
+/** An event is all-day when it's stored as local midnight with no end time. */
+export function isAllDayEvent(item: AppEvent): boolean {
+  return localTimeHHMMFromTimestamp(item.startTime) === ALL_DAY_TIME && !item.endTime;
+}
 
 export function eventFieldsFromItem(item: AppEvent): EventDraftFields {
   return {
@@ -62,11 +70,21 @@ export function eventFieldsFromItem(item: AppEvent): EventDraftFields {
     startTime: localTimeHHMMFromTimestamp(item.startTime),
     endTime: item.endTime ? localTimeHHMMFromTimestamp(item.endTime) : "",
     memo: item.memo ?? "",
+    allDay: isAllDayEvent(item),
   };
 }
 
 /** Merge a locally-saved draft onto a server event, matching the task-draft fallback pattern. */
 export function applyEventDraft(item: AppEvent, draft: EventDraftFields): AppEvent {
+  if (draft.allDay) {
+    return {
+      ...item,
+      title: draft.title,
+      startTime: applyTimeToTimestamp(item.startTime, ALL_DAY_TIME),
+      endTime: null,
+      memo: draft.memo ?? item.memo,
+    };
+  }
   return {
     ...item,
     title: draft.title,
@@ -86,6 +104,7 @@ export function eventDraftFieldsDiffer(item: AppEvent, draft: EventDraftFields):
     baseline.title !== draft.title ||
     baseline.startTime !== draft.startTime ||
     baseline.endTime !== draft.endTime ||
+    baseline.allDay !== draft.allDay ||
     (baseline.memo ?? "") !== (draft.memo ?? "")
   );
 }

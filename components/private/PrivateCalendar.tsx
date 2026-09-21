@@ -1,11 +1,27 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { AppEvent } from "@/lib/gyokan/types";
+import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { DayEventsModal } from "./DayEventsModal";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
+
+function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
+  return [...tasks].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function groupTasksByDate(tasks: AppTask[]): Map<string, AppTask[]> {
+  const map = new Map<string, AppTask[]>();
+  for (const task of sortTasksByOrder(tasks)) {
+    const list = map.get(task.date) ?? [];
+    list.push(task);
+    map.set(task.date, list);
+  }
+  return map;
+}
+
+type DayChip = { kind: "task"; task: AppTask } | { kind: "event"; event: AppEvent };
 
 type CalendarCell = { day: number; inMonth: boolean };
 type MonthCursor = { year: number; month: number };
@@ -55,7 +71,6 @@ function shiftCursor(cursor: MonthCursor, delta: number): MonthCursor {
 }
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
-const EVENT_PREVIEW_MAX = 4;
 
 // Release-animation tuning for the month swipe: a real ease-out deceleration
 // curve (not native scroll's browser-controlled easing) so the commit and
@@ -66,11 +81,14 @@ const MONTH_SNAP_DURATION_MS = 300;
 // current month instead of committing to the next/previous one.
 const SWIPE_COMMIT_RATIO = 0.3;
 
+const CHIP_PREVIEW_MAX = 4;
+
 function DayCell({
   cell,
   cellIndex,
   year,
   month,
+  dayTasks,
   dayEvents,
   onSelect,
 }: {
@@ -78,14 +96,20 @@ function DayCell({
   cellIndex: number;
   year: number;
   month: number;
+  dayTasks: AppTask[];
   dayEvents: AppEvent[];
   onSelect: (iso: string) => void;
 }) {
   const cellIso = getGridCellIso(year, month, cellIndex);
   const isToday = cellIso === todayISO();
   const dayOfWeek = cellIndex % 7;
-  const preview = dayEvents.slice(0, EVENT_PREVIEW_MAX);
-  const overflow = dayEvents.length > EVENT_PREVIEW_MAX ? dayEvents.length - EVENT_PREVIEW_MAX : 0;
+
+  const chips: DayChip[] = [
+    ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
+    ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
+  ];
+  const preview = chips.slice(0, CHIP_PREVIEW_MAX);
+  const overflow = chips.length > CHIP_PREVIEW_MAX ? chips.length - CHIP_PREVIEW_MAX : 0;
 
   const numberColor = !cell.inMonth
     ? "text-gray-300"
@@ -116,15 +140,25 @@ function DayCell({
         )}
       </div>
       <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
-        {preview.map((event) => (
-          <span
-            key={event.id}
-            className="truncate rounded-[3px] bg-indigo-50 px-1 py-px text-[9px] font-medium leading-[13px] text-indigo-700"
-            title={event.title}
-          >
-            {truncateEventTitle(event.title)}
-          </span>
-        ))}
+        {preview.map((chip) =>
+          chip.kind === "task" ? (
+            <span
+              key={`t-${chip.task.id}`}
+              className="truncate rounded-full bg-blue-50 px-1.5 py-px text-[9px] font-medium leading-[13px] text-blue-700"
+              title={chip.task.title}
+            >
+              {truncateEventTitle(chip.task.title)}
+            </span>
+          ) : (
+            <span
+              key={`e-${chip.event.id}`}
+              className="truncate rounded-[3px] bg-emerald-50 px-1 py-px text-[9px] font-medium leading-[13px] text-emerald-700"
+              title={chip.event.title}
+            >
+              {truncateEventTitle(chip.event.title)}
+            </span>
+          ),
+        )}
       </div>
     </button>
   );
@@ -133,11 +167,13 @@ function DayCell({
 function MonthPanel({
   year,
   month,
+  tasksByDate,
   eventsByDate,
   onSelect,
 }: {
   year: number;
   month: number;
+  tasksByDate: Map<string, AppTask[]>;
   eventsByDate: Map<string, AppEvent[]>;
   onSelect: (iso: string) => void;
 }) {
@@ -175,6 +211,7 @@ function MonthPanel({
             cellIndex={i}
             year={year}
             month={month}
+            dayTasks={tasksByDate.get(getGridCellIso(year, month, i)) ?? []}
             dayEvents={eventsByDate.get(getGridCellIso(year, month, i)) ?? []}
             onSelect={onSelect}
           />
@@ -186,12 +223,16 @@ function MonthPanel({
 
 export function PrivateCalendar({
   events,
+  tasks,
   onAddEvent,
   onUpdateEvent,
   onDeleteEvent,
   onReplaceEvents,
+  onToggleTask,
+  onReplaceTasks,
 }: {
   events: AppEvent[];
+  tasks: AppTask[];
   onAddEvent: (data: { title: string; startTime: string; endTime?: string | null; memo?: string }) => void;
   onUpdateEvent: (
     id: string,
@@ -199,6 +240,8 @@ export function PrivateCalendar({
   ) => Promise<boolean>;
   onDeleteEvent: (id: string) => void;
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
+  onToggleTask: (id: string) => void;
+  onReplaceTasks: (updater: (prev: AppTask[]) => AppTask[]) => void;
 }) {
   const [cursor, setCursor] = useState<MonthCursor>(() => {
     const d = new Date();
@@ -207,6 +250,7 @@ export function PrivateCalendar({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
+  const tasksByDate = useMemo(() => groupTasksByDate(tasks), [tasks]);
   // Three panels — previous / current / next — form the swipeable track.
   const panels = useMemo(
     () => [shiftCursor(cursor, -1), cursor, shiftCursor(cursor, 1)],
@@ -385,6 +429,7 @@ export function PrivateCalendar({
   }, []);
 
   const selectedDayEvents = selectedDate ? eventsByDate.get(selectedDate) ?? [] : [];
+  const selectedDayTasks = selectedDate ? tasksByDate.get(selectedDate) ?? [] : [];
   const selectedDateLabel = selectedDate
     ? (() => {
         const [y, m, d] = selectedDate.split("-").map((v) => parseInt(v, 10));
@@ -394,7 +439,7 @@ export function PrivateCalendar({
     : "";
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2 sm:px-4">
         <div className="flex items-center gap-1">
           <button
@@ -431,7 +476,13 @@ export function PrivateCalendar({
         <div ref={trackRef} className="flex h-full" style={{ width: "300%" }}>
           {panels.map((p, i) => (
             <div key={i} className="h-full shrink-0" style={{ width: `${100 / 3}%` }}>
-              <MonthPanel year={p.year} month={p.month} eventsByDate={eventsByDate} onSelect={handleDaySelect} />
+              <MonthPanel
+                year={p.year}
+                month={p.month}
+                tasksByDate={tasksByDate}
+                eventsByDate={eventsByDate}
+                onSelect={handleDaySelect}
+              />
             </div>
           ))}
         </div>
@@ -442,6 +493,10 @@ export function PrivateCalendar({
           dateISO={selectedDate}
           dateLabel={selectedDateLabel}
           dayEvents={selectedDayEvents}
+          dayTasks={selectedDayTasks}
+          taskSectionLabel="タスク"
+          onToggleTask={onToggleTask}
+          onReplaceTasks={onReplaceTasks}
           onAddEvent={onAddEvent}
           onUpdateEvent={onUpdateEvent}
           onDeleteEvent={onDeleteEvent}

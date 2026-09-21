@@ -13,27 +13,56 @@ const labelClass = "mb-1 block text-[11px] font-medium text-gray-500";
 
 type FormValues = EventDraftFields;
 
-const EMPTY_VALUES: FormValues = { title: "", startTime: "09:00", endTime: "", memo: "" };
+const EMPTY_VALUES: FormValues = { title: "", startTime: "09:00", endTime: "", memo: "", allDay: false };
+
+function AllDayTabs({ allDay, onChange }: { allDay: boolean; onChange: (allDay: boolean) => void }) {
+  return (
+    <div className="flex rounded-lg bg-black/[0.04] p-0.5">
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className={`flex-1 rounded-md py-1.5 text-[12px] font-medium transition-colors ${
+          !allDay ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+        }`}
+      >
+        時間指定
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className={`flex-1 rounded-md py-1.5 text-[12px] font-medium transition-colors ${
+          allDay ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+        }`}
+      >
+        終日
+      </button>
+    </div>
+  );
+}
 
 function FormFields({
   title,
   startTime,
   endTime,
   memo,
+  allDay,
   onTitleChange,
   onStartTimeChange,
   onEndTimeChange,
   onMemoChange,
+  onAllDayChange,
   autoFocus,
 }: {
   title: string;
   startTime: string;
   endTime: string;
   memo: string;
+  allDay: boolean;
   onTitleChange: (v: string) => void;
   onStartTimeChange: (v: string) => void;
   onEndTimeChange: (v: string) => void;
   onMemoChange: (v: string) => void;
+  onAllDayChange: (v: boolean) => void;
   autoFocus?: boolean;
 }) {
   return (
@@ -50,26 +79,33 @@ function FormFields({
         />
       </div>
 
-      <div className="flex gap-2">
-        <div className="flex-1">
-          <span className={labelClass}>開始時刻</span>
-          <input
-            type="time"
-            value={startTime}
-            onChange={(e) => onStartTimeChange(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-        <div className="flex-1">
-          <span className={labelClass}>終了時刻（任意）</span>
-          <input
-            type="time"
-            value={endTime}
-            onChange={(e) => onEndTimeChange(e.target.value)}
-            className={inputClass}
-          />
-        </div>
+      <div>
+        <span className={labelClass}>時刻</span>
+        <AllDayTabs allDay={allDay} onChange={onAllDayChange} />
       </div>
+
+      {!allDay && (
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <span className={labelClass}>開始時刻</span>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => onStartTimeChange(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div className="flex-1">
+            <span className={labelClass}>終了時刻（任意）</span>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => onEndTimeChange(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      )}
 
       <div>
         <span className={labelClass}>メモ（任意）</span>
@@ -112,11 +148,12 @@ export function AddEventForm({
   const [startTime, setStartTime] = useState(EMPTY_VALUES.startTime);
   const [endTime, setEndTime] = useState(EMPTY_VALUES.endTime);
   const [memo, setMemo] = useState(EMPTY_VALUES.memo);
+  const [allDay, setAllDay] = useState(EMPTY_VALUES.allDay);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onAdd({ title: title.trim(), startTime, endTime, memo });
+    onAdd({ title: title.trim(), startTime, endTime, memo, allDay });
     onClose();
   };
 
@@ -128,10 +165,12 @@ export function AddEventForm({
         startTime={startTime}
         endTime={endTime}
         memo={memo}
+        allDay={allDay}
         onTitleChange={setTitle}
         onStartTimeChange={setStartTime}
         onEndTimeChange={setEndTime}
         onMemoChange={setMemo}
+        onAllDayChange={setAllDay}
         autoFocus
       />
       <button
@@ -163,8 +202,9 @@ export function EditEventForm({
   const [startTime, setStartTime] = useState(initial.startTime);
   const [endTime, setEndTime] = useState(initial.endTime);
   const [memo, setMemo] = useState(initial.memo);
+  const [allDay, setAllDay] = useState(initial.allDay);
 
-  const values: FormValues = { title, startTime, endTime, memo };
+  const values: FormValues = { title, startTime, endTime, memo, allDay };
   const baseline: FormValues = eventFieldsFromItem(item);
 
   useAutosaveForm({
@@ -194,10 +234,12 @@ export function EditEventForm({
         startTime={startTime}
         endTime={endTime}
         memo={memo}
+        allDay={allDay}
         onTitleChange={setTitle}
         onStartTimeChange={setStartTime}
         onEndTimeChange={setEndTime}
         onMemoChange={setMemo}
+        onAllDayChange={setAllDay}
       />
       <div className="flex items-center gap-2 pt-1">
         <button

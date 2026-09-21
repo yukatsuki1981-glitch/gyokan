@@ -6,6 +6,8 @@ export type DbProject = {
   sort_order: number;
 };
 
+export type Scope = "work" | "private";
+
 export type DbTask = {
   id: string;
   user_id: string;
@@ -21,6 +23,7 @@ export type DbTask = {
   sort_order: number;
   memo: string;
   color: string | null;
+  scope: Scope;
 };
 
 export type DbCase = {
@@ -81,6 +84,7 @@ export type DbEvent = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  scope: Scope;
 };
 
 export type AppTask = {
@@ -97,6 +101,7 @@ export type AppTask = {
   sortOrder: number;
   memo?: string;
   color?: "red" | "yellow";
+  scope?: Scope;
 };
 
 export type AppCase = {
@@ -152,6 +157,7 @@ export type AppEvent = {
   endTime: string | null;
   memo: string;
   sortOrder: number;
+  scope?: Scope;
 };
 
 export type GyokanData = {

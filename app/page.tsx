@@ -5703,7 +5703,7 @@ export default function Home() {
     <ProjectColorsContext.Provider value={projectColorsValue}>
     <div
       className={`gyokan-app relative min-h-screen text-[var(--gyokan-text)] antialiased ${
-        appMode === "private" ? "max-lg:h-[100dvh] max-lg:overflow-hidden" : ""
+        appMode === "private" ? "max-lg:fixed max-lg:inset-0 max-lg:overflow-hidden" : ""
       }`}
     >
       <div
@@ -5712,7 +5712,7 @@ export default function Home() {
       />
       <ThemeDecorationLayer />
       <StoryMessageOverlay tasks={tasks} dataReady={dataReady} isAuthenticated={!!user} />
-      <div className="relative z-[2]">
+      <div className={`relative z-[2] ${appMode === "private" ? "max-lg:h-full max-lg:overflow-hidden" : ""}`}>
       <PullToRefresh enabled={isClient && appMode !== "private"} onRefresh={handleRefresh} />
       <div
         className={`mx-auto flex min-h-screen max-w-[1480px] lg:h-screen lg:overflow-hidden ${
@@ -5845,13 +5845,13 @@ export default function Home() {
           <div
             className={`mx-auto max-w-3xl px-2.5 pb-2 sm:px-4 lg:max-w-none lg:px-5 lg:pb-2 ${
               appMode === "private"
-                ? "max-lg:h-full max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden max-lg:pb-0"
+                ? "max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden max-lg:pb-0"
                 : ""
             }`}
           >
 
             {appMode === "private" ? (
-              <PrivateModeSection />
+              <PrivateModeSection tasks={tasks} onToggleTask={toggleTask} onReplaceTasks={replaceTasks} />
             ) : showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
