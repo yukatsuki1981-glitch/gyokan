@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -22,9 +22,14 @@ import { CSS } from "@dnd-kit/utilities";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import type { EventDraftFields } from "@/lib/gyokan/drafts";
 import { isAllDayEvent, localTimeHHMMFromTimestamp } from "@/lib/gyokan/events";
+import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
 import { AddEventForm, EditEventForm } from "./EventForm";
 import { GripIcon, PlusIcon, XIcon } from "./icons";
+
+// Matches the calendar's month-swipe release feel.
+const SHEET_DISMISS_EASING = makeCubicBezierEasing(0.22, 1, 0.36, 1);
+const SHEET_DISMISS_DURATION_MS = 260;
 
 function reorderById<T extends { id: string }>(
   prev: T[],
@@ -240,6 +245,77 @@ export function DayEventsModal({
     () => (dayEvents.length === 0 ? { kind: "add" } : { kind: "list" }),
   );
 
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const cancelAnimRef = useRef<(() => void) | null>(null);
+  const dragStartYRef = useRef(0);
+  const draggingRef = useRef(false);
+
+  const animateSheetTo = useCallback(
+    (fromPx: number, targetPx: number, onDone: (() => void) | null) => {
+      cancelAnimRef.current?.();
+      cancelAnimRef.current = null;
+      const sheet = sheetRef.current;
+      if (!sheet) {
+        onDone?.();
+        return;
+      }
+      const delta = targetPx - fromPx;
+      if (Math.abs(delta) < 0.5) {
+        sheet.style.transition = "none";
+        sheet.style.transform = `translateY(${targetPx}px)`;
+        onDone?.();
+        return;
+      }
+      const startTime = performance.now();
+      let cancelled = false;
+      const step = (now: number) => {
+        if (cancelled) return;
+        const progress = Math.min(1, (now - startTime) / SHEET_DISMISS_DURATION_MS);
+        sheet.style.transform = `translateY(${fromPx + delta * SHEET_DISMISS_EASING(progress)}px)`;
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          cancelAnimRef.current = null;
+          onDone?.();
+        }
+      };
+      sheet.style.transition = "none";
+      cancelAnimRef.current = () => {
+        cancelled = true;
+      };
+      requestAnimationFrame(step);
+    },
+    [],
+  );
+
+  const handleGripTouchStart = (e: ReactTouchEvent) => {
+    cancelAnimRef.current?.();
+    cancelAnimRef.current = null;
+    dragStartYRef.current = e.touches[0]?.clientY ?? 0;
+    draggingRef.current = true;
+    if (sheetRef.current) sheetRef.current.style.transition = "none";
+  };
+
+  const handleGripTouchMove = (e: ReactTouchEvent) => {
+    if (!draggingRef.current) return;
+    const dy = Math.max(0, (e.touches[0]?.clientY ?? 0) - dragStartYRef.current);
+    if (sheetRef.current) sheetRef.current.style.transform = `translateY(${dy}px)`;
+  };
+
+  const handleGripTouchEnd = (e: ReactTouchEvent) => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    const dy = Math.max(0, (e.changedTouches[0]?.clientY ?? 0) - dragStartYRef.current);
+    const sheetHeight = sheetRef.current?.getBoundingClientRect().height ?? 0;
+    const threshold = Math.max(60, sheetHeight * 0.25);
+
+    if (dy >= threshold) {
+      animateSheetTo(dy, sheetHeight + 40, onClose);
+    } else {
+      animateSheetTo(dy, 0, null);
+    }
+  };
+
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 10 } }),
@@ -288,9 +364,20 @@ export function DayEventsModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl bg-[#fafafa] shadow-2xl sm:max-w-md sm:rounded-2xl"
+        ref={sheetRef}
+        className="flex h-[50vh] w-full flex-col overflow-hidden rounded-t-2xl bg-[#fafafa] shadow-2xl sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
+        <div
+          className="flex shrink-0 items-center justify-center py-2 sm:hidden"
+          style={{ touchAction: "none" }}
+          onTouchStart={handleGripTouchStart}
+          onTouchMove={handleGripTouchMove}
+          onTouchEnd={handleGripTouchEnd}
+          onTouchCancel={handleGripTouchEnd}
+        >
+          <span className="h-1 w-9 rounded-full bg-black/15" />
+        </div>
         {view.kind === "list" ? (
           <>
             <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-4 py-3">

@@ -4,6 +4,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
+import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { DayEventsModal } from "./DayEventsModal";
 
 function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
@@ -102,6 +103,7 @@ function DayCell({
   const cellIso = getGridCellIso(year, month, cellIndex);
   const isToday = cellIso === todayISO();
   const dayOfWeek = cellIndex % 7;
+  const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cellIso) : null;
 
   const chips: DayChip[] = [
     ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
@@ -138,12 +140,22 @@ function DayCell({
           <span className="text-[10px] font-medium text-gray-400">+{overflow}</span>
         )}
       </div>
+      {dayInfo && (
+        <span
+          className={`mt-0.5 shrink-0 truncate px-0.5 text-[7px] leading-[9px] ${
+            dayInfo.kind === "holiday" ? "font-medium text-rose-600" : "font-medium text-gray-500"
+          }`}
+          title={dayInfo.label}
+        >
+          {dayInfo.label}
+        </span>
+      )}
       <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
         {preview.map((chip) =>
           chip.kind === "task" ? (
             <span
               key={`t-${chip.task.id}`}
-              className="truncate rounded-full bg-blue-50 px-1.5 py-px text-[9px] font-medium leading-[13px] text-blue-700"
+              className="truncate rounded-full bg-blue-50 px-1 py-px text-[9px] font-medium leading-[13px] text-blue-700"
               title={chip.task.title}
             >
               {truncateEventTitle(chip.task.title)}
@@ -151,7 +163,7 @@ function DayCell({
           ) : (
             <span
               key={`e-${chip.event.id}`}
-              className="truncate rounded-[3px] bg-emerald-50 px-1 py-px text-[9px] font-medium leading-[13px] text-emerald-700"
+              className="truncate rounded-[3px] bg-emerald-50 px-0.5 py-px text-[9px] font-medium leading-[13px] text-emerald-700"
               title={chip.event.title}
             >
               {truncateEventTitle(chip.event.title)}

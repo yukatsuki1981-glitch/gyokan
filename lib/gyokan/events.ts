@@ -27,7 +27,7 @@ export function applyTimeToTimestamp(referenceTimestamp: string, hhmm: string): 
   return combineLocalDateAndTime(localDateISOFromTimestamp(referenceTimestamp), hhmm);
 }
 
-const EVENT_TITLE_CHARS = 5;
+const EVENT_TITLE_CHARS = 4;
 
 export function truncateEventTitle(title: string, max = EVENT_TITLE_CHARS): string {
   if (title.length <= max) return title;

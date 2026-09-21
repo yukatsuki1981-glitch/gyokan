@@ -572,7 +572,7 @@ const MOBILE_BAR_HEIGHT_CLASS = "h-14";
 const CALENDAR_CELL_ROW_H = 80;
 const CALENDAR_TASK_PREVIEW_MAX = 5;
 
-const CALENDAR_TASK_CHARS = 4;
+const CALENDAR_TASK_CHARS = 5;
 const CALENDAR_MONTH_HEADER_H = 40;
 const CALENDAR_WEEKDAY_HEADER_H = 28;
 const CALENDAR_MONTH_PADDING_V = 16;
@@ -3401,7 +3401,7 @@ function MobileCalendarDayCell({
             return (
             <span
               key={task.id}
-              className="relative truncate rounded-[2px] px-0.5 text-[8px] leading-[10px]"
+              className="relative truncate rounded-[2px] px-px text-[8px] leading-[10px]"
               style={
                 displayDone
                   ? { backgroundColor: "rgba(229, 231, 235, 0.9)", color: "rgb(156, 163, 175)" }
