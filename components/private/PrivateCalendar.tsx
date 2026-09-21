@@ -181,21 +181,31 @@ function MonthPanel({
   tasksByDate,
   eventsByDate,
   onSelect,
+  onToday,
 }: {
   year: number;
   month: number;
   tasksByDate: Map<string, AppTask[]>;
   eventsByDate: Map<string, AppEvent[]>;
   onSelect: (iso: string) => void;
+  onToday: () => void;
 }) {
   const grid = useMemo(() => getCalendarGrid(year, month), [year, month]);
 
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <div className="relative shrink-0 px-3 py-1 sm:px-4">
+      <div className="relative shrink-0 flex items-center justify-between px-3 py-1 sm:px-4">
         <span className="text-[15px] font-semibold text-gray-900">
           {year}年{month + 1}月
         </span>
+        <button
+          type="button"
+          onClick={onToday}
+          aria-label="今日へ"
+          className="relative z-10 rounded-lg px-2 py-0.5 text-[13px] font-medium text-[var(--gyokan-accent2)] hover:bg-blue-50"
+        >
+          今日
+        </button>
         <span className="pointer-events-none absolute right-12 top-1/2 -translate-y-1/2 select-none text-[4.5rem] font-bold leading-none text-gray-100">
           {month + 1}
         </span>
@@ -422,6 +432,11 @@ export function PrivateCalendar({
     setSelectedDate(iso);
   }, []);
 
+  const goToToday = useCallback(() => {
+    const d = new Date();
+    setCursor({ year: d.getFullYear(), month: d.getMonth() });
+  }, []);
+
   const selectedDayEvents = selectedDate ? eventsByDate.get(selectedDate) ?? [] : [];
   const selectedDayTasks = selectedDate ? tasksByDate.get(selectedDate) ?? [] : [];
   const selectedDateLabel = selectedDate
@@ -448,6 +463,7 @@ export function PrivateCalendar({
                 tasksByDate={tasksByDate}
                 eventsByDate={eventsByDate}
                 onSelect={handleDaySelect}
+                onToday={goToToday}
               />
             </div>
           ))}

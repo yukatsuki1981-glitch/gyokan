@@ -565,10 +565,6 @@ function buildSingleDayTasksByDate(tasks: Task[]) {
   return map;
 }
 
-// Shared by the tasks-mode 5-icon nav and the private-mode 2-icon footer so
-// the bar's height stays identical regardless of how many icons it holds.
-const MOBILE_BAR_HEIGHT_CLASS = "h-14";
-
 const CALENDAR_CELL_ROW_H = 80;
 const CALENDAR_TASK_PREVIEW_MAX = 5;
 
@@ -5062,6 +5058,57 @@ function AppSettingsPanel({
   );
 }
 
+/**
+ * Single shared render path for both the tasks-mode bottom nav and the
+ * private-mode footer, so their icon row can never visually drift apart —
+ * only the outer positioning (fixed overlay vs. in-flow flex sibling)
+ * differs, since the two modes' surrounding page shells differ.
+ */
+function MobileBarShell({
+  as,
+  hidden = false,
+  children,
+}: {
+  as: "nav" | "footer";
+  hidden?: boolean;
+  children: ReactNode;
+}) {
+  const Tag = as;
+  return (
+    <Tag
+      className={`${as === "nav" ? "fixed bottom-0 left-0 right-0 z-40" : "shrink-0"} border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden ${hidden ? "hidden" : ""}`}
+      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+    >
+      <div className="mx-auto flex h-14 max-w-lg items-center justify-around px-1">{children}</div>
+    </Tag>
+  );
+}
+
+function MobileBarButton({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-all duration-200 ${
+        active ? "text-[var(--gyokan-accent2)]" : "text-gray-500"
+      }`}
+    >
+      <Icon name={icon} className="h-5 w-5" />
+      <span className="text-[9px] font-medium">{label}</span>
+    </button>
+  );
+}
+
 export default function Home() {
   const isClient = useIsClient();
   const router = useRouter();
@@ -6032,29 +6079,10 @@ export default function Home() {
           </div>
 
           {appMode === "private" && (
-            <footer
-              className="shrink-0 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden"
-              style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
-            >
-              <div className={`mx-auto flex ${MOBILE_BAR_HEIGHT_CLASS} max-w-lg items-center justify-around px-1`}>
-                <button
-                  type="button"
-                  onClick={() => router.push("/diary")}
-                  className="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-gray-500 transition-all duration-200"
-                >
-                  <Icon name="diary" className="h-5 w-5" />
-                  <span className="text-[9px] font-medium">日記</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={openSettings}
-                  className="flex flex-1 flex-col items-center gap-0.5 py-2.5 text-gray-500 transition-all duration-200"
-                >
-                  <Icon name="settings" className="h-5 w-5" />
-                  <span className="text-[9px] font-medium">設定</span>
-                </button>
-              </div>
-            </footer>
+            <MobileBarShell as="footer">
+              <MobileBarButton icon="diary" label="日記" active={false} onClick={() => router.push("/diary")} />
+              <MobileBarButton icon="settings" label="設定" active={false} onClick={openSettings} />
+            </MobileBarShell>
           )}
         </main>
 
@@ -6096,50 +6124,35 @@ export default function Home() {
       )}
 
       {/* Mobile Tab Bar */}
-      <nav
-        className={`fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden ${appMode === "private" ? "hidden" : ""}`}
-        style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
-      >
-        <div className={`mx-auto flex ${MOBILE_BAR_HEIGHT_CLASS} max-w-lg items-center justify-around px-1`}>
-          {mobileTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                if (tab.id === "projects") {
-                  if (!showProjects) return;
-                  setMemoSheetOpen(false);
-                  setActiveProject(ALL_PROJECTS_LABEL);
-                  setMobileTab("projects");
-                } else if (tab.id === "memo") {
-                  setMemoSheetOpen(true);
-                } else if (tab.id === "diary") {
-                  setMemoSheetOpen(false);
-                  router.push("/diary");
-                } else {
-                  setMemoSheetOpen(false);
-                  setMobileTab(tab.id);
-                  if (tab.id === "home") {
-                    setCalendarPeekReset((n) => n + 1);
-                  }
+      <MobileBarShell as="nav" hidden={appMode === "private"}>
+        {mobileTabs.map((tab) => (
+          <MobileBarButton
+            key={tab.id}
+            icon={tab.icon}
+            label={tab.label}
+            active={tab.id === "memo" ? memoSheetOpen : mobileTab === tab.id}
+            onClick={() => {
+              if (tab.id === "projects") {
+                if (!showProjects) return;
+                setMemoSheetOpen(false);
+                setActiveProject(ALL_PROJECTS_LABEL);
+                setMobileTab("projects");
+              } else if (tab.id === "memo") {
+                setMemoSheetOpen(true);
+              } else if (tab.id === "diary") {
+                setMemoSheetOpen(false);
+                router.push("/diary");
+              } else {
+                setMemoSheetOpen(false);
+                setMobileTab(tab.id);
+                if (tab.id === "home") {
+                  setCalendarPeekReset((n) => n + 1);
                 }
-              }}
-              className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-all duration-200 ${
-                tab.id === "memo"
-                  ? memoSheetOpen
-                    ? "text-[var(--gyokan-accent2)]"
-                    : "text-gray-500"
-                  : mobileTab === tab.id
-                  ? "text-[var(--gyokan-accent2)]"
-                  : "text-gray-500"
-              }`}
-            >
-              <Icon name={tab.icon} className="h-5 w-5" />
-              <span className="text-[9px] font-medium">{tab.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+              }
+            }}
+          />
+        ))}
+      </MobileBarShell>
 
       <AddTaskModal
         open={taskModalOpen}

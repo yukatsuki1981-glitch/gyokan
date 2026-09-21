@@ -365,7 +365,9 @@ export function DayEventsModal({
     >
       <div
         ref={sheetRef}
-        className="flex h-[50vh] w-full flex-col overflow-hidden rounded-t-2xl bg-[#fafafa] shadow-2xl sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-2xl"
+        className={`flex w-full flex-col overflow-hidden rounded-t-2xl bg-[#fafafa] shadow-2xl sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-2xl ${
+          view.kind === "list" ? "h-[50vh]" : "h-[80vh]"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div
