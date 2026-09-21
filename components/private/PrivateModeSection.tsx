@@ -30,7 +30,7 @@ export function PrivateModeSection({
   onToggleTask: (id: string) => void;
   onReplaceTasks: (updater: (prev: AppTask[]) => AppTask[]) => void;
 }) {
-  const { authReady, dataReady, loadError, events, addEvent, updateEvent, deleteEvent, replaceEvents } =
+  const { authReady, dataReady, loadError, saveError, events, addEvent, updateEvent, deleteEvent, replaceEvents } =
     useGyokanEvents();
 
   const ready = authReady && dataReady;
@@ -48,6 +48,11 @@ export function PrivateModeSection({
           {loadError && (
             <p className="shrink-0 bg-red-50 px-4 py-2 text-center text-[12px] text-red-600">
               データの読み込みに問題があります: {loadError}
+            </p>
+          )}
+          {saveError && (
+            <p className="shrink-0 bg-red-50 px-4 py-2 text-center text-[12px] text-red-600">
+              保存に失敗しました: {saveError}
             </p>
           )}
           <PrivateCalendar

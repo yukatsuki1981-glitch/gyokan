@@ -52,6 +52,7 @@ export function useGyokanEvents() {
   const [authReady, setAuthReady] = useState(false);
   const [dataReady, setDataReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [events, setEvents] = useState<AppEvent[]>([]);
 
   const userIdRef = useRef<string | null>(null);
@@ -145,9 +146,11 @@ export function useGyokanEvents() {
     try {
       await upsertEvent(getSupabase(), event, uid);
       clearDraft("event", event.id);
+      setSaveError(null);
       return true;
     } catch (err) {
       console.error("Failed to save event", err);
+      setSaveError(formatLoadError(err));
       return false;
     }
   }, [getSupabase]);
@@ -157,8 +160,10 @@ export function useGyokanEvents() {
     if (!uid) return;
     try {
       await upsertEventsBatch(getSupabase(), list, uid);
+      setSaveError(null);
     } catch (err) {
       console.error("Failed to save events", err);
+      setSaveError(formatLoadError(err));
     }
   }, [getSupabase]);
 
@@ -227,6 +232,7 @@ export function useGyokanEvents() {
     authReady,
     dataReady,
     loadError,
+    saveError,
     events,
     addEvent,
     updateEvent,
