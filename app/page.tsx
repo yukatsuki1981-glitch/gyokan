@@ -5763,7 +5763,9 @@ export default function Home() {
     <ProjectColorsContext.Provider value={projectColorsValue}>
     <div
       className={`gyokan-app relative min-h-screen text-[var(--gyokan-text)] antialiased ${
-        appMode === "private" ? "max-lg:fixed max-lg:inset-0 max-lg:overflow-hidden" : ""
+        appMode === "private"
+          ? "max-lg:fixed max-lg:inset-x-0 max-lg:top-0 max-lg:h-dvh max-lg:overflow-hidden"
+          : ""
       }`}
     >
       <div
