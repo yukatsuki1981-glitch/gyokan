@@ -5062,7 +5062,11 @@ function AppSettingsPanel({
  * Single shared render path for both the tasks-mode bottom nav and the
  * private-mode footer, so their icon row can never visually drift apart —
  * only the outer positioning (fixed overlay vs. in-flow flex sibling)
- * differs, since the two modes' surrounding page shells differ.
+ * differs, since the two modes' surrounding page shells differ. The row
+ * height and bottom padding both read from the --gyokan-mobile-bar-* CSS
+ * variables defined once in globals.css — nothing else may hardcode this
+ * bar's size; anything that needs to reserve space for it must read
+ * --gyokan-mobile-bar-h from there too.
  */
 function MobileBarShell({
   as,
@@ -5077,9 +5081,14 @@ function MobileBarShell({
   return (
     <Tag
       className={`${as === "nav" ? "fixed bottom-0 left-0 right-0 z-40" : "shrink-0"} border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden ${hidden ? "hidden" : ""}`}
-      style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+      style={{ paddingBottom: "var(--gyokan-mobile-bar-pad-b)" }}
     >
-      <div className="mx-auto flex h-14 max-w-lg items-center justify-around px-1">{children}</div>
+      <div
+        className="mx-auto flex max-w-lg items-center justify-around px-1"
+        style={{ height: "var(--gyokan-mobile-bar-row-h)" }}
+      >
+        {children}
+      </div>
     </Tag>
   );
 }
@@ -5836,7 +5845,7 @@ export default function Home() {
           className={`min-w-0 flex-1 lg:h-full lg:overflow-y-auto lg:pb-0 ${
             appMode === "private"
               ? "max-lg:flex max-lg:h-full max-lg:flex-col max-lg:overflow-hidden max-lg:pb-0"
-              : "pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+              : "pb-[var(--gyokan-mobile-bar-h)]"
           }`}
         >
           <div className="mx-auto w-full max-lg:shrink-0 max-w-3xl px-2.5 pt-2 sm:px-4 lg:max-w-none lg:px-5 lg:pt-2">

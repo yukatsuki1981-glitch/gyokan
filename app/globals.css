@@ -6,6 +6,15 @@
   --foreground: var(--gyokan-text);
   --glass: rgba(255, 255, 255, 0.72);
   --glass-border: rgba(0, 0, 0, 0.06);
+
+  /* Mobile bottom bar (tasks-mode nav / private-mode footer): the single
+     source of truth for its rendered height. MobileBarShell in app/page.tsx
+     is the only consumer of the two parts below; anything that needs to
+     reserve space for the bar (e.g. scroll-content bottom padding) must
+     read --gyokan-mobile-bar-h rather than repeat its own number. */
+  --gyokan-mobile-bar-row-h: 3.5rem;
+  --gyokan-mobile-bar-pad-b: max(0.5rem, env(safe-area-inset-bottom));
+  --gyokan-mobile-bar-h: calc(var(--gyokan-mobile-bar-row-h) + var(--gyokan-mobile-bar-pad-b));
 }
 
 @theme inline {
