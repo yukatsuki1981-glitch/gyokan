@@ -565,6 +565,10 @@ function buildSingleDayTasksByDate(tasks: Task[]) {
   return map;
 }
 
+// Shared by the tasks-mode 5-icon nav and the private-mode 2-icon footer so
+// the bar's height stays identical regardless of how many icons it holds.
+const MOBILE_BAR_HEIGHT_CLASS = "h-14";
+
 const CALENDAR_CELL_ROW_H = 80;
 const CALENDAR_TASK_PREVIEW_MAX = 5;
 
@@ -6030,9 +6034,9 @@ export default function Home() {
           {appMode === "private" && (
             <footer
               className="shrink-0 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden"
-              style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+              style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
             >
-              <div className="mx-auto flex max-w-lg justify-around px-1">
+              <div className={`mx-auto flex ${MOBILE_BAR_HEIGHT_CLASS} max-w-lg items-center justify-around px-1`}>
                 <button
                   type="button"
                   onClick={() => router.push("/diary")}
@@ -6092,8 +6096,11 @@ export default function Home() {
       )}
 
       {/* Mobile Tab Bar */}
-      <nav className={`fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden ${appMode === "private" ? "hidden" : ""}`}>
-        <div className="mx-auto flex max-w-lg justify-around px-1" style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}>
+      <nav
+        className={`fixed bottom-0 left-0 right-0 z-40 border-t border-[var(--gyokan-border)] bg-[color-mix(in_srgb,var(--gyokan-surface)_88%,transparent)] backdrop-blur-2xl lg:hidden ${appMode === "private" ? "hidden" : ""}`}
+        style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
+      >
+        <div className={`mx-auto flex ${MOBILE_BAR_HEIGHT_CLASS} max-w-lg items-center justify-around px-1`}>
           {mobileTabs.map((tab) => (
             <button
               key={tab.id}

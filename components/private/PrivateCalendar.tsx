@@ -5,7 +5,6 @@ import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { DayEventsModal } from "./DayEventsModal";
-import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 
 function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
   return [...tasks].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -321,23 +320,6 @@ export function PrivateCalendar({
     [],
   );
 
-  const goToMonth = useCallback(
-    (dir: 1 | -1) => {
-      const w = getWidth();
-      animateTrackTo(-w, dir === 1 ? -2 * w : 0, () => {
-        setCursor((prev) => shiftCursor(prev, dir));
-      });
-    },
-    [getWidth, animateTrackTo],
-  );
-
-  const goToToday = useCallback(() => {
-    cancelAnimRef.current?.();
-    cancelAnimRef.current = null;
-    const d = new Date();
-    setCursor({ year: d.getFullYear(), month: d.getMonth() });
-  }, []);
-
   // Swipe: real-time 1:1 finger-follow via a directly-mutated transform (no
   // native scrolling involved), then an eased release into place. Confirmed
   // horizontal drags call preventDefault so a diagonal swipe never turns
@@ -440,34 +422,6 @@ export function PrivateCalendar({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-2 sm:px-4">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => goToMonth(-1)}
-            aria-label="前の月"
-            className="rounded-lg p-1.5 text-gray-500 hover:bg-black/[0.04]"
-          >
-            <ChevronLeftIcon className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => goToMonth(1)}
-            aria-label="次の月"
-            className="rounded-lg p-1.5 text-gray-500 hover:bg-black/[0.04]"
-          >
-            <ChevronRightIcon className="h-4 w-4" />
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={goToToday}
-          className="rounded-lg border border-black/[0.08] px-2.5 py-1 text-[11px] font-medium text-gray-600 hover:bg-black/[0.03]"
-        >
-          今日
-        </button>
-      </div>
-
       <div
         ref={containerRef}
         className="relative min-h-0 flex-1 overflow-hidden"

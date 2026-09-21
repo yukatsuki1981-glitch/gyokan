@@ -735,6 +735,13 @@ export async function fetchGyokanEvents(
   return rows.map(mapDbEvent);
 }
 
+/** Drops `scope` from an events row — used when the DB doesn't have that
+ * column yet (migration 20260921_add_scope_columns.sql not applied). */
+function withoutEventScope<T extends { scope?: unknown }>(row: T): Omit<T, "scope"> {
+  const { scope: _scope, ...rest } = row;
+  return rest;
+}
+
 export async function upsertEvent(
   supabase: SupabaseClient,
   event: AppEvent,
@@ -742,7 +749,13 @@ export async function upsertEvent(
 ) {
   const row = mapEventToDb(event, userId);
   const { error } = await supabase.from("events").upsert(row);
-  if (error) throw error;
+  if (!error) return;
+  if (isMissingColumnError(error, "scope") || isSchemaMismatchError(error)) {
+    const { error: retryError } = await supabase.from("events").upsert(withoutEventScope(row));
+    if (!retryError) return;
+    throw retryError;
+  }
+  throw error;
 }
 
 export async function upsertEventsBatch(
@@ -753,7 +766,13 @@ export async function upsertEventsBatch(
   if (items.length === 0) return;
   const rows = items.map((item) => mapEventToDb(item, userId));
   const { error } = await supabase.from("events").upsert(rows);
-  if (error) throw error;
+  if (!error) return;
+  if (isMissingColumnError(error, "scope") || isSchemaMismatchError(error)) {
+    const { error: retryError } = await supabase.from("events").upsert(rows.map(withoutEventScope));
+    if (!retryError) return;
+    throw retryError;
+  }
+  throw error;
 }
 
 export async function deleteEventDb(supabase: SupabaseClient, id: string) {
