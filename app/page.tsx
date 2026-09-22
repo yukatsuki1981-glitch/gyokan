@@ -5913,7 +5913,7 @@ export default function Home() {
           >
 
             {appMode === "private" ? (
-              <PrivateModeSection tasks={tasks} onToggleTask={toggleTask} onReplaceTasks={replaceTasks} />
+              <PrivateModeSection />
             ) : showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
