@@ -18,7 +18,13 @@ import type { ReactNode } from "react";
  */
 export function PrivateModeSection({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#fafafa] lg:h-[640px] lg:rounded-2xl lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-sm">
+    // On mobile this must NOT be h-full + overflow-hidden: the parent wrapper
+    // in page.tsx is the scroll container (flex-1 + min-h-0 + overflow-y-auto),
+    // and pinning this box to exactly the parent's height while hiding its
+    // overflow would clip tall content instead of letting the parent scroll it,
+    // which is what happens once the account actually has tasks in it.
+    // min-h-full keeps the background filling the area when content is short.
+    <div className="flex min-h-full flex-col bg-[#fafafa] lg:h-[640px] lg:overflow-hidden lg:rounded-2xl lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-sm">
       {children}
     </div>
   );

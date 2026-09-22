@@ -5974,7 +5974,11 @@ export default function Home() {
     <div
       className={`gyokan-app relative min-h-screen text-[var(--gyokan-text)] antialiased ${
         appMode === "private"
-          ? "max-lg:fixed max-lg:inset-x-0 max-lg:top-0 max-lg:h-dvh max-lg:overflow-hidden"
+          ? // min-h-0 is required, not cosmetic: min-height always beats height
+            // in CSS, so the base min-h-screen (100vh) would otherwise override
+            // h-dvh and make this box taller than the visible viewport, pushing
+            // the footer below the fold on mobile browsers with a toolbar.
+            "max-lg:fixed max-lg:inset-x-0 max-lg:top-0 max-lg:h-dvh max-lg:min-h-0 max-lg:overflow-hidden"
           : ""
       }`}
     >
@@ -5989,7 +5993,9 @@ export default function Home() {
       <PullToRefresh enabled={isClient && appMode !== "private"} onRefresh={handleRefresh} />
       <div
         className={`mx-auto flex min-h-screen max-w-[1480px] lg:h-screen lg:overflow-hidden ${
-          appMode === "private" ? "max-lg:h-full max-lg:overflow-hidden" : ""
+          appMode === "private"
+            ? "max-lg:h-full max-lg:min-h-0 max-lg:overflow-hidden"
+            : ""
         }`}
       >
         {/* Left Sidebar */}
@@ -6051,13 +6057,15 @@ export default function Home() {
         {/* Main + Right Panel */}
         <div
           className={`flex min-w-0 flex-1 lg:h-full lg:overflow-hidden ${
-            appMode === "private" ? "max-lg:h-full max-lg:overflow-hidden" : ""
+            appMode === "private"
+              ? "max-lg:h-full max-lg:min-h-0 max-lg:overflow-hidden"
+              : ""
           }`}
         >
         <main
           className={`min-w-0 flex-1 lg:h-full lg:overflow-y-auto lg:pb-0 ${
             appMode === "private"
-              ? "max-lg:flex max-lg:h-full max-lg:flex-col max-lg:overflow-hidden max-lg:pb-0"
+              ? "max-lg:flex max-lg:h-full max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden max-lg:pb-0"
               : "pb-[var(--gyokan-mobile-bar-h)]"
           }`}
         >
