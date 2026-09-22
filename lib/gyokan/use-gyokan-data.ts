@@ -142,6 +142,13 @@ export function useGyokanData() {
   const userIdRef = useRef<string | null>(null);
   const viewDateSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDoneRef = useRef(false);
+  // See the onAuthStateChange handler below: on a brand-new tab, the very
+  // first (INITIAL_SESSION) callback can report a null session for a
+  // moment while GoTrueClient is still refreshing an expired-but-valid
+  // token from storage. These track whether we've since seen a real user,
+  // or given up waiting, so that ambiguous null is only trusted once.
+  const sawUserRef = useRef(false);
+  const authFallbackFiredRef = useRef(false);
 
   const projectNames = useMemo(() => projects.map((p) => p.name), [projects]);
   const projectColors = useMemo(() => projectsToColorMap(projects), [projects]);
@@ -366,6 +373,23 @@ export function useGyokanData() {
       (event: AuthChangeEvent, session: Session | null) => {
       if (!mounted) return;
       const u = session?.user ?? null;
+
+      // On a brand-new tab (no warm in-memory session from a previously
+      // running client), the very first callback is always INITIAL_SESSION,
+      // and it can report a null session for a moment while GoTrueClient is
+      // still refreshing an expired-but-refreshable token read from
+      // storage — a real SIGNED_IN/TOKEN_REFRESHED event typically follows
+      // within a beat. Treating that transient null as "logged out" was
+      // clearing tasks/cases to an empty, final-looking state (see the
+      // "tasks disappeared on a fresh Safari tab" report). Any later event
+      // (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, ...) is always trusted
+      // immediately — only this specific first-callback null is held back,
+      // and only until we've genuinely seen a user or given up waiting.
+      if (event === "INITIAL_SESSION" && !u && !sawUserRef.current && !authFallbackFiredRef.current) {
+        return;
+      }
+      if (u) sawUserRef.current = true;
+
       setUser(u);
       userIdRef.current = u?.id ?? null;
       setAuthChecked(true);
@@ -390,6 +414,7 @@ export function useGyokanData() {
 
     const authFallback = window.setTimeout(() => {
       if (!mounted) return;
+      authFallbackFiredRef.current = true;
       setAuthChecked(true);
       setAuthReady(true);
     }, 8000);
