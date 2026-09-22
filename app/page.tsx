@@ -5976,7 +5976,8 @@ export default function Home() {
                 案件の保存に失敗しました: {caseSaveError}
               </p>
             )}
-            <header className="mb-2 lg:mb-3">
+            {/* TEMP: deploy-freshness marker for cache/deploy diagnosis, remove when confirmed. */}
+            <header className="mb-2 lg:mb-3 bg-[#FF0000]">
               <div className="mb-2 hidden lg:flex lg:justify-start">
                 {modeToggle}
               </div>
@@ -5985,6 +5986,7 @@ export default function Home() {
                 {modeToggle}
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
+                  <span className="shrink-0 rounded bg-black px-1.5 py-0.5 text-[11px] font-bold text-white">TEST-001</span>
                   {!isAllProjects && showProjects && <ProjectColorHeaderLink project={activeProject} />}
                 </div>
                 <RefreshButton className="shrink-0" onRefresh={handleRefresh} />
