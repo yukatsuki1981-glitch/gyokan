@@ -5753,6 +5753,118 @@ export default function Home() {
     </button>
   );
 
+  // Temporary: private mode renders this exact same "home tab" content
+  // (calendar peek + today's tasks + ongoing cases) as tasks mode, with no
+  // scope filtering, while a real device confirms the shared shell works
+  // before private-only content (scope='private' filtering, the private
+  // calendar) is reintroduced step by step.
+  const homeTabContent = (
+    <div className="flex flex-col">
+            {showTasks && (
+              <section className="order-1 mb-3 lg:hidden">
+                <MobileCalendarWidget
+                  tasks={tasks}
+                  selectedDate={viewDateISO}
+                  onSelectDate={goToDate}
+                  peekMode
+                  peekResetSignal={calendarPeekReset}
+                />
+              </section>
+            )}
+
+            {showProjects && !isAllProjects && (
+              showCases && viewingCase ? (
+                <CaseDetailSection
+                  item={viewingCase}
+                  onSave={updateCase}
+                  onBack={() => setViewingCaseId(null)}
+                  onToggle={toggleCase}
+                  caseTasks={viewingCaseTasks}
+                  onAddTask={() => openTaskModalForCase(viewingCase)}
+                  onToggleTask={toggleTask}
+                  onOpenTask={setSelectedTask}
+                  onDelete={() => handleDeleteCase(viewingCase.id)}
+                  className="order-2 mb-4 lg:order-2 lg:mb-4"
+                />
+              ) : (
+                <ProjectDetailSection
+                  project={activeProject}
+                  cases={cases}
+                  memos={memos}
+                  onToggleCase={toggleCase}
+                  onOpenCase={openProjectCase}
+                  onSaveMemo={saveProjectMemo}
+                  onDeleteMemo={deleteProjectMemo}
+                  onAddCase={() => openAddCaseModal(activeProject)}
+                  className="order-2 mb-4 lg:order-2 lg:mb-4"
+                />
+              )
+            )}
+
+            {showTasks && (
+              <TodayTasksSection
+                viewDateISO={viewDateISO}
+                activeTaskCount={workTaskBuckets.activeCount}
+                completedTaskCount={workTaskBuckets.completedCount}
+                workDisplayedTasks={displayedTasks}
+                workIncompleteOtherTasks={incompleteOtherTasks}
+                workOngoingRangeTasks={ongoingRangeTasks}
+                privateDisplayedTasks={privateTaskBuckets.displayed}
+                privateIncompleteOtherTasks={privateTaskBuckets.incompleteOther}
+                privateOngoingRangeTasks={privateTaskBuckets.ongoingRange}
+                showPrivateSection={showPrivateTaskSection}
+                renderTaskList={renderTaskList}
+                onAddTask={openTaskModalForView}
+                className={
+                  showProjects && !isAllProjects
+                    ? "order-3 lg:order-3"
+                    : "order-2 lg:order-1"
+                }
+              />
+            )}
+
+            {showCases && effectiveAllProjects && (
+              <section
+                className={`order-3 mt-3 mb-2 lg:order-3 lg:mb-3 lg:mt-0 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
+              >
+                <div className="mb-1.5 flex items-center justify-between gap-4">
+                  <div className="flex min-w-0 items-baseline gap-3">
+                    <h3 className="shrink-0 text-[17px] font-semibold text-gray-900">進行中の{caseLabel}</h3>
+                    <span className="hidden text-[13px] text-gray-400 lg:inline">
+                      全{cases.length}件（進行中 {ongoingCases.length}件 · 完了 {completedCasesCount}件）
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setAllCasesListOpen(true)}
+                      className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
+                    >
+                      {caseLabel}一覧
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openAddCaseModal()}
+                      className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
+                    >
+                      ＋ {caseLabel}を追加
+                    </button>
+                  </div>
+                </div>
+                <HomeCasesByProjectGrid
+                  ongoingCases={orderedOngoingCases}
+                  projectOrder={projectNames}
+                  cols={homeCaseColumns}
+                  onToggle={toggleCase}
+                  onOpen={setSelectedCase}
+                  sensors={sensors}
+                  onDragEnd={handleCaseDragEnd}
+                />
+              </section>
+            )}
+    </div>
+  );
+
   return (
     <GyokanThemeProvider isPaidMember={isPaidMember}>
     <DisplaySettingsProvider
@@ -5907,13 +6019,13 @@ export default function Home() {
           <div
             className={`mx-auto max-w-3xl px-2.5 pb-2 sm:px-4 lg:max-w-none lg:px-5 lg:pb-2 ${
               appMode === "private"
-                ? "max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-hidden max-lg:pb-0"
+                ? "max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-y-auto max-lg:pb-2"
                 : ""
             }`}
           >
 
             {appMode === "private" ? (
-              <PrivateModeSection />
+              <PrivateModeSection>{homeTabContent}</PrivateModeSection>
             ) : showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
@@ -5979,113 +6091,7 @@ export default function Home() {
                 onSignOut={() => void signOut()}
               />
             ) : (
-              <>
-            <div className="flex flex-col">
-            {showTasks && (
-              <section className="order-1 mb-3 lg:hidden">
-                <MobileCalendarWidget
-                  tasks={tasks}
-                  selectedDate={viewDateISO}
-                  onSelectDate={goToDate}
-                  peekMode
-                  peekResetSignal={calendarPeekReset}
-                />
-              </section>
-            )}
-
-            {showProjects && !isAllProjects && (
-              showCases && viewingCase ? (
-                <CaseDetailSection
-                  item={viewingCase}
-                  onSave={updateCase}
-                  onBack={() => setViewingCaseId(null)}
-                  onToggle={toggleCase}
-                  caseTasks={viewingCaseTasks}
-                  onAddTask={() => openTaskModalForCase(viewingCase)}
-                  onToggleTask={toggleTask}
-                  onOpenTask={setSelectedTask}
-                  onDelete={() => handleDeleteCase(viewingCase.id)}
-                  className="order-2 mb-4 lg:order-2 lg:mb-4"
-                />
-              ) : (
-                <ProjectDetailSection
-                  project={activeProject}
-                  cases={cases}
-                  memos={memos}
-                  onToggleCase={toggleCase}
-                  onOpenCase={openProjectCase}
-                  onSaveMemo={saveProjectMemo}
-                  onDeleteMemo={deleteProjectMemo}
-                  onAddCase={() => openAddCaseModal(activeProject)}
-                  className="order-2 mb-4 lg:order-2 lg:mb-4"
-                />
-              )
-            )}
-
-            {showTasks && (
-              <TodayTasksSection
-                viewDateISO={viewDateISO}
-                activeTaskCount={workTaskBuckets.activeCount}
-                completedTaskCount={workTaskBuckets.completedCount}
-                workDisplayedTasks={displayedTasks}
-                workIncompleteOtherTasks={incompleteOtherTasks}
-                workOngoingRangeTasks={ongoingRangeTasks}
-                privateDisplayedTasks={privateTaskBuckets.displayed}
-                privateIncompleteOtherTasks={privateTaskBuckets.incompleteOther}
-                privateOngoingRangeTasks={privateTaskBuckets.ongoingRange}
-                showPrivateSection={showPrivateTaskSection}
-                renderTaskList={renderTaskList}
-                onAddTask={openTaskModalForView}
-                className={
-                  showProjects && !isAllProjects
-                    ? "order-3 lg:order-3"
-                    : "order-2 lg:order-1"
-                }
-              />
-            )}
-
-            {showCases && effectiveAllProjects && (
-              <section
-                className={`order-3 mt-3 mb-2 lg:order-3 lg:mb-3 lg:mt-0 ${showHomeCaseGrid ? "" : "hidden lg:block"}`}
-              >
-                <div className="mb-1.5 flex items-center justify-between gap-4">
-                  <div className="flex min-w-0 items-baseline gap-3">
-                    <h3 className="shrink-0 text-[17px] font-semibold text-gray-900">進行中の{caseLabel}</h3>
-                    <span className="hidden text-[13px] text-gray-400 lg:inline">
-                      全{cases.length}件（進行中 {ongoingCases.length}件 · 完了 {completedCasesCount}件）
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setAllCasesListOpen(true)}
-                      className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
-                    >
-                      {caseLabel}一覧
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openAddCaseModal()}
-                      className="text-[13px] font-medium text-gray-400 transition-all duration-200 hover:text-[var(--gyokan-accent2)]"
-                    >
-                      ＋ {caseLabel}を追加
-                    </button>
-                  </div>
-                </div>
-                <HomeCasesByProjectGrid
-                  ongoingCases={orderedOngoingCases}
-                  projectOrder={projectNames}
-                  cols={homeCaseColumns}
-                  onToggle={toggleCase}
-                  onOpen={setSelectedCase}
-                  sensors={sensors}
-                  onDragEnd={handleCaseDragEnd}
-                />
-              </section>
-            )}
-
-                </div>
-              </>
+              homeTabContent
             )}
           </div>
 
