@@ -5118,6 +5118,86 @@ function MobileBarButton({
   );
 }
 
+/**
+ * TEMP diagnostic overlay. Shows the real auth-event order and load results
+ * on screen so they can be captured in a screenshot (console logs aren't
+ * practical to read off a phone). Rendered in every branch of Home(),
+ * including the loading spinner and the "redirecting to login" state, since
+ * the whole point is to see which of those the app is stuck in.
+ * Remove together with the TEST-001 header marker.
+ */
+function DebugOverlay({
+  mode,
+  authReady,
+  authChecked,
+  dataReady,
+  userId,
+  taskCount,
+  caseCount,
+  loadError,
+  lines,
+}: {
+  mode: string;
+  authReady: boolean;
+  authChecked: boolean;
+  dataReady: boolean;
+  userId: string | null;
+  taskCount: number | null;
+  caseCount: number | null;
+  loadError: string | null;
+  lines: string[];
+}) {
+  const [open, setOpen] = useState(true);
+  // Whether the Supabase auth cookies are visible to JS at all. The browser
+  // client reads its session from these; if they're missing here but the
+  // server clearly sees them, that alone explains an empty, error-free load.
+  const [cookieInfo, setCookieInfo] = useState("(checking)");
+  useEffect(() => {
+    try {
+      const names = document.cookie
+        .split(";")
+        .map((c) => c.trim().split("=")[0])
+        .filter((n) => n.startsWith("sb-"));
+      setCookieInfo(names.length ? names.join(" ") : "(none visible to JS)");
+    } catch {
+      setCookieInfo("(read failed)");
+    }
+  }, []);
+  return (
+    <div className="fixed bottom-0 left-0 z-[9999] max-h-[45vh] w-full overflow-auto border-t-2 border-lime-400 bg-black/85 px-2 py-1.5 font-mono text-[10px] leading-[13px] text-lime-300">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="mb-1 rounded bg-lime-400 px-1.5 py-0.5 text-[10px] font-bold text-black"
+      >
+        DEBUG {open ? "▼ 隠す" : "▶ 表示"}
+      </button>
+      <div className="text-[11px] font-bold text-white">現在: {mode}</div>
+      {open && (
+        <>
+          <div>
+            authReady={String(authReady)} authChecked={String(authChecked)} dataReady=
+            {String(dataReady)}
+          </div>
+          <div>
+            user={userId ? userId.slice(0, 8) : "null"} tasks={taskCount ?? "-"} cases=
+            {caseCount ?? "-"}
+          </div>
+          <div className="break-all">cookie: {cookieInfo}</div>
+          {loadError && <div className="text-red-400">loadError: {loadError}</div>}
+          <div className="mt-1 border-t border-lime-400/30 pt-1">
+            {lines.length === 0 ? (
+              <div className="text-gray-400">(no auth events yet)</div>
+            ) : (
+              lines.map((l, i) => <div key={i}>{l}</div>)
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const isClient = useIsClient();
   const router = useRouter();
@@ -5127,6 +5207,7 @@ export default function Home() {
     authChecked,
     dataReady,
     loadError,
+    debugLines,
     caseSaveError,
     projectNames,
     projects,
@@ -5667,15 +5748,31 @@ export default function Home() {
     return tabs;
   }, [showProjects, projectLabel]);
 
+  const debugOverlay = (
+    <DebugOverlay
+      mode={appMode === "private" ? "プライベート" : "仕事（タスク管理）"}
+      authReady={authReady}
+      authChecked={authChecked}
+      dataReady={dataReady}
+      userId={user?.id ?? null}
+      taskCount={tasks.length}
+      caseCount={cases.length}
+      loadError={loadError}
+      lines={debugLines}
+    />
+  );
+
   if (!isClient || !authReady || (user && !dataReady)) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--gyokan-bg)] px-6">
         <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
+        <p className="text-[12px] text-gray-400">読み込み中…（認証確認中）</p>
         {loadError && (
           <p className="max-w-sm text-center text-[13px] text-red-600">
             データの読み込みに問題があります: {loadError}
           </p>
         )}
+        {debugOverlay}
       </div>
     );
   }
@@ -5685,6 +5782,7 @@ export default function Home() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--gyokan-bg)] px-6">
         <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />
         <p className="text-[13px] text-gray-400">ログイン画面へ移動しています…</p>
+        {debugOverlay}
       </div>
     );
   }
@@ -5880,6 +5978,7 @@ export default function Home() {
           : ""
       }`}
     >
+      {debugOverlay}
       <div
         className="pointer-events-none fixed inset-0 z-0 bg-[var(--gyokan-bg)]"
         aria-hidden

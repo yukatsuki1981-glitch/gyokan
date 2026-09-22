@@ -150,6 +150,19 @@ export function useGyokanData() {
   const sawUserRef = useRef(false);
   const authFallbackFiredRef = useRef(false);
 
+  // TEMP diagnostics: records the real order of auth events and load results
+  // so they can be read off the screen (console logs aren't practical to
+  // capture on a phone). Remove together with the on-screen debug panel.
+  const debugStartRef = useRef<number | null>(null);
+  const debugLinesRef = useRef<string[]>([]);
+  const [, setDebugTick] = useState(0);
+  const pushDebug = useCallback((msg: string) => {
+    if (debugStartRef.current === null) debugStartRef.current = Date.now();
+    const ms = Date.now() - debugStartRef.current;
+    debugLinesRef.current = [...debugLinesRef.current, `+${ms}ms ${msg}`];
+    setDebugTick((n) => n + 1);
+  }, []);
+
   const projectNames = useMemo(() => projects.map((p) => p.name), [projects]);
   const projectColors = useMemo(() => projectsToColorMap(projects), [projects]);
   const allProjectLabels = useMemo(
@@ -314,8 +327,12 @@ export function useGyokanData() {
       setDataReady(false);
     }
     setLoadError(null);
+    pushDebug(`load:start uid=${uid.slice(0, 8)} silent=${silent}`);
     try {
       const data = await fetchGyokanData(getSupabase(), uid);
+      pushDebug(
+        `load:ok tasks=${data.tasks.length} cases=${data.cases.length} projects=${data.projects.length}`,
+      );
       setProjects(data.projects);
       syncMaps(data.projects);
       const mergedCases = mergeCasesWithDrafts(data.cases);
@@ -347,12 +364,13 @@ export function useGyokanData() {
       return data.lastViewDate;
     } catch (err) {
       const message = formatLoadError(err);
+      pushDebug(`load:ERROR ${message}`);
       setLoadError(message);
       setDataReady(true);
       initialLoadDoneRef.current = true;
       return null;
     }
-  }, [getSupabase, syncMaps, flushPendingDrafts, flushPendingDailyMemos, syncConsolidatedDailyMemos]);
+  }, [getSupabase, syncMaps, flushPendingDrafts, flushPendingDailyMemos, syncConsolidatedDailyMemos, pushDebug]);
 
   useEffect(() => {
     let mounted = true;
@@ -373,6 +391,11 @@ export function useGyokanData() {
       (event: AuthChangeEvent, session: Session | null) => {
       if (!mounted) return;
       const u = session?.user ?? null;
+      pushDebug(
+        `auth:${event} user=${u ? u.id.slice(0, 8) : "null"} token=${
+          session?.access_token ? "yes" : "no"
+        } exp=${session?.expires_at ?? "-"}`,
+      );
 
       // On a brand-new tab (no warm in-memory session from a previously
       // running client), the very first callback is always INITIAL_SESSION,
@@ -386,6 +409,7 @@ export function useGyokanData() {
       // immediately — only this specific first-callback null is held back,
       // and only until we've genuinely seen a user or given up waiting.
       if (event === "INITIAL_SESSION" && !u && !sawUserRef.current && !authFallbackFiredRef.current) {
+        pushDebug("auth:INITIAL_SESSION(null) held back, waiting");
         return;
       }
       if (u) sawUserRef.current = true;
@@ -414,6 +438,7 @@ export function useGyokanData() {
 
     const authFallback = window.setTimeout(() => {
       if (!mounted) return;
+      pushDebug("auth:FALLBACK 8s elapsed, giving up on auth");
       authFallbackFiredRef.current = true;
       setAuthChecked(true);
       setAuthReady(true);
@@ -424,7 +449,7 @@ export function useGyokanData() {
       window.clearTimeout(authFallback);
       subscription.unsubscribe();
     };
-  }, [getSupabase, loadData]);
+  }, [getSupabase, loadData, pushDebug]);
 
   const persistTask = useCallback(async (task: AppTask): Promise<boolean> => {
     const uid = userIdRef.current;
@@ -951,6 +976,7 @@ export function useGyokanData() {
     authChecked,
     dataReady,
     loadError,
+    debugLines: debugLinesRef.current,
     caseSaveError,
     projects,
     projectNames,
