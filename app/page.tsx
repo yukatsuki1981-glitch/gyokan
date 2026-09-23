@@ -5164,7 +5164,12 @@ function DebugOverlay({
     }
   }, []);
   return (
-    <div className="fixed bottom-0 left-0 z-[9999] max-h-[45vh] w-full overflow-auto border-t-2 border-lime-400 bg-black/85 px-2 py-1.5 font-mono text-[10px] leading-[13px] text-lime-300">
+    // Sits directly ABOVE the bottom bar (same variable the bar's own height
+    // comes from) so it never covers the footer being inspected.
+    <div
+      className="fixed left-0 z-[9999] max-h-[35vh] w-full overflow-auto border-y-2 border-lime-400 bg-black/85 px-2 py-1.5 font-mono text-[10px] leading-[13px] text-lime-300"
+      style={{ bottom: "var(--gyokan-mobile-bar-h)" }}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
