@@ -5864,32 +5864,6 @@ export default function Home() {
     </div>
   );
 
-  // Private mode's content: calendar only, no today's-tasks / ongoing-cases
-  // sections. Reuses MobileCalendarWidget (peekMode off, so it always shows
-  // the full month rather than starting collapsed) — this is the same
-  // shared/breakpoint-responsive <main> content area tasks mode uses, so
-  // this fills the whole width on mobile and just the center column on
-  // desktop (lg+), leaving the left project sidebar and right calendar/memo
-  // panel untouched. Row count (always 6, next-month grayed) and the day
-  // grid itself are unchanged for now — that's the next step.
-  const privateModeContent = (
-    // flex-1 + min-h-0 here (not h-full): PrivateModeSection only sets
-    // min-height (min-h-full), so its own computed `height` is auto — a
-    // percentage-height child (h-full) would not reliably resolve against
-    // that. Sizing via flex-grow instead works regardless.
-    <div className="flex min-h-0 flex-1 flex-col">
-      <section className="flex min-h-0 flex-1 flex-col">
-        <MobileCalendarWidget
-          tasks={tasks}
-          selectedDate={viewDateISO}
-          onSelectDate={goToDate}
-          peekMode={false}
-          peekResetSignal={calendarPeekReset}
-        />
-      </section>
-    </div>
-  );
-
   return (
     <GyokanThemeProvider isPaidMember={isPaidMember}>
     <DisplaySettingsProvider
@@ -6066,7 +6040,7 @@ export default function Home() {
           >
 
             {appMode === "private" ? (
-              <PrivateModeSection>{privateModeContent}</PrivateModeSection>
+              <PrivateModeSection tasks={tasks} onToggleTask={toggleTask} />
             ) : showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
