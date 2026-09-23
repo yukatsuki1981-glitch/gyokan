@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import {
   combineLocalDateAndTime,
+  isAllDayEvent,
   localTimeHHMMFromTimestamp,
   sortEventsByOrder,
 } from "@/lib/gyokan/events";
@@ -19,6 +20,7 @@ function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
 }
 
 function timeRangeLabel(event: AppEvent): string {
+  if (isAllDayEvent(event)) return "終日";
   const start = localTimeHHMMFromTimestamp(event.startTime);
   if (!event.endTime) return start;
   const end = localTimeHHMMFromTimestamp(event.endTime);
@@ -46,6 +48,7 @@ export function DayEventPopup({
 }) {
   const [view, setView] = useState<View>(() => (dayEvents.length === 0 ? "add" : "list"));
   const [title, setTitle] = useState("");
+  const [allDay, setAllDay] = useState(false);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("");
   const [memo, setMemo] = useState("");
@@ -142,12 +145,21 @@ export function DayEventPopup({
   const handleAdd = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    onAddEvent({
-      title: trimmed,
-      startTime: combineLocalDateAndTime(dateISO, startTime),
-      endTime: endTime ? combineLocalDateAndTime(dateISO, endTime) : null,
-      memo: memo.trim() || undefined,
-    });
+    onAddEvent(
+      allDay
+        ? {
+            title: trimmed,
+            startTime: combineLocalDateAndTime(dateISO, "00:00"),
+            endTime: null,
+            memo: memo.trim() || undefined,
+          }
+        : {
+            title: trimmed,
+            startTime: combineLocalDateAndTime(dateISO, startTime),
+            endTime: endTime ? combineLocalDateAndTime(dateISO, endTime) : null,
+            memo: memo.trim() || undefined,
+          },
+    );
     onClose();
   };
 
@@ -262,26 +274,48 @@ export function DayEventPopup({
                   className="rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]"
                 />
               </label>
-              <div className="flex gap-2">
-                <label className="flex flex-1 flex-col gap-1">
-                  <span className="text-[11px] font-medium text-gray-400">開始</span>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]"
-                  />
-                </label>
-                <label className="flex flex-1 flex-col gap-1">
-                  <span className="text-[11px] font-medium text-gray-400">終了（任意）</span>
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]"
-                  />
-                </label>
+              <div className="flex rounded-xl bg-black/[0.05] p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setAllDay(false)}
+                  className={`flex-1 rounded-[10px] py-1.5 text-[13px] font-medium transition-colors ${
+                    !allDay ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                  }`}
+                >
+                  時間指定
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAllDay(true)}
+                  className={`flex-1 rounded-[10px] py-1.5 text-[13px] font-medium transition-colors ${
+                    allDay ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                  }`}
+                >
+                  終日
+                </button>
               </div>
+              {!allDay && (
+                <div className="flex gap-2">
+                  <label className="flex flex-1 flex-col gap-1">
+                    <span className="text-[11px] font-medium text-gray-400">開始</span>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]"
+                    />
+                  </label>
+                  <label className="flex flex-1 flex-col gap-1">
+                    <span className="text-[11px] font-medium text-gray-400">終了（任意）</span>
+                    <input
+                      type="time"
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]"
+                    />
+                  </label>
+                </div>
+              )}
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-medium text-gray-400">メモ（任意）</span>
                 <textarea

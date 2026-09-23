@@ -5,7 +5,6 @@ import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import { groupEventsByDate } from "@/lib/gyokan/events";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
-import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { DayEventPopup } from "./DayEventPopup";
 
 function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
@@ -24,7 +23,7 @@ function groupTasksByDate(tasks: AppTask[]): Map<string, AppTask[]> {
 
 type DayChip = { kind: "task"; task: AppTask } | { kind: "event"; event: AppEvent };
 type MonthCursor = { year: number; month: number };
-type CalendarCell = { day: number; iso: string };
+type CalendarCell = { day: number; iso: string; inMonth: boolean };
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 const CHIP_PREVIEW_MAX = 4;
@@ -56,16 +55,28 @@ function shiftCursor(cursor: MonthCursor, delta: number): MonthCursor {
   return { year: d.getFullYear(), month: d.getMonth() };
 }
 
-// Leading blanks to align the 1st onto its weekday, then every day of the
-// month — no trailing next-month fill (that, and always padding to 6 rows,
-// is deferred). Row count is whatever this month actually needs (5 or 6).
-function buildGridCells(year: number, month: number): (CalendarCell | null)[] {
+// Always exactly 42 cells (6 fixed rows): leading days borrow from the
+// previous month, trailing days from the next — both greyed via
+// cell.inMonth === false, matching the original private-calendar spec.
+function buildGridCells(year: number, month: number): CalendarCell[] {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDow = new Date(year, month, 1).getDay();
-  const cells: (CalendarCell | null)[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push(null);
+  const prevMonthLastDay = new Date(year, month, 0).getDate();
+  const cells: CalendarCell[] = [];
+
+  for (let i = firstDow - 1; i >= 0; i--) {
+    const day = prevMonthLastDay - i;
+    const d = new Date(year, month - 1, day);
+    cells.push({ day, iso: isoOf(d.getFullYear(), d.getMonth(), day), inMonth: false });
+  }
   for (let day = 1; day <= daysInMonth; day++) {
-    cells.push({ day, iso: isoOf(year, month, day) });
+    cells.push({ day, iso: isoOf(year, month, day), inMonth: true });
+  }
+  let nextDay = 1;
+  while (cells.length < 42) {
+    const d = new Date(year, month + 1, nextDay);
+    cells.push({ day: nextDay, iso: isoOf(d.getFullYear(), d.getMonth(), nextDay), inMonth: false });
+    nextDay++;
   }
   return cells;
 }
@@ -86,28 +97,34 @@ function DayCell({
   onSelect: (iso: string) => void;
 }) {
   const dayOfWeek = cellIndex % 7;
-  const dayInfo = getJapaneseCalendarDay(cell.iso);
+  const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cell.iso) : null;
 
-  const chips: DayChip[] = [
-    ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
-    ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
-  ];
+  const chips: DayChip[] = cell.inMonth
+    ? [
+        ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
+        ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
+      ]
+    : [];
   const preview = chips.slice(0, CHIP_PREVIEW_MAX);
   const overflow = chips.length > CHIP_PREVIEW_MAX ? chips.length - CHIP_PREVIEW_MAX : 0;
 
-  const numberColor = isToday
-    ? ""
-    : dayOfWeek === 0
-      ? "text-red-500"
-      : dayOfWeek === 6
-        ? "text-blue-500"
-        : "text-gray-700";
+  const numberColor = !cell.inMonth
+    ? "text-gray-300"
+    : isToday
+      ? ""
+      : dayOfWeek === 0
+        ? "text-red-500"
+        : dayOfWeek === 6
+          ? "text-blue-500"
+          : "text-gray-700";
 
   return (
     <button
       type="button"
       onClick={() => onSelect(cell.iso)}
-      className="flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] bg-white p-0.5 text-left transition-colors hover:bg-black/[0.02]"
+      className={`flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] p-0.5 text-left transition-colors hover:bg-black/[0.02] ${
+        cell.inMonth ? "bg-white" : "bg-gray-50/60"
+      }`}
     >
       <div className="flex shrink-0 items-center gap-1">
         <span
@@ -160,19 +177,37 @@ function MonthPanel({
   tasksByDate,
   eventsByDate,
   onSelect,
+  onToday,
 }: {
   year: number;
   month: number;
   tasksByDate: Map<string, AppTask[]>;
   eventsByDate: Map<string, AppEvent[]>;
   onSelect: (iso: string) => void;
+  onToday: () => void;
 }) {
   const cells = useMemo(() => buildGridCells(year, month), [year, month]);
-  const weekCount = Math.ceil(cells.length / 7);
   const today = todayISO();
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
+    <div className="flex min-h-0 flex-1 min-w-0 flex-col">
+      <div className="relative flex shrink-0 items-center justify-between px-3 py-1 sm:px-4">
+        <span className="text-[15px] font-semibold text-gray-900">
+          {year}年{month + 1}月
+        </span>
+        <button
+          type="button"
+          onClick={onToday}
+          aria-label="今日へ"
+          className="relative z-10 rounded-lg px-2 py-0.5 text-[13px] font-medium text-[var(--gyokan-accent2)] hover:bg-blue-50"
+        >
+          今日
+        </button>
+        <span className="pointer-events-none absolute right-12 top-1/2 -translate-y-1/2 select-none text-[4.5rem] font-bold leading-none text-gray-100">
+          {month + 1}
+        </span>
+      </div>
+
       <div className="grid shrink-0 grid-cols-7 border-b border-t border-black/[0.06]">
         {WEEKDAY_LABELS.map((label, i) => (
           <div
@@ -187,23 +222,19 @@ function MonthPanel({
       </div>
       <div
         className="grid min-h-0 flex-1 grid-cols-7 border-l border-black/[0.05]"
-        style={{ gridTemplateRows: `repeat(${weekCount}, 1fr)` }}
+        style={{ gridTemplateRows: "repeat(6, 1fr)" }}
       >
-        {cells.map((cell, i) =>
-          cell ? (
-            <DayCell
-              key={cell.iso}
-              cell={cell}
-              cellIndex={i}
-              isToday={cell.iso === today}
-              dayTasks={tasksByDate.get(cell.iso) ?? []}
-              dayEvents={eventsByDate.get(cell.iso) ?? []}
-              onSelect={onSelect}
-            />
-          ) : (
-            <div key={`blank-${i}`} className="border-b border-r border-black/[0.05] bg-gray-50/60" />
-          ),
-        )}
+        {cells.map((cell, i) => (
+          <DayCell
+            key={`${cell.iso}-${i}`}
+            cell={cell}
+            cellIndex={i}
+            isToday={cell.inMonth && cell.iso === today}
+            dayTasks={tasksByDate.get(cell.iso) ?? []}
+            dayEvents={eventsByDate.get(cell.iso) ?? []}
+            onSelect={onSelect}
+          />
+        ))}
       </div>
     </div>
   );
@@ -408,51 +439,21 @@ export function PrivateCalendar({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative flex shrink-0 items-center justify-between px-3 py-1 sm:px-4">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setCursor((c) => shiftCursor(c, -1))}
-            aria-label="前の月"
-            className="rounded-lg p-1.5 text-gray-500 hover:bg-black/[0.04]"
-          >
-            <ChevronLeftIcon className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setCursor((c) => shiftCursor(c, 1))}
-            aria-label="次の月"
-            className="rounded-lg p-1.5 text-gray-500 hover:bg-black/[0.04]"
-          >
-            <ChevronRightIcon className="h-4 w-4" />
-          </button>
-          <span className="text-[15px] font-semibold text-gray-900">
-            {cursor.year}年{cursor.month + 1}月
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={goToToday}
-          className="rounded-lg px-2 py-0.5 text-[13px] font-medium text-[var(--gyokan-accent2)] hover:bg-blue-50"
-        >
-          今日
-        </button>
-      </div>
-
       <div
         ref={containerRef}
-        className="relative min-h-0 flex-1 overflow-hidden"
+        className="relative flex min-h-0 flex-1 overflow-hidden"
         style={{ touchAction: "pan-x", overscrollBehavior: "contain" }}
       >
-        <div ref={trackRef} className="flex h-full" style={{ width: "300%" }}>
+        <div ref={trackRef} className="flex shrink-0" style={{ width: "300%" }}>
           {panels.map((p, i) => (
-            <div key={i} className="h-full shrink-0" style={{ width: `${100 / 3}%` }}>
+            <div key={i} className="flex min-h-0 shrink-0 flex-col" style={{ width: `${100 / 3}%` }}>
               <MonthPanel
                 year={p.year}
                 month={p.month}
                 tasksByDate={tasksByDate}
                 eventsByDate={eventsByDate}
                 onSelect={handleDaySelect}
+                onToday={goToToday}
               />
             </div>
           ))}
