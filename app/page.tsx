@@ -3397,7 +3397,7 @@ function MobileCalendarDayCell({
             return (
             <span
               key={task.id}
-              className="relative truncate rounded-[2px] px-px text-[8px] leading-[10px]"
+              className="relative truncate rounded-[2px] px-px py-[0.8px] text-[8px] leading-[10px]"
               style={
                 displayDone
                   ? { backgroundColor: "rgba(229, 231, 235, 0.9)", color: "rgb(156, 163, 175)" }
