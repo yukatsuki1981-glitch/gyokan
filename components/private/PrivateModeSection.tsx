@@ -24,7 +24,13 @@ export function PrivateModeSection({ children }: { children: ReactNode }) {
     // overflow would clip tall content instead of letting the parent scroll it,
     // which is what happens once the account actually has tasks in it.
     // min-h-full keeps the background filling the area when content is short.
-    <div className="flex min-h-full flex-col bg-[#fafafa] lg:h-[640px] lg:overflow-hidden lg:rounded-2xl lg:border lg:border-black/[0.06] lg:bg-white lg:shadow-sm">
+    //
+    // On desktop (lg+) this is no longer a small floating preview card — it
+    // now fills the same center column tasks mode's own content uses (left
+    // project sidebar and right calendar/memo panel are untouched siblings),
+    // so the old fixed lg:h-[640px] card treatment (rounded/border/shadow)
+    // is dropped in favor of just filling the available height plainly.
+    <div className="flex min-h-full flex-col bg-[#fafafa] lg:h-full lg:bg-transparent">
       {children}
     </div>
   );
