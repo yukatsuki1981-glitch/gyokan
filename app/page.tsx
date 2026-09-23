@@ -5744,7 +5744,7 @@ export default function Home() {
           プライベート
         </span>
         <span className="col-start-1 row-start-1 whitespace-nowrap text-[11px] font-medium text-gray-700">
-          {appMode === "tasks" ? "プライベート" : "タスク管理"}
+          {appMode === "tasks" ? "タスク管理" : "プライベート"}
         </span>
       </span>
       {appMode === "private" && (

@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
-import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
+import { groupEventsByDate } from "@/lib/gyokan/events";
+import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { DayEventPopup } from "./DayEventPopup";
@@ -28,11 +29,21 @@ type CalendarCell = { day: number; iso: string };
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 const CHIP_PREVIEW_MAX = 4;
 
+// Release-animation tuning for the month swipe — same ease-out deceleration
+// curve/duration used elsewhere in this codebase (the day-popup swipe-
+// dismiss), picked to land in the 250-350ms range with a real cubic-bezier
+// curve. Native scrollTo({behavior:"smooth"}) (what tasks mode's own
+// calendar uses) can't guarantee a specific duration/curve across browsers,
+// so this is a real-time-drag transform carousel instead — same commit/
+// bounce/ease-out feel, precise timing.
+const MONTH_SNAP_EASING = makeCubicBezierEasing(0.22, 1, 0.36, 1);
+const MONTH_SNAP_DURATION_MS = 300;
+const SWIPE_COMMIT_RATIO = 0.3;
+
 function isoOf(year: number, month: number, day: number) {
-  const y = year;
   const m = String(month + 1).padStart(2, "0");
   const d = String(day).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return `${year}-${m}-${d}`;
 }
 
 function todayISO() {
@@ -49,10 +60,10 @@ function shiftCursor(cursor: MonthCursor, delta: number): MonthCursor {
 // month — no trailing next-month fill (that, and always padding to 6 rows,
 // is deferred). Row count is whatever this month actually needs (5 or 6).
 function buildGridCells(year: number, month: number): (CalendarCell | null)[] {
-  const first = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDow = new Date(year, month, 1).getDay();
   const cells: (CalendarCell | null)[] = [];
-  for (let i = 0; i < first.getDay(); i++) cells.push(null);
+  for (let i = 0; i < firstDow; i++) cells.push(null);
   for (let day = 1; day <= daysInMonth; day++) {
     cells.push({ day, iso: isoOf(year, month, day) });
   }
@@ -96,7 +107,7 @@ function DayCell({
     <button
       type="button"
       onClick={() => onSelect(cell.iso)}
-      className="flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] bg-white p-1 text-left transition-colors hover:bg-black/[0.02]"
+      className="flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] bg-white p-0.5 text-left transition-colors hover:bg-black/[0.02]"
     >
       <div className="flex shrink-0 items-center gap-1">
         <span
@@ -123,23 +134,78 @@ function DayCell({
           chip.kind === "task" ? (
             <span
               key={`t-${chip.task.id}`}
-              className="truncate rounded-full bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium leading-[15px] text-blue-700"
+              className="truncate rounded-full bg-blue-50 px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight text-blue-700"
               title={chip.task.title}
             >
-              {truncateEventTitle(chip.task.title)}
+              {chip.task.title}
             </span>
           ) : (
             <span
               key={`e-${chip.event.id}`}
-              className="truncate rounded-[4px] bg-emerald-50 px-1 py-0.5 text-[11px] font-medium leading-[15px] text-emerald-700"
+              className="truncate rounded-[4px] bg-emerald-50 px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight text-emerald-700"
               title={chip.event.title}
             >
-              {truncateEventTitle(chip.event.title)}
+              {chip.event.title}
             </span>
           ),
         )}
       </div>
     </button>
+  );
+}
+
+function MonthPanel({
+  year,
+  month,
+  tasksByDate,
+  eventsByDate,
+  onSelect,
+}: {
+  year: number;
+  month: number;
+  tasksByDate: Map<string, AppTask[]>;
+  eventsByDate: Map<string, AppEvent[]>;
+  onSelect: (iso: string) => void;
+}) {
+  const cells = useMemo(() => buildGridCells(year, month), [year, month]);
+  const weekCount = Math.ceil(cells.length / 7);
+  const today = todayISO();
+
+  return (
+    <div className="flex h-full min-w-0 flex-col">
+      <div className="grid shrink-0 grid-cols-7 border-b border-t border-black/[0.06]">
+        {WEEKDAY_LABELS.map((label, i) => (
+          <div
+            key={label}
+            className={`py-1 text-center text-[11px] font-medium ${
+              i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-500"
+            }`}
+          >
+            {label}
+          </div>
+        ))}
+      </div>
+      <div
+        className="grid min-h-0 flex-1 grid-cols-7 border-l border-black/[0.05]"
+        style={{ gridTemplateRows: `repeat(${weekCount}, 1fr)` }}
+      >
+        {cells.map((cell, i) =>
+          cell ? (
+            <DayCell
+              key={cell.iso}
+              cell={cell}
+              cellIndex={i}
+              isToday={cell.iso === today}
+              dayTasks={tasksByDate.get(cell.iso) ?? []}
+              dayEvents={eventsByDate.get(cell.iso) ?? []}
+              onSelect={onSelect}
+            />
+          ) : (
+            <div key={`blank-${i}`} className="border-b border-r border-black/[0.05] bg-gray-50/60" />
+          ),
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -162,11 +228,173 @@ export function PrivateCalendar({
 
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
   const tasksByDate = useMemo(() => groupTasksByDate(tasks), [tasks]);
-  const cells = useMemo(() => buildGridCells(cursor.year, cursor.month), [cursor]);
-  const weekCount = Math.ceil(cells.length / 7);
-  const today = todayISO();
+  // Three panels — previous / current / next — form the swipeable track,
+  // same pattern as elsewhere in this codebase (real-time drag via a
+  // directly-mutated transform, then an eased release).
+  const panels = useMemo(
+    () => [shiftCursor(cursor, -1), cursor, shiftCursor(cursor, 1)],
+    [cursor],
+  );
 
-  const monthLabel = `${cursor.year}年${cursor.month + 1}月`;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const cancelAnimRef = useRef<(() => void) | null>(null);
+  const suppressClickRef = useRef(false);
+
+  const getWidth = useCallback(() => containerRef.current?.clientWidth || 0, []);
+
+  const resetTransformInstant = useCallback(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    track.style.transition = "none";
+    track.style.transform = `translateX(${-getWidth()}px)`;
+  }, [getWidth]);
+
+  // Re-center on the (possibly new) current month whenever it changes —
+  // runs before paint, so the swap from the animation's end position to
+  // this resting position is never visible.
+  useLayoutEffect(() => {
+    resetTransformInstant();
+  }, [cursor, resetTransformInstant]);
+
+  useLayoutEffect(() => {
+    window.addEventListener("resize", resetTransformInstant);
+    return () => window.removeEventListener("resize", resetTransformInstant);
+  }, [resetTransformInstant]);
+
+  const animateTrackTo = useCallback(
+    (fromPx: number, targetPx: number, onDone: (() => void) | null) => {
+      cancelAnimRef.current?.();
+      cancelAnimRef.current = null;
+      const track = trackRef.current;
+      if (!track) {
+        onDone?.();
+        return;
+      }
+      const delta = targetPx - fromPx;
+      if (Math.abs(delta) < 0.5) {
+        track.style.transition = "none";
+        track.style.transform = `translateX(${targetPx}px)`;
+        onDone?.();
+        return;
+      }
+      const startTime = performance.now();
+      let cancelled = false;
+      const step = (now: number) => {
+        if (cancelled) return;
+        const progress = Math.min(1, (now - startTime) / MONTH_SNAP_DURATION_MS);
+        track.style.transform = `translateX(${fromPx + delta * MONTH_SNAP_EASING(progress)}px)`;
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          cancelAnimRef.current = null;
+          onDone?.();
+        }
+      };
+      track.style.transition = "none";
+      cancelAnimRef.current = () => {
+        cancelled = true;
+      };
+      requestAnimationFrame(step);
+    },
+    [],
+  );
+
+  // Swipe: real-time 1:1 finger-follow via a directly-mutated transform (no
+  // native scrolling involved), then an eased release into place. Confirmed
+  // horizontal drags call preventDefault so a diagonal swipe never turns
+  // into a vertical page scroll — touch-action: pan-x and
+  // overscroll-behavior: contain below back that up at the CSS level.
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const track = trackRef.current;
+    if (!container || !track) return;
+
+    let startX = 0;
+    let startY = 0;
+    let dragging = false;
+    let confirmed = false;
+    let currentDx = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      cancelAnimRef.current?.();
+      cancelAnimRef.current = null;
+      startX = e.touches[0]?.clientX ?? 0;
+      startY = e.touches[0]?.clientY ?? 0;
+      dragging = true;
+      confirmed = false;
+      currentDx = 0;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!dragging) return;
+      const x = e.touches[0]?.clientX ?? 0;
+      const y = e.touches[0]?.clientY ?? 0;
+      const dx = x - startX;
+      const dy = y - startY;
+
+      if (!confirmed) {
+        if (Math.abs(dx) <= 2 && Math.abs(dy) <= 2) return;
+        if (Math.abs(dx) < Math.abs(dy)) {
+          // Vertical intent — not ours; let the page handle it normally.
+          dragging = false;
+          return;
+        }
+        confirmed = true;
+        suppressClickRef.current = true;
+      }
+
+      currentDx = dx;
+      e.preventDefault();
+      track.style.transition = "none";
+      track.style.transform = `translateX(${-getWidth() + dx}px)`;
+    };
+
+    const onTouchEnd = () => {
+      if (!dragging) return;
+      dragging = false;
+      if (!confirmed) return;
+
+      const w = getWidth();
+      const threshold = Math.max(40, w * SWIPE_COMMIT_RATIO);
+      const fromPx = -w + currentDx;
+
+      if (Math.abs(currentDx) >= threshold) {
+        const dir: 1 | -1 = currentDx < 0 ? 1 : -1;
+        animateTrackTo(fromPx, dir === 1 ? -2 * w : 0, () => {
+          setCursor((prev) => shiftCursor(prev, dir));
+        });
+      } else {
+        animateTrackTo(fromPx, -w, null);
+      }
+
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, MONTH_SNAP_DURATION_MS + 50);
+    };
+
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: false });
+    container.addEventListener("touchend", onTouchEnd, { passive: true });
+    container.addEventListener("touchcancel", onTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
+      container.removeEventListener("touchend", onTouchEnd);
+      container.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [getWidth, animateTrackTo]);
+
+  const handleDaySelect = useCallback((iso: string) => {
+    if (suppressClickRef.current) return;
+    setSelectedDate(iso);
+  }, []);
+
+  const goToToday = useCallback(() => {
+    const d = new Date();
+    setCursor({ year: d.getFullYear(), month: d.getMonth() });
+  }, []);
 
   const selectedDayEvents = selectedDate ? eventsByDate.get(selectedDate) ?? [] : [];
   const selectedDayTasks = selectedDate ? tasksByDate.get(selectedDate) ?? [] : [];
@@ -198,52 +426,37 @@ export function PrivateCalendar({
           >
             <ChevronRightIcon className="h-4 w-4" />
           </button>
-          <span className="text-[15px] font-semibold text-gray-900">{monthLabel}</span>
+          <span className="text-[15px] font-semibold text-gray-900">
+            {cursor.year}年{cursor.month + 1}月
+          </span>
         </div>
         <button
           type="button"
-          onClick={() => {
-            const d = new Date();
-            setCursor({ year: d.getFullYear(), month: d.getMonth() });
-          }}
+          onClick={goToToday}
           className="rounded-lg px-2 py-0.5 text-[13px] font-medium text-[var(--gyokan-accent2)] hover:bg-blue-50"
         >
           今日
         </button>
       </div>
 
-      <div className="grid shrink-0 grid-cols-7 border-b border-t border-black/[0.06]">
-        {WEEKDAY_LABELS.map((label, i) => (
-          <div
-            key={label}
-            className={`py-1 text-center text-[11px] font-medium ${
-              i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-500"
-            }`}
-          >
-            {label}
-          </div>
-        ))}
-      </div>
-
       <div
-        className="grid min-h-0 flex-1 grid-cols-7 border-l border-black/[0.05]"
-        style={{ gridTemplateRows: `repeat(${weekCount}, 1fr)` }}
+        ref={containerRef}
+        className="relative min-h-0 flex-1 overflow-hidden"
+        style={{ touchAction: "pan-x", overscrollBehavior: "contain" }}
       >
-        {cells.map((cell, i) =>
-          cell ? (
-            <DayCell
-              key={cell.iso}
-              cell={cell}
-              cellIndex={i}
-              isToday={cell.iso === today}
-              dayTasks={tasksByDate.get(cell.iso) ?? []}
-              dayEvents={eventsByDate.get(cell.iso) ?? []}
-              onSelect={setSelectedDate}
-            />
-          ) : (
-            <div key={`blank-${i}`} className="border-b border-r border-black/[0.05] bg-gray-50/60" />
-          ),
-        )}
+        <div ref={trackRef} className="flex h-full" style={{ width: "300%" }}>
+          {panels.map((p, i) => (
+            <div key={i} className="h-full shrink-0" style={{ width: `${100 / 3}%` }}>
+              <MonthPanel
+                year={p.year}
+                month={p.month}
+                tasksByDate={tasksByDate}
+                eventsByDate={eventsByDate}
+                onSelect={handleDaySelect}
+              />
+            </div>
+          ))}
+        </div>
       </div>
 
       {selectedDate && (

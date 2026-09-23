@@ -162,7 +162,9 @@ export function DayEventPopup({
       <div
         ref={sheetRef}
         onClick={(e) => e.stopPropagation()}
-        className="flex h-[50vh] w-full flex-col overflow-hidden rounded-t-2xl bg-[#fafafa] shadow-2xl sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-2xl"
+        className={`flex w-full flex-col overflow-hidden rounded-t-2xl bg-[#fafafa] shadow-2xl sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-2xl ${
+          view === "add" ? "h-[70vh]" : "h-[50vh]"
+        }`}
       >
         <div
           className="flex shrink-0 flex-col items-center pb-1 pt-2 sm:hidden"
