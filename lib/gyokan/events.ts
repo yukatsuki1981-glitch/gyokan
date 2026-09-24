@@ -29,9 +29,11 @@ export function applyTimeToTimestamp(referenceTimestamp: string, hhmm: string): 
 
 const EVENT_TITLE_CHARS = 4;
 
+// Plain character truncation, no "…" — the day-cell chips are narrow enough
+// that appending an ellipsis glyph ate into the 4-character budget and only
+// ~3 characters actually stayed visible. Just cut at the character count.
 export function truncateEventTitle(title: string, max = EVENT_TITLE_CHARS): string {
-  if (title.length <= max) return title;
-  return `${title.slice(0, max)}…`;
+  return title.slice(0, max);
 }
 
 export function sortEventsByOrder(events: AppEvent[]): AppEvent[] {

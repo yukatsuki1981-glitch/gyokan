@@ -2,7 +2,7 @@
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
-import { groupEventsByDate } from "@/lib/gyokan/events";
+import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { DayEventPopup } from "./DayEventPopup";
@@ -99,12 +99,10 @@ function DayCell({
   const dayOfWeek = cellIndex % 7;
   const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cell.iso) : null;
 
-  const chips: DayChip[] = cell.inMonth
-    ? [
-        ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
-        ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
-      ]
-    : [];
+  const chips: DayChip[] = [
+    ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
+    ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
+  ];
   const preview = chips.slice(0, CHIP_PREVIEW_MAX);
   const overflow = chips.length > CHIP_PREVIEW_MAX ? chips.length - CHIP_PREVIEW_MAX : 0;
 
@@ -151,18 +149,22 @@ function DayCell({
           chip.kind === "task" ? (
             <span
               key={`t-${chip.task.id}`}
-              className="truncate rounded-full bg-blue-50 px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight text-blue-700"
+              className={`truncate rounded-full px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight ${
+                cell.inMonth ? "bg-blue-50 text-blue-700" : "bg-blue-50/40 text-blue-300"
+              }`}
               title={chip.task.title}
             >
-              {chip.task.title}
+              {truncateEventTitle(chip.task.title)}
             </span>
           ) : (
             <span
               key={`e-${chip.event.id}`}
-              className="truncate rounded-[4px] bg-emerald-50 px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight text-emerald-700"
+              className={`truncate rounded-[4px] px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight ${
+                cell.inMonth ? "bg-emerald-50 text-emerald-700" : "bg-emerald-50/40 text-emerald-300"
+              }`}
               title={chip.event.title}
             >
-              {chip.event.title}
+              {truncateEventTitle(chip.event.title)}
             </span>
           ),
         )}
