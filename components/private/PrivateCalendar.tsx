@@ -144,12 +144,12 @@ function DayCell({
       </div>
       {dayInfo && (
         <span
-          className={`mt-0.5 shrink-0 truncate px-0.5 text-[7px] leading-[9px] tracking-tight ${
+          className={`mt-0.5 shrink-0 truncate px-0.5 text-[8.4px] leading-[10px] tracking-tight ${
             dayInfo.kind === "holiday" ? "font-medium text-rose-600" : "font-medium text-gray-500"
           }`}
           title={dayInfo.label}
         >
-          {dayInfo.label}
+          {dayInfo.label.slice(0, 5)}
         </span>
       )}
       <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
