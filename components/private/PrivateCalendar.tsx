@@ -195,10 +195,10 @@ function MonthPanel({
   eventsByDate,
   onSelect,
   onToday,
-  rowHeightPx,
+  availableHeightPx,
   headerRef,
   weekdayRef,
-  gridWrapRef,
+  gridRef,
 }: {
   year: number;
   month: number;
@@ -206,25 +206,27 @@ function MonthPanel({
   eventsByDate: Map<string, AppEvent[]>;
   onSelect: (iso: string) => void;
   onToday: () => void;
-  // Fixed per-row height in px, derived from the available space divided by
-  // 6 — a stable unit independent of this particular month's own row count.
-  // null until the first measurement lands (initial mount), during which the
-  // grid falls back to filling available space so there's no flash of a
-  // zero-height grid.
-  rowHeightPx: number | null;
+  // Total pixel budget for the day-grid area — constant across every month
+  // and every panel (it's just "however much vertical space is left below
+  // the header/weekday row"). Each panel divides this by its OWN row count,
+  // so a 5-row month gets taller rows than a 6-row one instead of leaving
+  // blank space below a shorter grid. null until the first measurement
+  // lands, during which the grid falls back to filling available space with
+  // 1fr rows so there's no flash of a zero-height grid.
+  availableHeightPx: number | null;
   headerRef?: Ref<HTMLDivElement>;
   weekdayRef?: Ref<HTMLDivElement>;
   // Provided only for the centered ("current") panel: when set, this panel's
-  // clip-wrapper height is owned entirely by PrivateCalendar's imperative
-  // rAF animation (see there for why a plain CSS transition isn't reliable
-  // for a same-node height change driven by a synchronous React re-render),
-  // so no height is set declaratively here for it.
-  gridWrapRef?: Ref<HTMLDivElement>;
+  // inner grid's row height/grid-template-rows is owned entirely by
+  // PrivateCalendar's imperative rAF animation (see there for why a plain
+  // CSS transition isn't reliable for a same-node style change driven by a
+  // synchronous React re-render), so no height is set declaratively here.
+  gridRef?: Ref<HTMLDivElement>;
 }) {
   const cells = useMemo(() => buildGridCells(year, month), [year, month]);
   const rows = cells.length / 7;
   const today = todayISO();
-  const gridHeightPx = rowHeightPx != null ? rows * rowHeightPx : null;
+  const rowHeightPx = availableHeightPx != null ? availableHeightPx / rows : null;
 
   return (
     <div className="flex min-h-0 flex-1 min-w-0 flex-col">
@@ -263,18 +265,19 @@ function MonthPanel({
           </div>
         ))}
       </div>
-      <div
-        ref={gridWrapRef}
-        className={gridHeightPx != null ? "shrink-0 overflow-hidden" : "min-h-0 flex-1 overflow-hidden"}
-        style={gridWrapRef ? undefined : gridHeightPx != null ? { height: gridHeightPx } : undefined}
-      >
+      <div className="min-h-0 flex-1 overflow-hidden">
         <div
+          ref={gridRef}
           className="grid grid-cols-7 border-l border-black/[0.05]"
-          style={{
-            height: gridHeightPx ?? "100%",
-            gridTemplateRows:
-              rowHeightPx != null ? `repeat(${rows}, ${rowHeightPx}px)` : `repeat(${rows}, 1fr)`,
-          }}
+          style={
+            gridRef
+              ? undefined
+              : {
+                  height: rowHeightPx != null ? rows * rowHeightPx : "100%",
+                  gridTemplateRows:
+                    rowHeightPx != null ? `repeat(${rows}, ${rowHeightPx}px)` : `repeat(${rows}, 1fr)`,
+                }
+          }
         >
           {cells.map((cell, i) => (
             <DayCell
@@ -334,15 +337,15 @@ export function PrivateCalendar({
   const cancelAnimRef = useRef<(() => void) | null>(null);
   const suppressClickRef = useRef(false);
 
-  // Fixed per-row height (px), derived once from the space available for a
-  // 6-row month and re-derived on resize. Using a stable unit — rather than
-  // always dividing the available height by *this* month's own row count —
-  // is what lets a 5-row month be genuinely shorter than a 6-row one instead
-  // of always stretching to fill the screen, which is what makes the
-  // 5-row/6-row height change (animated in MonthPanel) visible at all.
+  // Total pixel budget for the day-grid area (space below the header/weekday
+  // row), re-derived on resize. This is constant across every month — it's
+  // *this* that lets the calendar always fill header-to-footer regardless of
+  // row count; each panel then divides it by its own row count for that
+  // month's per-row height, so a 5-row month gets taller rows rather than
+  // leaving blank space below a shorter grid.
   const headerRef = useRef<HTMLDivElement>(null);
   const weekdayRef = useRef<HTMLDivElement>(null);
-  const [rowHeightPx, setRowHeightPx] = useState<number | null>(null);
+  const [availableHeightPx, setAvailableHeightPx] = useState<number | null>(null);
 
   const getWidth = useCallback(() => containerRef.current?.clientWidth || 0, []);
 
@@ -353,7 +356,7 @@ export function PrivateCalendar({
       const headerH = headerRef.current?.getBoundingClientRect().height ?? 0;
       const weekdayH = weekdayRef.current?.getBoundingClientRect().height ?? 0;
       const available = container.clientHeight - headerH - weekdayH;
-      if (available > 0) setRowHeightPx(available / 6);
+      if (available > 0) setAvailableHeightPx(available);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -361,51 +364,60 @@ export function PrivateCalendar({
     return () => ro.disconnect();
   }, []);
 
-  // Animates the centered panel's grid height across a 5↔6-row switch. A
-  // plain CSS transition on this same-node height style is unreliable here —
-  // the value changes synchronously inside React's own re-render (triggered
-  // by setCursor), which can land in the same paint as the old value with no
-  // separate frame for the browser to transition from — so this drives the
-  // height manually with the same rAF+easing approach already used for the
-  // swipe track above. Swipe-driven cursor changes set suppressGridAnimRef
-  // first: by the time the swipe animation finishes, the destination panel's
-  // true height was already progressively revealed during the drag itself
-  // (each panel always renders at its own natural rows*rowHeightPx), so
-  // animating again here would visually shrink-then-regrow it — instant, not
-  // animated, is correct for that case.
-  const gridWrapRef = useRef<HTMLDivElement>(null);
+  // Animates the centered panel's per-row height across a 5↔6-row switch. A
+  // plain CSS transition on this same-node style is unreliable here — the
+  // value changes synchronously inside React's own re-render (triggered by
+  // setCursor), which can land in the same paint as the old value with no
+  // separate frame for the browser to transition from — so this drives it
+  // manually with the same rAF+easing approach already used for the swipe
+  // track above. The grid keeps rendering at the new month's own row count
+  // throughout (rows don't interpolate, only the px height per row does),
+  // so a 6th row growing in (or shrinking away) slides smoothly into/out of
+  // view as it crosses the fixed-height clipping wrapper's edge. Swipe-
+  // driven cursor changes set suppressGridAnimRef first: by the time the
+  // swipe animation finishes, the destination panel's true row height was
+  // already progressively revealed during the drag itself (each panel
+  // always renders at its own natural availableHeightPx/rows), so animating
+  // again here would visually snap-then-redo it — instant, not animated, is
+  // correct for that case.
+  const gridRef = useRef<HTMLDivElement>(null);
   const prevRowsRef = useRef<number | null>(null);
   const gridAnimCancelRef = useRef<(() => void) | null>(null);
   const suppressGridAnimRef = useRef(false);
 
   useLayoutEffect(() => {
-    const el = gridWrapRef.current;
-    if (!el || rowHeightPx == null) return;
+    const el = gridRef.current;
+    if (!el || availableHeightPx == null) return;
 
     const newRows = buildGridCells(cursor.year, cursor.month).length / 7;
-    const targetH = newRows * rowHeightPx;
+    const targetRowH = availableHeightPx / newRows;
     const prevRows = prevRowsRef.current;
     prevRowsRef.current = newRows;
 
     gridAnimCancelRef.current?.();
     gridAnimCancelRef.current = null;
 
+    const applyRowHeight = (rowH: number) => {
+      el.style.gridTemplateRows = `repeat(${newRows}, ${rowH}px)`;
+      el.style.height = `${newRows * rowH}px`;
+    };
+
     const skipAnim = suppressGridAnimRef.current;
     suppressGridAnimRef.current = false;
 
     if (skipAnim || prevRows == null || prevRows === newRows) {
-      el.style.height = `${targetH}px`;
+      applyRowHeight(targetRowH);
       return;
     }
 
-    const fromH = prevRows * rowHeightPx;
-    el.style.height = `${fromH}px`;
+    const fromRowH = availableHeightPx / prevRows;
+    applyRowHeight(fromRowH);
     const startTime = performance.now();
     let cancelled = false;
     const step = (now: number) => {
       if (cancelled) return;
       const progress = Math.min(1, (now - startTime) / MONTH_SNAP_DURATION_MS);
-      el.style.height = `${fromH + (targetH - fromH) * MONTH_SNAP_EASING(progress)}px`;
+      applyRowHeight(fromRowH + (targetRowH - fromRowH) * MONTH_SNAP_EASING(progress));
       if (progress < 1) {
         requestAnimationFrame(step);
       } else {
@@ -416,7 +428,7 @@ export function PrivateCalendar({
       cancelled = true;
     };
     requestAnimationFrame(step);
-  }, [cursor, rowHeightPx]);
+  }, [cursor, availableHeightPx]);
 
   const resetTransformInstant = useCallback(() => {
     const track = trackRef.current;
@@ -599,10 +611,10 @@ export function PrivateCalendar({
                 eventsByDate={eventsByDate}
                 onSelect={handleDaySelect}
                 onToday={goToToday}
-                rowHeightPx={rowHeightPx}
+                availableHeightPx={availableHeightPx}
                 headerRef={i === 1 ? headerRef : undefined}
                 weekdayRef={i === 1 ? weekdayRef : undefined}
-                gridWrapRef={i === 1 ? gridWrapRef : undefined}
+                gridRef={i === 1 ? gridRef : undefined}
               />
             </div>
           ))}
