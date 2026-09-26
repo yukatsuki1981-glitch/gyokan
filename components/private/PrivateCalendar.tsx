@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type Ref } from "react";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
@@ -27,7 +27,10 @@ type MonthCursor = { year: number; month: number };
 type CalendarCell = { day: number; iso: string; inMonth: boolean };
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+// A holiday/commemorative-day label occupies one of the day cell's display
+// slots, so days that have one get one fewer task/event preview slot.
 const CHIP_PREVIEW_MAX = 4;
+const CHIP_PREVIEW_MAX_WITH_DAY_LABEL = 3;
 
 // Release-animation tuning for the month swipe — same ease-out deceleration
 // curve/duration used elsewhere in this codebase (the day-popup swipe-
@@ -56,9 +59,10 @@ function shiftCursor(cursor: MonthCursor, delta: number): MonthCursor {
   return { year: d.getFullYear(), month: d.getMonth() };
 }
 
-// Always exactly 42 cells (6 fixed rows): leading days borrow from the
+// 35 cells (5 rows) when the month fits, 42 (6 rows) when it doesn't — same
+// rule as tasks mode's own calendar grid. Leading days borrow from the
 // previous month, trailing days from the next — both greyed via
-// cell.inMonth === false, matching the original private-calendar spec.
+// cell.inMonth === false.
 function buildGridCells(year: number, month: number): CalendarCell[] {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDow = new Date(year, month, 1).getDay();
@@ -74,7 +78,7 @@ function buildGridCells(year: number, month: number): CalendarCell[] {
     cells.push({ day, iso: isoOf(year, month, day), inMonth: true });
   }
   let nextDay = 1;
-  while (cells.length < 42) {
+  while (cells.length % 7 !== 0) {
     const d = new Date(year, month + 1, nextDay);
     cells.push({ day: nextDay, iso: isoOf(d.getFullYear(), d.getMonth(), nextDay), inMonth: false });
     nextDay++;
@@ -106,8 +110,11 @@ function DayCell({
     ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
     ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
   ];
-  const preview = chips.slice(0, CHIP_PREVIEW_MAX);
-  const overflow = chips.length > CHIP_PREVIEW_MAX ? chips.length - CHIP_PREVIEW_MAX : 0;
+  // The day-label line (holiday/commemorative-day name) counts as one of the
+  // cell's display slots, so a day that has one gets one fewer chip slot.
+  const previewMax = dayInfo ? CHIP_PREVIEW_MAX_WITH_DAY_LABEL : CHIP_PREVIEW_MAX;
+  const preview = chips.slice(0, previewMax);
+  const overflow = chips.length > previewMax ? chips.length - previewMax : 0;
 
   const numberColor = !cell.inMonth
     ? "text-gray-300"
@@ -188,6 +195,10 @@ function MonthPanel({
   eventsByDate,
   onSelect,
   onToday,
+  rowHeightPx,
+  headerRef,
+  weekdayRef,
+  gridWrapRef,
 }: {
   year: number;
   month: number;
@@ -195,13 +206,32 @@ function MonthPanel({
   eventsByDate: Map<string, AppEvent[]>;
   onSelect: (iso: string) => void;
   onToday: () => void;
+  // Fixed per-row height in px, derived from the available space divided by
+  // 6 — a stable unit independent of this particular month's own row count.
+  // null until the first measurement lands (initial mount), during which the
+  // grid falls back to filling available space so there's no flash of a
+  // zero-height grid.
+  rowHeightPx: number | null;
+  headerRef?: Ref<HTMLDivElement>;
+  weekdayRef?: Ref<HTMLDivElement>;
+  // Provided only for the centered ("current") panel: when set, this panel's
+  // clip-wrapper height is owned entirely by PrivateCalendar's imperative
+  // rAF animation (see there for why a plain CSS transition isn't reliable
+  // for a same-node height change driven by a synchronous React re-render),
+  // so no height is set declaratively here for it.
+  gridWrapRef?: Ref<HTMLDivElement>;
 }) {
   const cells = useMemo(() => buildGridCells(year, month), [year, month]);
+  const rows = cells.length / 7;
   const today = todayISO();
+  const gridHeightPx = rowHeightPx != null ? rows * rowHeightPx : null;
 
   return (
     <div className="flex min-h-0 flex-1 min-w-0 flex-col">
-      <div className="relative flex shrink-0 items-center justify-between px-3 py-1 sm:px-4">
+      <div
+        ref={headerRef}
+        className="relative flex shrink-0 items-center justify-between px-3 py-1 sm:px-4"
+      >
         <span className="text-[15px] font-semibold text-gray-900">
           {year}年{month + 1}月
         </span>
@@ -218,7 +248,10 @@ function MonthPanel({
         </span>
       </div>
 
-      <div className="grid shrink-0 grid-cols-7 border-b border-t border-black/[0.06]">
+      <div
+        ref={weekdayRef}
+        className="grid shrink-0 grid-cols-7 border-b border-t border-black/[0.06]"
+      >
         {WEEKDAY_LABELS.map((label, i) => (
           <div
             key={label}
@@ -231,20 +264,30 @@ function MonthPanel({
         ))}
       </div>
       <div
-        className="grid min-h-0 flex-1 grid-cols-7 border-l border-black/[0.05]"
-        style={{ gridTemplateRows: "repeat(6, 1fr)" }}
+        ref={gridWrapRef}
+        className={gridHeightPx != null ? "shrink-0 overflow-hidden" : "min-h-0 flex-1 overflow-hidden"}
+        style={gridWrapRef ? undefined : gridHeightPx != null ? { height: gridHeightPx } : undefined}
       >
-        {cells.map((cell, i) => (
-          <DayCell
-            key={`${cell.iso}-${i}`}
-            cell={cell}
-            cellIndex={i}
-            isToday={cell.inMonth && cell.iso === today}
-            dayTasks={tasksByDate.get(cell.iso) ?? []}
-            dayEvents={eventsByDate.get(cell.iso) ?? []}
-            onSelect={onSelect}
-          />
-        ))}
+        <div
+          className="grid grid-cols-7 border-l border-black/[0.05]"
+          style={{
+            height: gridHeightPx ?? "100%",
+            gridTemplateRows:
+              rowHeightPx != null ? `repeat(${rows}, ${rowHeightPx}px)` : `repeat(${rows}, 1fr)`,
+          }}
+        >
+          {cells.map((cell, i) => (
+            <DayCell
+              key={`${cell.iso}-${i}`}
+              cell={cell}
+              cellIndex={i}
+              isToday={cell.inMonth && cell.iso === today}
+              dayTasks={tasksByDate.get(cell.iso) ?? []}
+              dayEvents={eventsByDate.get(cell.iso) ?? []}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -254,11 +297,20 @@ export function PrivateCalendar({
   events,
   tasks,
   onAddEvent,
+  onUpdateEvent,
+  onDeleteEvent,
+  onReplaceEvents,
   onToggleTask,
 }: {
   events: AppEvent[];
   tasks: AppTask[];
   onAddEvent: (data: { title: string; startTime: string; endTime?: string | null; memo?: string }) => void;
+  onUpdateEvent: (
+    id: string,
+    patch: { title: string; startTime: string; endTime?: string | null; memo?: string },
+  ) => void;
+  onDeleteEvent: (id: string) => void;
+  onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
   onToggleTask: (id: string) => void;
 }) {
   const [cursor, setCursor] = useState<MonthCursor>(() => {
@@ -282,7 +334,89 @@ export function PrivateCalendar({
   const cancelAnimRef = useRef<(() => void) | null>(null);
   const suppressClickRef = useRef(false);
 
+  // Fixed per-row height (px), derived once from the space available for a
+  // 6-row month and re-derived on resize. Using a stable unit — rather than
+  // always dividing the available height by *this* month's own row count —
+  // is what lets a 5-row month be genuinely shorter than a 6-row one instead
+  // of always stretching to fill the screen, which is what makes the
+  // 5-row/6-row height change (animated in MonthPanel) visible at all.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const weekdayRef = useRef<HTMLDivElement>(null);
+  const [rowHeightPx, setRowHeightPx] = useState<number | null>(null);
+
   const getWidth = useCallback(() => containerRef.current?.clientWidth || 0, []);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const measure = () => {
+      const headerH = headerRef.current?.getBoundingClientRect().height ?? 0;
+      const weekdayH = weekdayRef.current?.getBoundingClientRect().height ?? 0;
+      const available = container.clientHeight - headerH - weekdayH;
+      if (available > 0) setRowHeightPx(available / 6);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
+  // Animates the centered panel's grid height across a 5↔6-row switch. A
+  // plain CSS transition on this same-node height style is unreliable here —
+  // the value changes synchronously inside React's own re-render (triggered
+  // by setCursor), which can land in the same paint as the old value with no
+  // separate frame for the browser to transition from — so this drives the
+  // height manually with the same rAF+easing approach already used for the
+  // swipe track above. Swipe-driven cursor changes set suppressGridAnimRef
+  // first: by the time the swipe animation finishes, the destination panel's
+  // true height was already progressively revealed during the drag itself
+  // (each panel always renders at its own natural rows*rowHeightPx), so
+  // animating again here would visually shrink-then-regrow it — instant, not
+  // animated, is correct for that case.
+  const gridWrapRef = useRef<HTMLDivElement>(null);
+  const prevRowsRef = useRef<number | null>(null);
+  const gridAnimCancelRef = useRef<(() => void) | null>(null);
+  const suppressGridAnimRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const el = gridWrapRef.current;
+    if (!el || rowHeightPx == null) return;
+
+    const newRows = buildGridCells(cursor.year, cursor.month).length / 7;
+    const targetH = newRows * rowHeightPx;
+    const prevRows = prevRowsRef.current;
+    prevRowsRef.current = newRows;
+
+    gridAnimCancelRef.current?.();
+    gridAnimCancelRef.current = null;
+
+    const skipAnim = suppressGridAnimRef.current;
+    suppressGridAnimRef.current = false;
+
+    if (skipAnim || prevRows == null || prevRows === newRows) {
+      el.style.height = `${targetH}px`;
+      return;
+    }
+
+    const fromH = prevRows * rowHeightPx;
+    el.style.height = `${fromH}px`;
+    const startTime = performance.now();
+    let cancelled = false;
+    const step = (now: number) => {
+      if (cancelled) return;
+      const progress = Math.min(1, (now - startTime) / MONTH_SNAP_DURATION_MS);
+      el.style.height = `${fromH + (targetH - fromH) * MONTH_SNAP_EASING(progress)}px`;
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      } else {
+        gridAnimCancelRef.current = null;
+      }
+    };
+    gridAnimCancelRef.current = () => {
+      cancelled = true;
+    };
+    requestAnimationFrame(step);
+  }, [cursor, rowHeightPx]);
 
   const resetTransformInstant = useCallback(() => {
     const track = trackRef.current;
@@ -403,6 +537,7 @@ export function PrivateCalendar({
       if (Math.abs(currentDx) >= threshold) {
         const dir: 1 | -1 = currentDx < 0 ? 1 : -1;
         animateTrackTo(fromPx, dir === 1 ? -2 * w : 0, () => {
+          suppressGridAnimRef.current = true;
           setCursor((prev) => shiftCursor(prev, dir));
         });
       } else {
@@ -464,6 +599,10 @@ export function PrivateCalendar({
                 eventsByDate={eventsByDate}
                 onSelect={handleDaySelect}
                 onToday={goToToday}
+                rowHeightPx={rowHeightPx}
+                headerRef={i === 1 ? headerRef : undefined}
+                weekdayRef={i === 1 ? weekdayRef : undefined}
+                gridWrapRef={i === 1 ? gridWrapRef : undefined}
               />
             </div>
           ))}
@@ -478,6 +617,9 @@ export function PrivateCalendar({
           dayTasks={selectedDayTasks}
           onToggleTask={onToggleTask}
           onAddEvent={onAddEvent}
+          onUpdateEvent={onUpdateEvent}
+          onDeleteEvent={onDeleteEvent}
+          onReplaceEvents={onReplaceEvents}
           onClose={() => setSelectedDate(null)}
         />
       )}

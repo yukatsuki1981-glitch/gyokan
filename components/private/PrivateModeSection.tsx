@@ -24,7 +24,8 @@ export function PrivateModeSection({
   tasks: AppTask[];
   onToggleTask: (id: string) => void;
 }) {
-  const { authReady, dataReady, loadError, saveError, events, addEvent } = useGyokanEvents();
+  const { authReady, dataReady, loadError, saveError, events, addEvent, updateEvent, deleteEvent, replaceEvents } =
+    useGyokanEvents();
 
   const ready = authReady && dataReady;
   const privateEvents = useMemo(
@@ -58,6 +59,9 @@ export function PrivateModeSection({
             events={privateEvents}
             tasks={privateTasks}
             onAddEvent={addEvent}
+            onUpdateEvent={updateEvent}
+            onDeleteEvent={deleteEvent}
+            onReplaceEvents={replaceEvents}
             onToggleTask={onToggleTask}
           />
         </>

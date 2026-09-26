@@ -1,16 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  DndContext,
+  closestCorners,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import {
   combineLocalDateAndTime,
+  eventFieldsFromItem,
   isAllDayEvent,
+  localDateISOFromTimestamp,
   localTimeHHMMFromTimestamp,
   sortEventsByOrder,
 } from "@/lib/gyokan/events";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
-import { XIcon } from "./icons";
+import { GripIcon, TrashIcon, XIcon } from "./icons";
 
 const SHEET_DISMISS_EASING = makeCubicBezierEasing(0.22, 1, 0.36, 1);
 const SHEET_DISMISS_DURATION_MS = 260;
@@ -27,7 +47,83 @@ function timeRangeLabel(event: AppEvent): string {
   return `${start} - ${end}`;
 }
 
-type View = "list" | "add";
+// Mirrors reorderTasksInList in app/page.tsx: reorder within the visible
+// (this-day) subset, then splice the result back into the full array so
+// other days' relative order (and their sortOrder values) is untouched.
+function reorderEventsInList(
+  prev: AppEvent[],
+  visible: AppEvent[],
+  activeId: string,
+  overId: string,
+): AppEvent[] {
+  const oldIndex = visible.findIndex((e) => e.id === activeId);
+  const newIndex = visible.findIndex((e) => e.id === overId);
+  if (oldIndex === -1 || newIndex === -1) return prev;
+
+  const reordered = arrayMove(visible, oldIndex, newIndex);
+  const visibleIds = new Set(visible.map((e) => e.id));
+  let nextIdx = 0;
+  return prev.map((e) => (visibleIds.has(e.id) ? reordered[nextIdx++]! : e));
+}
+
+function SortableEventRow({
+  event,
+  onOpen,
+  onDelete,
+}: {
+  event: AppEvent;
+  onOpen: (event: AppEvent) => void;
+  onDelete: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: event.id,
+  });
+
+  return (
+    <li
+      ref={setNodeRef}
+      onClick={() => onOpen(event)}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: isDragging ? undefined : transition,
+        zIndex: isDragging ? 50 : undefined,
+      }}
+      className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 transition-colors ${
+        isDragging
+          ? "border-blue-200/60 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.12)]"
+          : "border-black/[0.04] bg-white hover:bg-black/[0.02]"
+      }`}
+    >
+      <button
+        type="button"
+        aria-label="並び替え"
+        onClick={(e) => e.stopPropagation()}
+        className="flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-gray-300 hover:text-gray-500 active:cursor-grabbing"
+        style={{ touchAction: "none" }}
+        {...attributes}
+        {...listeners}
+      >
+        <GripIcon className="h-3.5 w-3.5" />
+      </button>
+      <span className="h-[14px] w-[14px] shrink-0 rounded-[4px] border border-emerald-300 bg-emerald-50" />
+      <span className="min-w-0 flex-1 truncate text-[13px] text-gray-800">{event.title}</span>
+      <span className="shrink-0 text-[11px] text-gray-400">{timeRangeLabel(event)}</span>
+      <button
+        type="button"
+        aria-label="削除"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(event.id);
+        }}
+        className="shrink-0 rounded-md p-1 text-gray-300 hover:bg-rose-50 hover:text-rose-500"
+      >
+        <TrashIcon className="h-3 w-3" />
+      </button>
+    </li>
+  );
+}
+
+type View = "list" | "add" | "edit";
 
 export function DayEventPopup({
   dateISO,
@@ -36,6 +132,9 @@ export function DayEventPopup({
   dayTasks,
   onToggleTask,
   onAddEvent,
+  onUpdateEvent,
+  onDeleteEvent,
+  onReplaceEvents,
   onClose,
 }: {
   dateISO: string;
@@ -44,14 +143,39 @@ export function DayEventPopup({
   dayTasks: AppTask[];
   onToggleTask: (id: string) => void;
   onAddEvent: (data: { title: string; startTime: string; endTime?: string | null; memo?: string }) => void;
+  onUpdateEvent: (
+    id: string,
+    patch: { title: string; startTime: string; endTime?: string | null; memo?: string },
+  ) => void;
+  onDeleteEvent: (id: string) => void;
+  onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
   onClose: () => void;
 }) {
   const [view, setView] = useState<View>(() => (dayEvents.length === 0 ? "add" : "list"));
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [allDay, setAllDay] = useState(false);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("");
   const [memo, setMemo] = useState("");
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 10 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleEventDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      onReplaceEvents((prev) => {
+        const visible = prev.filter((e) => localDateISOFromTimestamp(e.startTime) === dateISO);
+        return reorderEventsInList(prev, visible, String(active.id), String(over.id));
+      });
+    },
+    [dateISO, onReplaceEvents],
+  );
 
   const sheetRef = useRef<HTMLDivElement>(null);
   const dragStartYRef = useRef(0);
@@ -142,24 +266,58 @@ export function DayEventPopup({
     };
   }, []);
 
-  const handleAdd = () => {
+  const resetForm = () => {
+    setTitle("");
+    setAllDay(false);
+    setStartTime("09:00");
+    setEndTime("");
+    setMemo("");
+    setEditingId(null);
+  };
+
+  const openAdd = () => {
+    resetForm();
+    setView("add");
+  };
+
+  const openEdit = (event: AppEvent) => {
+    const fields = eventFieldsFromItem(event);
+    setTitle(fields.title);
+    setAllDay(fields.allDay);
+    setStartTime(fields.startTime || "09:00");
+    setEndTime(fields.endTime);
+    setMemo(fields.memo);
+    setEditingId(event.id);
+    setView("edit");
+  };
+
+  const handleSave = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    onAddEvent(
-      allDay
-        ? {
-            title: trimmed,
-            startTime: combineLocalDateAndTime(dateISO, "00:00"),
-            endTime: null,
-            memo: memo.trim() || undefined,
-          }
-        : {
-            title: trimmed,
-            startTime: combineLocalDateAndTime(dateISO, startTime),
-            endTime: endTime ? combineLocalDateAndTime(dateISO, endTime) : null,
-            memo: memo.trim() || undefined,
-          },
-    );
+    const payload = allDay
+      ? {
+          title: trimmed,
+          startTime: combineLocalDateAndTime(dateISO, "00:00"),
+          endTime: null,
+          memo: memo.trim() || undefined,
+        }
+      : {
+          title: trimmed,
+          startTime: combineLocalDateAndTime(dateISO, startTime),
+          endTime: endTime ? combineLocalDateAndTime(dateISO, endTime) : null,
+          memo: memo.trim() || undefined,
+        };
+    if (view === "edit" && editingId) {
+      onUpdateEvent(editingId, payload);
+    } else {
+      onAddEvent(payload);
+    }
+    onClose();
+  };
+
+  const handleDeleteEditing = () => {
+    if (!editingId) return;
+    onDeleteEvent(editingId);
     onClose();
   };
 
@@ -175,7 +333,7 @@ export function DayEventPopup({
         ref={sheetRef}
         onClick={(e) => e.stopPropagation()}
         className={`flex w-full flex-col overflow-hidden rounded-t-2xl bg-[#fafafa] shadow-2xl sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-2xl ${
-          view === "add" ? "h-[95vh]" : "h-[50vh]"
+          view === "add" || view === "edit" ? "h-[95vh]" : "h-[50vh]"
         }`}
       >
         <div
@@ -207,22 +365,27 @@ export function DayEventPopup({
                 {sortedEvents.length === 0 ? (
                   <p className="text-[12px] text-gray-300">予定はありません</p>
                 ) : (
-                  <ul className="flex flex-col gap-1.5">
-                    {sortedEvents.map((event) => (
-                      <li
-                        key={event.id}
-                        className="flex items-center gap-2 rounded-xl border border-black/[0.04] bg-white px-3 py-2"
-                      >
-                        <span className="h-[14px] w-[14px] shrink-0 rounded-[4px] border border-emerald-300 bg-emerald-50" />
-                        <span className="min-w-0 flex-1 truncate text-[13px] text-gray-800">
-                          {event.title}
-                        </span>
-                        <span className="shrink-0 text-[11px] text-gray-400">
-                          {timeRangeLabel(event)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCorners}
+                    onDragEnd={handleEventDragEnd}
+                  >
+                    <SortableContext
+                      items={sortedEvents.map((e) => e.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <ul className="flex flex-col gap-1.5">
+                        {sortedEvents.map((event) => (
+                          <SortableEventRow
+                            key={event.id}
+                            event={event}
+                            onOpen={openEdit}
+                            onDelete={onDeleteEvent}
+                          />
+                        ))}
+                      </ul>
+                    </SortableContext>
+                  </DndContext>
                 )}
               </section>
 
@@ -255,7 +418,7 @@ export function DayEventPopup({
 
               <button
                 type="button"
-                onClick={() => setView("add")}
+                onClick={openAdd}
                 className="w-full rounded-xl border border-dashed border-black/[0.1] py-2.5 text-[13px] font-medium text-[var(--gyokan-accent2)] hover:bg-blue-50"
               >
                 ＋ 予定を追加
@@ -263,6 +426,9 @@ export function DayEventPopup({
             </>
           ) : (
             <div className="flex flex-col gap-3">
+              <p className="text-[11px] font-medium text-gray-400">
+                {view === "edit" ? "予定を編集" : "予定を追加"}
+              </p>
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-medium text-gray-400">タイトル</span>
                 <input
@@ -326,7 +492,17 @@ export function DayEventPopup({
                 />
               </label>
               <div className="flex gap-2 pt-1">
-                {sortedEvents.length + sortedTasks.length > 0 && (
+                {view === "edit" && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteEditing}
+                    aria-label="削除"
+                    className="rounded-xl border border-black/[0.08] px-3 py-2.5 text-rose-500 hover:bg-rose-50"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </button>
+                )}
+                {(view === "edit" || sortedEvents.length + sortedTasks.length > 0) && (
                   <button
                     type="button"
                     onClick={() => setView("list")}
@@ -337,7 +513,7 @@ export function DayEventPopup({
                 )}
                 <button
                   type="button"
-                  onClick={handleAdd}
+                  onClick={handleSave}
                   disabled={!title.trim()}
                   className="flex-1 rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
                 >
