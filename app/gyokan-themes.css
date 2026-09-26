@@ -68,7 +68,7 @@ html[data-theme="marine"] {
   --gyokan-accent2: #2E8FA3;
   --gyokan-accent-lt: #DEF0F2;
   --gyokan-highlight: #E97A5C;
-  --gyokan-font-display: var(--font-zen-maru-gothic), sans-serif;
+  --gyokan-font-display: var(--font-zen-maru-gothic, sans-serif), sans-serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
   --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
@@ -84,7 +84,7 @@ html[data-theme="sakura"] {
   --gyokan-accent2: #D98A9C;
   --gyokan-accent-lt: #FBE6EA;
   --gyokan-highlight: #D98A9C;
-  --gyokan-font-display: var(--font-zen-maru-gothic), sans-serif;
+  --gyokan-font-display: var(--font-zen-maru-gothic, sans-serif), sans-serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
   --gyokan-font-mono: var(--font-dm-mono), monospace;
 }

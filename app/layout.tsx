@@ -3,11 +3,9 @@ import {
   DM_Mono,
   Geist,
   Geist_Mono,
-  Klee_One,
   Noto_Sans_JP,
   Noto_Serif_JP,
   Shippori_Mincho_B1,
-  Zen_Maru_Gothic,
 } from "next/font/google";
 import { PRODUCTION_SITE_URL } from "@/lib/site-url";
 import { DEFAULT_THEME_ID, GYOKAN_THEMES, GYOKAN_THEME_STORAGE_KEY } from "@/lib/gyokan/themes";
@@ -27,18 +25,21 @@ const notoSansJP = Noto_Sans_JP({
   variable: "--font-noto-sans-jp",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
+  preload: false,
 });
 
 const notoSerifJP = Noto_Serif_JP({
   variable: "--font-noto-serif-jp",
   subsets: ["latin"],
   weight: ["400", "600", "700"],
+  preload: false,
 });
 
 const shipporiMincho = Shippori_Mincho_B1({
   variable: "--font-shippori-mincho",
   subsets: ["latin"],
   weight: ["400", "600", "700"],
+  preload: false,
 });
 
 const dmMono = DM_Mono({
@@ -47,18 +48,10 @@ const dmMono = DM_Mono({
   weight: ["400", "500"],
 });
 
-const zenMaruGothic = Zen_Maru_Gothic({
-  variable: "--font-zen-maru-gothic",
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-});
-
-const kleeOne = Klee_One({
-  variable: "--font-klee-one",
-  subsets: ["latin"],
-  weight: ["400", "600"],
-});
-
+// Zen Maru Gothic (marine/sakura themes only) and Klee One (diary route only)
+// are intentionally not loaded here — see components/zen-maru-gothic-loader.tsx
+// and app/diary/layout.tsx. Loading them globally cost every visitor ~460KB of
+// unused CJK font-face CSS regardless of theme or route.
 const fontVariables = [
   geistSans.variable,
   geistMono.variable,
@@ -66,8 +59,6 @@ const fontVariables = [
   notoSerifJP.variable,
   shipporiMincho.variable,
   dmMono.variable,
-  zenMaruGothic.variable,
-  kleeOne.variable,
 ].join(" ");
 
 export const metadata: Metadata = {

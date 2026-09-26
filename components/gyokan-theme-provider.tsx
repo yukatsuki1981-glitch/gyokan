@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import {
   createContext,
   useCallback,
@@ -28,6 +29,14 @@ type GyokanThemeContextValue = {
 };
 
 const GyokanThemeContext = createContext<GyokanThemeContextValue | null>(null);
+
+// Themes whose display font is Zen Maru Gothic (see app/gyokan-themes.css).
+// Its font is only fetched for users on one of these two themes.
+const ZEN_MARU_GOTHIC_THEME_IDS: GyokanThemeId[] = ["marine", "sakura"];
+
+const ZenMaruGothicLoader = dynamic(() => import("./zen-maru-gothic-loader"), {
+  ssr: false,
+});
 
 let themeListeners: Array<(theme: GyokanTheme) => void> = [];
 
@@ -93,6 +102,7 @@ export function GyokanThemeProvider({
 
   return (
     <GyokanThemeContext.Provider value={{ theme, themeId, isPaidMember, setThemeId }}>
+      {ZEN_MARU_GOTHIC_THEME_IDS.includes(themeId) && <ZenMaruGothicLoader />}
       {children}
     </GyokanThemeContext.Provider>
   );
