@@ -5,6 +5,7 @@ import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
+import { getRokuyou } from "@/lib/gyokan/rokuyou";
 import { DayEventPopup } from "./DayEventPopup";
 
 function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
@@ -98,6 +99,8 @@ function DayCell({
 }) {
   const dayOfWeek = cellIndex % 7;
   const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cell.iso) : null;
+  const isHoliday = dayInfo?.kind === "holiday";
+  const rokuyou = cell.inMonth ? getRokuyou(cell.iso) : null;
 
   const chips: DayChip[] = [
     ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
@@ -110,7 +113,7 @@ function DayCell({
     ? "text-gray-300"
     : isToday
       ? ""
-      : dayOfWeek === 0
+      : dayOfWeek === 0 || isHoliday
         ? "text-red-500"
         : dayOfWeek === 6
           ? "text-blue-500"
@@ -132,11 +135,16 @@ function DayCell({
         >
           {cell.day}
         </span>
+        {rokuyou && (
+          <span className="shrink-0 truncate text-[7px] font-medium leading-none text-gray-400">
+            {rokuyou}
+          </span>
+        )}
         {overflow > 0 && <span className="text-[11px] font-medium text-gray-400">+{overflow}</span>}
       </div>
       {dayInfo && (
         <span
-          className={`mt-0.5 shrink-0 truncate px-0.5 text-[9px] leading-[11px] ${
+          className={`mt-0.5 shrink-0 truncate px-0.5 text-[7px] leading-[9px] tracking-tight ${
             dayInfo.kind === "holiday" ? "font-medium text-rose-600" : "font-medium text-gray-500"
           }`}
           title={dayInfo.label}
