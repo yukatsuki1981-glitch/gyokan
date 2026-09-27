@@ -1281,6 +1281,87 @@ function useBackgroundScrollLock(open: boolean, rootRef: RefObject<HTMLElement |
   }, [open, rootRef]);
 }
 
+/** Can this element still scroll vertically in the direction the finger is
+ * dragging? delta > 0 means the finger moved down, which scrolls content
+ * back up, so it needs room above. */
+function canScrollInDirection(el: HTMLElement, delta: number) {
+  if (el.scrollHeight <= el.clientHeight) return false;
+  return delta > 0 ? el.scrollTop > 0 : el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+}
+
+/** Walks target -> boundary looking for something that can absorb this
+ * drag, mirroring how the browser chains a touch-scroll outward through
+ * nested scrollers. */
+function findScrollableForGesture(
+  target: EventTarget | null,
+  delta: number,
+  boundary: HTMLElement,
+): HTMLElement | null {
+  let node = target instanceof HTMLElement ? target : null;
+  while (node) {
+    const style = getComputedStyle(node);
+    const scrollable =
+      node instanceof HTMLTextAreaElement ||
+      style.overflowY === "auto" ||
+      style.overflowY === "scroll";
+    if (scrollable && canScrollInDirection(node, delta)) return node;
+    if (node === boundary) break;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+// The CSS lock above is necessary but not sufficient: body{position:fixed}
+// does nothing about a *nested* scroll container behind the overlay, and is
+// unreliable on iOS Safari while the keyboard is open — which is exactly
+// when a text-input popup is on screen. So the overlay also actively
+// cancels any touch-scroll that nothing inside the dialog can absorb.
+// Because the overlay root covers the whole screen, this catches every
+// touch, whatever would otherwise have scrolled underneath.
+function useBlockBackgroundTouchScroll(
+  open: boolean,
+  rootRef: RefObject<HTMLElement | null>,
+  scrollRef: RefObject<HTMLElement | null>,
+) {
+  useEffect(() => {
+    if (!open) return;
+    const root = rootRef.current;
+    if (!root) return;
+
+    let lastY = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      lastY = e.touches[0]?.clientY ?? 0;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 1) return; // leave pinch-zoom alone
+      const y = e.touches[0]?.clientY ?? 0;
+      const delta = y - lastY;
+      lastY = y;
+      if (delta === 0) return;
+
+      const scroller = scrollRef.current;
+      const insideDialog =
+        !!scroller && e.target instanceof Node && scroller.contains(e.target);
+      if (!insideDialog) {
+        e.preventDefault();
+        return;
+      }
+      if (!findScrollableForGesture(e.target, delta, scroller)) {
+        e.preventDefault();
+      }
+    };
+
+    root.addEventListener("touchstart", onTouchStart, { passive: true });
+    root.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      root.removeEventListener("touchstart", onTouchStart);
+      root.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [open, rootRef, scrollRef]);
+}
+
 function DetailOverlay({
   open,
   onClose,
@@ -1301,7 +1382,9 @@ function DetailOverlay({
 
   const viewportBox = useVisualViewportBox();
   const rootRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   useBackgroundScrollLock(open, rootRef);
+  useBlockBackgroundTouchScroll(open, rootRef, scrollRef);
 
   if (!open) return null;
 
@@ -1336,7 +1419,11 @@ function DetailOverlay({
             </button>
           </div>
         )}
-        <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: Math.min(vpHeight * 0.9, 760) }}>
+        <div
+          ref={scrollRef}
+          className="overflow-y-auto overscroll-contain px-6 py-5"
+          style={{ maxHeight: Math.min(vpHeight * 0.9, 760) }}
+        >
           {children}
         </div>
       </div>
@@ -5399,6 +5486,7 @@ function AppSettingsPanel({
     </section>
   );
 }
+
 
 /**
  * Single shared render path for both the tasks-mode bottom nav and the

@@ -205,6 +205,27 @@ export function DayEventPopup({
   const [memo, setMemo] = useState("");
   const [color, setColor] = useState(DEFAULT_EVENT_COLOR);
 
+  // The sheet is sized from the *visual* viewport, not 95vh of the layout
+  // viewport. With the keyboard open the layout viewport doesn't shrink, so
+  // a 95vh sheet kept ~1/3 of itself (including the memo field's lower half
+  // and the save button) behind the keyboard — and because its content box
+  // was then exactly as tall as its content, there was nothing to scroll to
+  // reach them. Tracking the visible height instead means the content area
+  // genuinely overflows while the keyboard is up, so it scrolls normally.
+  const [vpHeight, setVpHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setVpHeight(vv.height);
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 10 } }),
@@ -306,17 +327,29 @@ export function DayEventPopup({
       );
     };
 
-    // The innermost scrollable element relevant to this touch — the memo
-    // textarea if the touch is inside one, otherwise the popup's own
-    // scrollable content area (if the touch is inside that) — or null if
-    // neither applies (e.g. the header), which is always eligible to
-    // dismiss.
-    const getRelevantScrollable = (target: EventTarget | null): HTMLElement | null => {
-      if (!(target instanceof HTMLElement)) return null;
-      const textarea = target.closest("textarea");
-      if (textarea) return textarea;
-      const content = contentRef.current;
-      if (content && content.contains(target)) return content;
+    // Walks target -> sheet looking for anything that can still absorb a
+    // downward drag, mirroring the browser's own scroll chaining. The
+    // previous version picked a single element (the memo textarea if the
+    // touch was inside one, else the content area) and judged only that:
+    // so a touch starting on a textarea that was already at its top made
+    // the sheet dismiss even when the content area behind it still had
+    // plenty of room to scroll — the exact "it won't scroll back, and a
+    // firmer drag closes it" report.
+    const findScrollableForGesture = (target: EventTarget | null): HTMLElement | null => {
+      let node = target instanceof HTMLElement ? target : null;
+      while (node) {
+        const style = getComputedStyle(node);
+        const scrollable =
+          node instanceof HTMLTextAreaElement ||
+          style.overflowY === "auto" ||
+          style.overflowY === "scroll";
+        // delta is always downward here, so "can absorb it" means room above.
+        if (scrollable && node.scrollHeight > node.clientHeight && node.scrollTop > 0) {
+          return node;
+        }
+        if (node === sheet) break;
+        node = node.parentElement;
+      }
       return null;
     };
 
@@ -354,8 +387,8 @@ export function DayEventPopup({
 
       if (stepDelta <= 0) return; // moving up this step — always let it scroll natively
 
-      const scrollable = getRelevantScrollable(e.target);
-      if (scrollable && scrollable.scrollTop > 0) return; // still room to scroll up — let it scroll
+      // Anything in the chain still has room to scroll up: let it.
+      if (findScrollableForGesture(e.target)) return;
 
       // At the scroll-top edge and still moving down this step: confirm the
       // dismiss, re-baselined to start tracking from right here.
@@ -462,16 +495,24 @@ export function DayEventPopup({
   const sortedEvents = sortEventsByOrder(dayEvents);
   const sortedTasks = sortTasksByOrder(dayTasks);
 
+  const isFormView = view === "add" || view === "edit";
+  // Fall back to the old vh-based sizing only until the first
+  // visualViewport measurement lands (or on browsers without the API).
+  const sheetHeightStyle =
+    vpHeight != null ? { height: Math.round(vpHeight * (isFormView ? 0.95 : 0.5)) } : undefined;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-0 sm:items-center sm:px-4"
+      className="fixed inset-x-0 top-0 z-50 flex items-end justify-center bg-black/40 px-0 sm:items-center sm:px-4"
+      style={vpHeight != null ? { height: Math.round(vpHeight) } : { bottom: 0 }}
       onClick={onClose}
     >
       <div
         ref={sheetRef}
         onClick={(e) => e.stopPropagation()}
+        style={sheetHeightStyle}
         className={`flex w-full flex-col overflow-hidden rounded-t-2xl bg-[#fafafa] shadow-2xl sm:h-auto sm:max-h-[85vh] sm:max-w-md sm:rounded-2xl ${
-          view === "add" || view === "edit" ? "h-[95vh]" : "h-[50vh]"
+          sheetHeightStyle ? "" : isFormView ? "h-[95vh]" : "h-[50vh]"
         }`}
       >
         <div className="flex shrink-0 flex-col items-center pb-1 pt-2 sm:hidden">
@@ -490,7 +531,7 @@ export function DayEventPopup({
           </button>
         </div>
 
-        <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
           {view === "list" ? (
             <>
               <section className="mb-4">
