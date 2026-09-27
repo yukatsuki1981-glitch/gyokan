@@ -94,6 +94,7 @@ import {
   type CSSProperties,
   type PointerEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 
 /* ─── Types ─── */
@@ -1200,6 +1201,86 @@ function useVisualViewportBox() {
   return box;
 }
 
+// While open, prevents whatever's behind the overlay from scrolling —
+// otherwise a touch that lands on the dimmed backdrop (or, when one
+// DetailOverlay opens on top of another, on the outer overlay's own
+// scrollable content) still scrolls that background, visibly shifting it
+// underneath. Locks document.body/<html> with the standard iOS-safe
+// position:fixed trick (plain overflow:hidden alone doesn't reliably stop
+// touch-scroll/rubber-banding on iOS Safari), restoring the exact scroll
+// offset on close, and additionally locks the nearest scrollable ancestor
+// of the overlay's own root — which is what actually needs locking in the
+// nested-overlay case, since that ancestor is a local overflow-y-auto box
+// rather than the document itself.
+function useBackgroundScrollLock(open: boolean, rootRef: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    if (!open) return;
+
+    const findScrollableAncestors = (el: HTMLElement | null) => {
+      const found: HTMLElement[] = [];
+      let node = el?.parentElement ?? null;
+      while (node && node !== document.body) {
+        const style = getComputedStyle(node);
+        if (
+          (style.overflowY === "auto" || style.overflowY === "scroll") &&
+          node.scrollHeight > node.clientHeight
+        ) {
+          found.push(node);
+        }
+        node = node.parentElement;
+      }
+      return found;
+    };
+
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const html = document.documentElement;
+    const ancestors = findScrollableAncestors(rootRef.current);
+
+    const prev = {
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyWidth: body.style.width,
+      htmlOverflow: html.style.overflow,
+      // The longhand overflowY, not the overflow shorthand: ancestors here
+      // are arbitrary app containers that may already set their own
+      // overflow-x (or set overflow-y specifically, as React inline styles
+      // do) — writing the shorthand would silently replace whatever they
+      // had, and restoring the shorthand back to "" would then leave that
+      // longhand permanently cleared instead of restored.
+      ancestorOverflowY: ancestors.map((a) => a.style.overflowY),
+      // Belt-and-suspenders: locking overflow can itself cause a few
+      // pixels of incidental scroll (e.g. layout shifting once a
+      // scrollbar disappears), so the exact scrollTop is captured and
+      // restored too, not just the overflow style.
+      ancestorScrollTop: ancestors.map((a) => a.scrollTop),
+    };
+
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    html.style.overflow = "hidden";
+    ancestors.forEach((a) => {
+      a.style.overflowY = "hidden";
+    });
+
+    return () => {
+      body.style.overflow = prev.bodyOverflow;
+      body.style.position = prev.bodyPosition;
+      body.style.top = prev.bodyTop;
+      body.style.width = prev.bodyWidth;
+      html.style.overflow = prev.htmlOverflow;
+      ancestors.forEach((a, i) => {
+        a.style.overflowY = prev.ancestorOverflowY[i];
+        a.scrollTop = prev.ancestorScrollTop[i];
+      });
+      window.scrollTo(0, scrollY);
+    };
+  }, [open, rootRef]);
+}
+
 function DetailOverlay({
   open,
   onClose,
@@ -1219,6 +1300,8 @@ function DetailOverlay({
   }, [open, onClose]);
 
   const viewportBox = useVisualViewportBox();
+  const rootRef = useRef<HTMLDivElement>(null);
+  useBackgroundScrollLock(open, rootRef);
 
   if (!open) return null;
 
@@ -1227,6 +1310,7 @@ function DetailOverlay({
 
   return (
     <div
+      ref={rootRef}
       className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
       style={{ top: vpTop, height: vpHeight, bottom: "auto" }}
       onClick={onClose}
@@ -5032,10 +5116,23 @@ function SettingsEditSheet({
     if (open) setDraft(value);
   }, [open, value]);
 
+  // Not the `autoFocus` prop: React's autoFocus calls the DOM's plain
+  // .focus(), whose default behavior scrolls the nearest scrollable
+  // ancestor to reveal the newly-focused input — even though this input
+  // sits inside a fixed, full-screen overlay that doesn't need any
+  // ancestor scrolled to be visible. That scroll was landing on the
+  // settings screen behind the overlay, which is exactly the background
+  // movement this sheet's scroll lock is meant to prevent. preventScroll
+  // suppresses that side effect while still focusing normally.
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (open) inputRef.current?.focus({ preventScroll: true });
+  }, [open]);
+
   return (
     <DetailOverlay open={open} onClose={onClose} title={title}>
       <input
-        autoFocus
+        ref={inputRef}
         type="text"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
