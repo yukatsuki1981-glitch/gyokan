@@ -1176,6 +1176,30 @@ function Card({
   );
 }
 
+// position:fixed + inset-0 (the CSS layout viewport) doesn't shrink when
+// the on-screen keyboard opens on mobile, so a bottom-anchored sheet stays
+// anchored to the full, keyboard-inclusive height — landing partly or
+// fully behind the keyboard. window.visualViewport reports the actually-
+// visible region (excluding the keyboard) and fires resize/scroll as it
+// opens/closes, so DetailOverlay tracks it and re-sizes/re-positions itself
+// to stay within whatever's really visible.
+function useVisualViewportBox() {
+  const [box, setBox] = useState<{ height: number; top: number } | null>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setBox({ height: vv.height, top: vv.offsetTop });
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+  return box;
+}
+
 function DetailOverlay({
   open,
   onClose,
@@ -1194,11 +1218,17 @@ function DetailOverlay({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  const viewportBox = useVisualViewportBox();
+
   if (!open) return null;
+
+  const vpHeight = viewportBox?.height ?? (typeof window !== "undefined" ? window.innerHeight : 800);
+  const vpTop = viewportBox?.top ?? 0;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+      style={{ top: vpTop, height: vpHeight, bottom: "auto" }}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -1222,7 +1252,9 @@ function DetailOverlay({
             </button>
           </div>
         )}
-        <div className="max-h-[min(90vh,760px)] overflow-y-auto px-6 py-5">{children}</div>
+        <div className="overflow-y-auto px-6 py-5" style={{ maxHeight: Math.min(vpHeight * 0.9, 760) }}>
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -224,9 +224,6 @@ export function DayEventPopup({
   );
 
   const sheetRef = useRef<HTMLDivElement>(null);
-  const dragStartYRef = useRef(0);
-  const draggingRef = useRef(false);
-  const confirmedRef = useRef(false);
   const cancelAnimRef = useRef<(() => void) | null>(null);
 
   const animateSheetTo = useCallback(
@@ -279,17 +276,25 @@ export function DayEventPopup({
   // a dismiss-drag is confirmed — same technique as the month-swipe gesture
   // in PrivateCalendar.tsx.
   //
-  // The memo textarea (and the popup's own scrollable content area) get a
-  // *continuously re-checked* scroll-position gate rather than a one-time
-  // check at touchstart: scrollTop is read fresh on every touchmove, not
-  // just when the gesture began. Gating only at touchstart broke scrolling
-  // back down after scrolling up within the same touch (once armed, a mere
-  // dy>0 was treated as a confirmed dismiss even if the textarea had since
-  // scrolled away from its top) — re-checking means a downward drag only
-  // ever confirms as a dismiss once that scrollable is genuinely back at
-  // its top edge, exactly where a further downward drag has nothing left
-  // to scroll. Once confirmed, the gate is no longer re-applied for the
-  // rest of that touch, matching the existing "confirmed" pattern.
+  // Direction is judged per touchmove step (this event's Y vs. the previous
+  // event's Y), not cumulatively from where the touch started. An earlier
+  // version compared against the touch's start position, which broke
+  // scrolling back up after scrolling down within the same touch: once the
+  // finger had moved far enough past the start point to read as "downward
+  // overall", any leftover scrollable room was still gated correctly, but a
+  // single continuous drag that scrolls down a long way and then reverses
+  // spends a long stretch where the cumulative delta is still negative (or
+  // barely positive) relative to the start — during which real touch
+  // hardware's momentum/rubber-banding could disagree with that stale
+  // baseline. Per-step direction has no such baseline to go stale: each
+  // event is judged only against the scrollable's *current* scrollTop, so
+  // scrolling back and forth any number of times within one touch always
+  // works, and a dismiss is confirmed only at the exact step where the
+  // scrollable is already at scrollTop 0 and the finger keeps moving down.
+  // Once confirmed, the sheet's own drag distance is re-baselined to start
+  // from that moment (not from the touch's original start point), so the
+  // release/threshold math isn't polluted by whatever scrolling happened
+  // before the dismiss began.
   useLayoutEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
@@ -315,39 +320,59 @@ export function DayEventPopup({
       return null;
     };
 
+    let dragging = false;
+    let confirmed = false;
+    let lastY = 0;
+    let dismissStartY = 0;
+
     const onTouchStart = (e: TouchEvent) => {
       if (isFullyExcludedTarget(e.target)) {
-        draggingRef.current = false;
+        dragging = false;
         return;
       }
       cancelAnimRef.current?.();
       cancelAnimRef.current = null;
-      dragStartYRef.current = e.touches[0]?.clientY ?? 0;
-      draggingRef.current = true;
-      confirmedRef.current = false;
+      const y = e.touches[0]?.clientY ?? 0;
+      lastY = y;
+      dismissStartY = y;
+      dragging = true;
+      confirmed = false;
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (!draggingRef.current) return;
+      if (!dragging) return;
       const y = e.touches[0]?.clientY ?? 0;
-      const dy = y - dragStartYRef.current;
-      if (dy <= 0) return;
-      if (!confirmedRef.current) {
-        const scrollable = getRelevantScrollable(e.target);
-        if (scrollable && scrollable.scrollTop > 0) return;
-        confirmedRef.current = true;
+      const stepDelta = y - lastY;
+      lastY = y;
+
+      if (confirmed) {
+        e.preventDefault();
+        sheet.style.transition = "none";
+        sheet.style.transform = `translateY(${Math.max(0, y - dismissStartY)}px)`;
+        return;
       }
+
+      if (stepDelta <= 0) return; // moving up this step — always let it scroll natively
+
+      const scrollable = getRelevantScrollable(e.target);
+      if (scrollable && scrollable.scrollTop > 0) return; // still room to scroll up — let it scroll
+
+      // At the scroll-top edge and still moving down this step: confirm the
+      // dismiss, re-baselined to start tracking from right here.
+      confirmed = true;
+      dismissStartY = y;
       e.preventDefault();
       sheet.style.transition = "none";
-      sheet.style.transform = `translateY(${dy}px)`;
+      sheet.style.transform = "translateY(0px)";
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      if (!draggingRef.current) return;
-      draggingRef.current = false;
-      if (!confirmedRef.current) return;
+      if (!dragging) return;
+      dragging = false;
+      if (!confirmed) return;
       const sheetHeight = sheet.getBoundingClientRect().height;
-      const dy = (e.changedTouches[0]?.clientY ?? 0) - dragStartYRef.current;
+      const y = e.changedTouches[0]?.clientY ?? lastY;
+      const dy = Math.max(0, y - dismissStartY);
       const threshold = Math.max(60, sheetHeight * 0.25);
       if (dy >= threshold) {
         animateSheetTo(dy, sheetHeight + 40, onClose);
