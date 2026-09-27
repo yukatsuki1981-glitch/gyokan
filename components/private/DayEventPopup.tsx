@@ -270,33 +270,53 @@ export function DayEventPopup({
   const contentRef = useRef<HTMLDivElement>(null);
 
   // Swipe-to-dismiss works from anywhere on the sheet — not just the grip
-  // handle — except: (1) text inputs/textareas, so normal text selection and
-  // caret dragging isn't hijacked, and (2) the event-list drag handles, so a
-  // downward drag-to-reorder isn't mistaken for a dismiss before dnd-kit's
-  // own activation delay has a chance to claim it. Raw DOM listeners (not
-  // React's onTouchMove prop) are used so preventDefault reliably suppresses
-  // the browser's own scroll/bounce once a dismiss-drag is confirmed — same
-  // technique as the month-swipe gesture in PrivateCalendar.tsx. Starting a
-  // touch inside the scrollable content while it isn't already scrolled to
-  // the top defers to normal scrolling instead of arming a dismiss-drag.
+  // handle — except: (1) single-line inputs/select/contenteditable, so
+  // normal text selection and caret dragging isn't hijacked, and (2) the
+  // event-list drag handles, so a downward drag-to-reorder isn't mistaken
+  // for a dismiss before dnd-kit's own activation delay has a chance to
+  // claim it. Raw DOM listeners (not React's onTouchMove prop) are used so
+  // preventDefault reliably suppresses the browser's own scroll/bounce once
+  // a dismiss-drag is confirmed — same technique as the month-swipe gesture
+  // in PrivateCalendar.tsx.
+  //
+  // The memo textarea (and the popup's own scrollable content area) get a
+  // *continuously re-checked* scroll-position gate rather than a one-time
+  // check at touchstart: scrollTop is read fresh on every touchmove, not
+  // just when the gesture began. Gating only at touchstart broke scrolling
+  // back down after scrolling up within the same touch (once armed, a mere
+  // dy>0 was treated as a confirmed dismiss even if the textarea had since
+  // scrolled away from its top) — re-checking means a downward drag only
+  // ever confirms as a dismiss once that scrollable is genuinely back at
+  // its top edge, exactly where a further downward drag has nothing left
+  // to scroll. Once confirmed, the gate is no longer re-applied for the
+  // rest of that touch, matching the existing "confirmed" pattern.
   useLayoutEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
 
-    const isExcludedTarget = (target: EventTarget | null) => {
+    const isFullyExcludedTarget = (target: EventTarget | null) => {
       if (!(target instanceof HTMLElement)) return false;
       return !!target.closest(
-        "input, textarea, select, [contenteditable='true'], button[aria-label='並び替え']",
+        "input, select, [contenteditable='true'], button[aria-label='並び替え']",
       );
     };
 
-    const onTouchStart = (e: TouchEvent) => {
-      if (isExcludedTarget(e.target)) {
-        draggingRef.current = false;
-        return;
-      }
+    // The innermost scrollable element relevant to this touch — the memo
+    // textarea if the touch is inside one, otherwise the popup's own
+    // scrollable content area (if the touch is inside that) — or null if
+    // neither applies (e.g. the header), which is always eligible to
+    // dismiss.
+    const getRelevantScrollable = (target: EventTarget | null): HTMLElement | null => {
+      if (!(target instanceof HTMLElement)) return null;
+      const textarea = target.closest("textarea");
+      if (textarea) return textarea;
       const content = contentRef.current;
-      if (content && e.target instanceof Node && content.contains(e.target) && content.scrollTop > 0) {
+      if (content && content.contains(target)) return content;
+      return null;
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (isFullyExcludedTarget(e.target)) {
         draggingRef.current = false;
         return;
       }
@@ -312,7 +332,11 @@ export function DayEventPopup({
       const y = e.touches[0]?.clientY ?? 0;
       const dy = y - dragStartYRef.current;
       if (dy <= 0) return;
-      confirmedRef.current = true;
+      if (!confirmedRef.current) {
+        const scrollable = getRelevantScrollable(e.target);
+        if (scrollable && scrollable.scrollTop > 0) return;
+        confirmedRef.current = true;
+      }
       e.preventDefault();
       sheet.style.transition = "none";
       sheet.style.transform = `translateY(${dy}px)`;

@@ -175,7 +175,7 @@ function DayCell({
           ) : (
             <span
               key={`e-${chip.event.id}`}
-              className="truncate rounded-[4px] px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight"
+              className="truncate rounded-[4px] px-0.5 py-0.5 text-[10px] font-bold leading-[13px] tracking-tight"
               style={{
                 backgroundColor: eventColorStyle(chip.event.color).bg,
                 color: eventColorStyle(chip.event.color).text,
