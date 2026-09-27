@@ -3,6 +3,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type Ref } from "react";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
+import { eventColorStyle } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { getRokuyou } from "@/lib/gyokan/rokuyou";
@@ -174,9 +175,12 @@ function DayCell({
           ) : (
             <span
               key={`e-${chip.event.id}`}
-              className={`truncate rounded-[4px] px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight ${
-                cell.inMonth ? "bg-emerald-50 text-emerald-700" : "bg-emerald-50/40 text-emerald-300"
-              }`}
+              className="truncate rounded-[4px] px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight"
+              style={{
+                backgroundColor: eventColorStyle(chip.event.color).bg,
+                color: eventColorStyle(chip.event.color).text,
+                opacity: cell.inMonth ? 1 : 0.4,
+              }}
               title={chip.event.title}
             >
               {truncateEventTitle(chip.event.title)}
@@ -307,10 +311,16 @@ export function PrivateCalendar({
 }: {
   events: AppEvent[];
   tasks: AppTask[];
-  onAddEvent: (data: { title: string; startTime: string; endTime?: string | null; memo?: string }) => void;
+  onAddEvent: (data: {
+    title: string;
+    startTime: string;
+    endTime?: string | null;
+    memo?: string;
+    color?: string | null;
+  }) => void;
   onUpdateEvent: (
     id: string,
-    patch: { title: string; startTime: string; endTime?: string | null; memo?: string },
+    patch: { title: string; startTime: string; endTime?: string | null; memo?: string; color?: string | null },
   ) => void;
   onDeleteEvent: (id: string) => void;
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;

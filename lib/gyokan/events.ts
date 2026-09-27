@@ -57,6 +57,7 @@ export type EventDraftFields = {
   endTime: string;
   memo: string;
   allDay: boolean;
+  color?: string | null;
 };
 
 const ALL_DAY_TIME = "00:00";
@@ -73,6 +74,7 @@ export function eventFieldsFromItem(item: AppEvent): EventDraftFields {
     endTime: item.endTime ? localTimeHHMMFromTimestamp(item.endTime) : "",
     memo: item.memo ?? "",
     allDay: isAllDayEvent(item),
+    color: item.color ?? null,
   };
 }
 
@@ -85,6 +87,7 @@ export function applyEventDraft(item: AppEvent, draft: EventDraftFields): AppEve
       startTime: applyTimeToTimestamp(item.startTime, ALL_DAY_TIME),
       endTime: null,
       memo: draft.memo ?? item.memo,
+      color: draft.color ?? item.color,
     };
   }
   return {
@@ -97,6 +100,7 @@ export function applyEventDraft(item: AppEvent, draft: EventDraftFields): AppEve
       ? applyTimeToTimestamp(item.endTime ?? item.startTime, draft.endTime)
       : null,
     memo: draft.memo ?? item.memo,
+    color: draft.color ?? item.color,
   };
 }
 
@@ -107,6 +111,7 @@ export function eventDraftFieldsDiffer(item: AppEvent, draft: EventDraftFields):
     baseline.startTime !== draft.startTime ||
     baseline.endTime !== draft.endTime ||
     baseline.allDay !== draft.allDay ||
-    (baseline.memo ?? "") !== (draft.memo ?? "")
+    (baseline.memo ?? "") !== (draft.memo ?? "") ||
+    (baseline.color ?? null) !== (draft.color ?? null)
   );
 }

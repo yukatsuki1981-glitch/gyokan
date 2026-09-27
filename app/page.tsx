@@ -5734,22 +5734,25 @@ export default function Home() {
       type="button"
       onClick={() => setAppMode(appMode === "tasks" ? "private" : "tasks")}
       aria-label={appMode === "tasks" ? "プライベートモードに切り替え" : "タスク管理モードに切り替え"}
-      className="flex shrink-0 items-center gap-1 rounded-full bg-black/[0.08] p-0.5 transition-colors"
+      className="relative grid shrink-0 grid-cols-2 gap-0.5 rounded-full bg-black/[0.08] p-0.5 transition-colors"
     >
-      {appMode === "tasks" && (
-        <span className="h-5 w-5 shrink-0 rounded-full bg-white shadow-sm transition-transform" />
-      )}
-      <span className="relative grid place-items-center px-1">
-        <span className="invisible col-start-1 row-start-1 whitespace-nowrap text-[11px] font-medium">
-          プライベート
-        </span>
-        <span className="col-start-1 row-start-1 whitespace-nowrap text-[11px] font-medium text-gray-700">
-          {appMode === "tasks" ? "タスク管理" : "プライベート"}
-        </span>
+      {/* Invisible placeholders reserve equal-width track columns sized to
+          fit the longer label ("プライベート"), so the knob below can be a
+          fixed fraction of the track and just translate between the two. */}
+      <span className="invisible whitespace-nowrap rounded-full px-3 py-1.5 text-center text-[12px] font-semibold">
+        プライベート
       </span>
-      {appMode === "private" && (
-        <span className="h-5 w-5 shrink-0 rounded-full bg-white shadow-sm transition-transform" />
-      )}
+      <span className="invisible whitespace-nowrap rounded-full px-3 py-1.5 text-center text-[12px] font-semibold">
+        プライベート
+      </span>
+      <span
+        className={`absolute inset-y-0.5 left-0.5 flex items-center justify-center whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-800 shadow-sm transition-transform duration-200 ease-out ${
+          appMode === "private" ? "translate-x-[calc(100%+2px)]" : "translate-x-0"
+        }`}
+        style={{ width: "calc(50% - 1px)" }}
+      >
+        {appMode === "tasks" ? "タスク管理" : "プライベート"}
+      </span>
     </button>
   );
 

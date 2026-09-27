@@ -249,6 +249,7 @@ export function mapDbEvent(row: DbEvent): AppEvent {
     memo: row.memo ?? "",
     sortOrder: row.sort_order ?? 0,
     scope: row.scope === "work" ? "work" : "private",
+    color: row.color ?? null,
   };
 }
 
@@ -262,6 +263,7 @@ export function mapEventToDb(event: AppEvent, userId: string) {
     memo: event.memo ?? "",
     sort_order: event.sortOrder,
     scope: event.scope ?? "private",
+    color: event.color ?? null,
   };
 }
 

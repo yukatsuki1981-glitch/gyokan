@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   DndContext,
   closestCorners,
@@ -28,6 +28,7 @@ import {
   localTimeHHMMFromTimestamp,
   sortEventsByOrder,
 } from "@/lib/gyokan/events";
+import { DEFAULT_EVENT_COLOR, EVENT_COLOR_PALETTE, eventColorStyle } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
 import { GripIcon, TrashIcon, XIcon } from "./icons";
@@ -105,7 +106,10 @@ function SortableEventRow({
       >
         <GripIcon className="h-3.5 w-3.5" />
       </button>
-      <span className="h-[14px] w-[14px] shrink-0 rounded-[4px] border border-emerald-300 bg-emerald-50" />
+      <span
+        className="h-[14px] w-[14px] shrink-0 rounded-[4px]"
+        style={{ backgroundColor: eventColorStyle(event.color).accent }}
+      />
       <span className="min-w-0 flex-1 truncate text-[13px] text-gray-800">{event.title}</span>
       <span className="shrink-0 text-[11px] text-gray-400">{timeRangeLabel(event)}</span>
       <button
@@ -120,6 +124,41 @@ function SortableEventRow({
         <TrashIcon className="h-3 w-3" />
       </button>
     </li>
+  );
+}
+
+function ColorSwatchPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {EVENT_COLOR_PALETTE.map((color) => {
+        const selected = color.toUpperCase() === value.toUpperCase();
+        return (
+          <button
+            key={color}
+            type="button"
+            aria-label={`色を選択 ${color}`}
+            aria-pressed={selected}
+            onClick={() => onChange(color)}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform ${
+              selected ? "ring-2 ring-offset-2" : ""
+            }`}
+            style={
+              selected
+                ? ({ backgroundColor: color, "--tw-ring-color": color } as React.CSSProperties)
+                : { backgroundColor: color }
+            }
+          >
+            {selected && <span className="h-2 w-2 rounded-full bg-white" />}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -142,10 +181,16 @@ export function DayEventPopup({
   dayEvents: AppEvent[];
   dayTasks: AppTask[];
   onToggleTask: (id: string) => void;
-  onAddEvent: (data: { title: string; startTime: string; endTime?: string | null; memo?: string }) => void;
+  onAddEvent: (data: {
+    title: string;
+    startTime: string;
+    endTime?: string | null;
+    memo?: string;
+    color?: string | null;
+  }) => void;
   onUpdateEvent: (
     id: string,
-    patch: { title: string; startTime: string; endTime?: string | null; memo?: string },
+    patch: { title: string; startTime: string; endTime?: string | null; memo?: string; color?: string | null },
   ) => void;
   onDeleteEvent: (id: string) => void;
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
@@ -158,6 +203,7 @@ export function DayEventPopup({
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("");
   const [memo, setMemo] = useState("");
+  const [color, setColor] = useState(DEFAULT_EVENT_COLOR);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
@@ -221,34 +267,62 @@ export function DayEventPopup({
     [],
   );
 
-  const handleGripTouchStart = useCallback((e: React.TouchEvent) => {
-    cancelAnimRef.current?.();
-    cancelAnimRef.current = null;
-    dragStartYRef.current = e.touches[0]?.clientY ?? 0;
-    draggingRef.current = true;
-    confirmedRef.current = false;
-  }, []);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  const handleGripTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!draggingRef.current) return;
-    const y = e.touches[0]?.clientY ?? 0;
-    const dy = y - dragStartYRef.current;
-    if (dy <= 0) return;
-    confirmedRef.current = true;
+  // Swipe-to-dismiss works from anywhere on the sheet — not just the grip
+  // handle — except: (1) text inputs/textareas, so normal text selection and
+  // caret dragging isn't hijacked, and (2) the event-list drag handles, so a
+  // downward drag-to-reorder isn't mistaken for a dismiss before dnd-kit's
+  // own activation delay has a chance to claim it. Raw DOM listeners (not
+  // React's onTouchMove prop) are used so preventDefault reliably suppresses
+  // the browser's own scroll/bounce once a dismiss-drag is confirmed — same
+  // technique as the month-swipe gesture in PrivateCalendar.tsx. Starting a
+  // touch inside the scrollable content while it isn't already scrolled to
+  // the top defers to normal scrolling instead of arming a dismiss-drag.
+  useLayoutEffect(() => {
     const sheet = sheetRef.current;
-    if (sheet) {
+    if (!sheet) return;
+
+    const isExcludedTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      return !!target.closest(
+        "input, textarea, select, [contenteditable='true'], button[aria-label='並び替え']",
+      );
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (isExcludedTarget(e.target)) {
+        draggingRef.current = false;
+        return;
+      }
+      const content = contentRef.current;
+      if (content && e.target instanceof Node && content.contains(e.target) && content.scrollTop > 0) {
+        draggingRef.current = false;
+        return;
+      }
+      cancelAnimRef.current?.();
+      cancelAnimRef.current = null;
+      dragStartYRef.current = e.touches[0]?.clientY ?? 0;
+      draggingRef.current = true;
+      confirmedRef.current = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!draggingRef.current) return;
+      const y = e.touches[0]?.clientY ?? 0;
+      const dy = y - dragStartYRef.current;
+      if (dy <= 0) return;
+      confirmedRef.current = true;
+      e.preventDefault();
       sheet.style.transition = "none";
       sheet.style.transform = `translateY(${dy}px)`;
-    }
-  }, []);
+    };
 
-  const handleGripTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
+    const onTouchEnd = (e: TouchEvent) => {
       if (!draggingRef.current) return;
       draggingRef.current = false;
       if (!confirmedRef.current) return;
-      const sheet = sheetRef.current;
-      const sheetHeight = sheet?.getBoundingClientRect().height ?? 0;
+      const sheetHeight = sheet.getBoundingClientRect().height;
       const dy = (e.changedTouches[0]?.clientY ?? 0) - dragStartYRef.current;
       const threshold = Math.max(60, sheetHeight * 0.25);
       if (dy >= threshold) {
@@ -256,9 +330,20 @@ export function DayEventPopup({
       } else {
         animateSheetTo(dy, 0, null);
       }
-    },
-    [animateSheetTo, onClose],
-  );
+    };
+
+    sheet.addEventListener("touchstart", onTouchStart, { passive: true });
+    sheet.addEventListener("touchmove", onTouchMove, { passive: false });
+    sheet.addEventListener("touchend", onTouchEnd, { passive: true });
+    sheet.addEventListener("touchcancel", onTouchEnd, { passive: true });
+
+    return () => {
+      sheet.removeEventListener("touchstart", onTouchStart);
+      sheet.removeEventListener("touchmove", onTouchMove);
+      sheet.removeEventListener("touchend", onTouchEnd);
+      sheet.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [animateSheetTo, onClose]);
 
   useEffect(() => {
     return () => {
@@ -272,6 +357,7 @@ export function DayEventPopup({
     setStartTime("09:00");
     setEndTime("");
     setMemo("");
+    setColor(DEFAULT_EVENT_COLOR);
     setEditingId(null);
   };
 
@@ -287,6 +373,7 @@ export function DayEventPopup({
     setStartTime(fields.startTime || "09:00");
     setEndTime(fields.endTime);
     setMemo(fields.memo);
+    setColor(fields.color || DEFAULT_EVENT_COLOR);
     setEditingId(event.id);
     setView("edit");
   };
@@ -300,12 +387,14 @@ export function DayEventPopup({
           startTime: combineLocalDateAndTime(dateISO, "00:00"),
           endTime: null,
           memo: memo.trim() || undefined,
+          color,
         }
       : {
           title: trimmed,
           startTime: combineLocalDateAndTime(dateISO, startTime),
           endTime: endTime ? combineLocalDateAndTime(dateISO, endTime) : null,
           memo: memo.trim() || undefined,
+          color,
         };
     if (view === "edit" && editingId) {
       onUpdateEvent(editingId, payload);
@@ -336,12 +425,7 @@ export function DayEventPopup({
           view === "add" || view === "edit" ? "h-[95vh]" : "h-[50vh]"
         }`}
       >
-        <div
-          className="flex shrink-0 flex-col items-center pb-1 pt-2 sm:hidden"
-          onTouchStart={handleGripTouchStart}
-          onTouchMove={handleGripTouchMove}
-          onTouchEnd={handleGripTouchEnd}
-        >
+        <div className="flex shrink-0 flex-col items-center pb-1 pt-2 sm:hidden">
           <span className="h-1 w-9 rounded-full bg-black/15" />
         </div>
 
@@ -357,7 +441,7 @@ export function DayEventPopup({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {view === "list" ? (
             <>
               <section className="mb-4">
@@ -482,6 +566,10 @@ export function DayEventPopup({
                   </label>
                 </div>
               )}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-medium text-gray-400">ラベルの色</span>
+                <ColorSwatchPicker value={color} onChange={setColor} />
+              </div>
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-medium text-gray-400">メモ（任意）</span>
                 <textarea

@@ -735,10 +735,15 @@ export async function fetchGyokanEvents(
   return rows.map(mapDbEvent);
 }
 
-/** Drops `scope` from an events row — used when the DB doesn't have that
- * column yet (migration 20260921_add_scope_columns.sql not applied). */
-function withoutEventScope<T extends { scope?: unknown }>(row: T): Omit<T, "scope"> {
-  const { scope: _scope, ...rest } = row;
+/** Drops `scope`/`color` from an events row — used when the DB doesn't have
+ * those columns yet (migrations 20260921_add_scope_columns.sql /
+ * 20260927_add_event_color.sql not applied). Stripping both together on any
+ * schema-mismatch error keeps the retry simple regardless of which one is
+ * actually missing. */
+function withoutEventCompatColumns<T extends { scope?: unknown; color?: unknown }>(
+  row: T,
+): Omit<T, "scope" | "color"> {
+  const { scope: _scope, color: _color, ...rest } = row;
   return rest;
 }
 
@@ -750,8 +755,12 @@ export async function upsertEvent(
   const row = mapEventToDb(event, userId);
   const { error } = await supabase.from("events").upsert(row);
   if (!error) return;
-  if (isMissingColumnError(error, "scope") || isSchemaMismatchError(error)) {
-    const { error: retryError } = await supabase.from("events").upsert(withoutEventScope(row));
+  if (
+    isMissingColumnError(error, "scope") ||
+    isMissingColumnError(error, "color") ||
+    isSchemaMismatchError(error)
+  ) {
+    const { error: retryError } = await supabase.from("events").upsert(withoutEventCompatColumns(row));
     if (!retryError) return;
     throw retryError;
   }
@@ -767,8 +776,12 @@ export async function upsertEventsBatch(
   const rows = items.map((item) => mapEventToDb(item, userId));
   const { error } = await supabase.from("events").upsert(rows);
   if (!error) return;
-  if (isMissingColumnError(error, "scope") || isSchemaMismatchError(error)) {
-    const { error: retryError } = await supabase.from("events").upsert(rows.map(withoutEventScope));
+  if (
+    isMissingColumnError(error, "scope") ||
+    isMissingColumnError(error, "color") ||
+    isSchemaMismatchError(error)
+  ) {
+    const { error: retryError } = await supabase.from("events").upsert(rows.map(withoutEventCompatColumns));
     if (!retryError) return;
     throw retryError;
   }

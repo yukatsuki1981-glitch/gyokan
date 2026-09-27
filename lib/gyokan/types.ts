@@ -85,6 +85,7 @@ export type DbEvent = {
   created_at: string;
   updated_at: string;
   scope: Scope;
+  color: string | null;
 };
 
 export type AppTask = {
@@ -158,6 +159,7 @@ export type AppEvent = {
   memo: string;
   sortOrder: number;
   scope?: Scope;
+  color?: string | null;
 };
 
 export type GyokanData = {

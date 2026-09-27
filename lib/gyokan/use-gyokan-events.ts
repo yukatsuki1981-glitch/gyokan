@@ -172,6 +172,7 @@ export function useGyokanEvents() {
     startTime: string;
     endTime?: string | null;
     memo?: string;
+    color?: string | null;
   }) => {
     const event: AppEvent = {
       id: newUuid(),
@@ -181,6 +182,7 @@ export function useGyokanEvents() {
       memo: data.memo ?? "",
       sortOrder: 0,
       scope: "private",
+      color: data.color ?? null,
     };
     setEvents((prev) => {
       const next = assignSortOrders([...prev, event]);
@@ -192,7 +194,7 @@ export function useGyokanEvents() {
 
   const updateEvent = useCallback((
     id: string,
-    patch: { title: string; startTime: string; endTime?: string | null; memo?: string },
+    patch: { title: string; startTime: string; endTime?: string | null; memo?: string; color?: string | null },
   ): Promise<boolean> => {
     let updated: AppEvent | undefined;
     setEvents((prev) => {
@@ -204,6 +206,7 @@ export function useGyokanEvents() {
           startTime: patch.startTime,
           endTime: patch.endTime ?? null,
           memo: patch.memo ?? "",
+          color: patch.color ?? null,
         };
       });
       updated = next.find((e) => e.id === id);
