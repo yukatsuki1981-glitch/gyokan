@@ -5734,22 +5734,24 @@ export default function Home() {
       type="button"
       onClick={() => setAppMode(appMode === "tasks" ? "private" : "tasks")}
       aria-label={appMode === "tasks" ? "プライベートモードに切り替え" : "タスク管理モードに切り替え"}
-      className="relative grid shrink-0 grid-cols-2 gap-0.5 rounded-full bg-black/[0.08] p-0.5 transition-colors"
+      className="relative flex shrink-0 items-center rounded-full bg-black/[0.08] p-[3px] transition-colors"
     >
-      {/* Invisible placeholders reserve equal-width track columns sized to
-          fit the longer label ("プライベート"), so the knob below can be a
-          fixed fraction of the track and just translate between the two. */}
-      <span className="invisible whitespace-nowrap rounded-full px-3 py-1.5 text-center text-[12px] font-semibold">
+      {/* A single invisible placeholder (sized to the longer label,
+          "プライベート") plus a small fixed spacer set the button's total
+          width in ordinary flex content-sizing — no percentage widths or
+          1fr grid tracks, which is what let the track balloon unpredictably
+          depending on its flex siblings. The knob is absolutely positioned
+          and shares the placeholder's min-width so it doesn't resize between
+          the two (differently-long) labels, sliding by that same fixed
+          spacer width instead of a fraction of its own size. */}
+      <span className="invisible min-w-[62px] whitespace-nowrap rounded-full px-2 py-1 text-center text-[11px] font-semibold">
         プライベート
       </span>
-      <span className="invisible whitespace-nowrap rounded-full px-3 py-1.5 text-center text-[12px] font-semibold">
-        プライベート
-      </span>
+      <span aria-hidden="true" className="w-[7px] shrink-0" />
       <span
-        className={`absolute inset-y-0.5 left-0.5 flex items-center justify-center whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold text-gray-800 shadow-sm transition-transform duration-200 ease-out ${
-          appMode === "private" ? "translate-x-[calc(100%+2px)]" : "translate-x-0"
+        className={`absolute inset-y-[3px] left-[3px] flex min-w-[62px] items-center justify-center whitespace-nowrap rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-gray-800 shadow-sm transition-transform duration-200 ease-out ${
+          appMode === "private" ? "translate-x-[7px]" : "translate-x-0"
         }`}
-        style={{ width: "calc(50% - 1px)" }}
       >
         {appMode === "tasks" ? "タスク管理" : "プライベート"}
       </span>

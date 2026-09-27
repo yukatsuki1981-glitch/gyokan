@@ -135,7 +135,7 @@ function ColorSwatchPicker({
   onChange: (color: string) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex items-center justify-between gap-1">
       {EVENT_COLOR_PALETTE.map((color) => {
         const selected = color.toUpperCase() === value.toUpperCase();
         return (
@@ -145,8 +145,8 @@ function ColorSwatchPicker({
             aria-label={`色を選択 ${color}`}
             aria-pressed={selected}
             onClick={() => onChange(color)}
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform ${
-              selected ? "ring-2 ring-offset-2" : ""
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-transform ${
+              selected ? "ring-2 ring-offset-1" : ""
             }`}
             style={
               selected
@@ -154,7 +154,7 @@ function ColorSwatchPicker({
                 : { backgroundColor: color }
             }
           >
-            {selected && <span className="h-2 w-2 rounded-full bg-white" />}
+            {selected && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
           </button>
         );
       })}

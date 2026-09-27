@@ -2,12 +2,14 @@
 // tasks mode's free-form HSL project-color picker (app/page.tsx), per the
 // request for a simple 10-swatch choice here instead.
 
+// Fixed display order — the default (emerald) always comes first; this
+// order never changes based on which color is currently selected.
 export const EVENT_COLOR_PALETTE: string[] = [
+  "#10B981", // emerald (default, matches the prior hardcoded chip color)
   "#EF4444", // red
   "#F97316", // orange
   "#F59E0B", // amber
   "#EAB308", // yellow
-  "#10B981", // emerald (existing default)
   "#14B8A6", // teal
   "#3B82F6", // blue
   "#6366F1", // indigo
@@ -15,7 +17,7 @@ export const EVENT_COLOR_PALETTE: string[] = [
   "#EC4899", // pink
 ];
 
-export const DEFAULT_EVENT_COLOR = EVENT_COLOR_PALETTE[4]; // emerald, matches the prior hardcoded chip color
+export const DEFAULT_EVENT_COLOR = EVENT_COLOR_PALETTE[0];
 
 export type EventColorStyle = {
   accent: string;
