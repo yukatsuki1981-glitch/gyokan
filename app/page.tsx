@@ -42,7 +42,6 @@ import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
 import { PrivateModeSection } from "@/components/private/PrivateModeSection";
 import {
   DisplaySettingsProvider,
-  SettingsToggle,
   useDisplaySettings,
 } from "@/components/display-settings-provider";
 import { isGyokanPaidMember } from "@/lib/gyokan/membership";
@@ -4896,21 +4895,225 @@ function useIsClient() {
   );
 }
 
-function SettingsThemeButton({ onOpen }: { onOpen: () => void }) {
-  const { theme } = useGyokanTheme();
+// iOS Settings-style compact list: related rows grouped into one white
+// card, each row a single flush line. Designed to keep scaling as more
+// settings are added, without ever growing beyond one line per row.
+function SettingsCard({ children }: { children: ReactNode }) {
+  return <Card className="overflow-hidden py-0">{children}</Card>;
+}
+
+function SettingsDivider() {
+  return <div className="h-px bg-black/[0.05]" style={{ marginLeft: 16 }} />;
+}
+
+function SettingsRow({
+  label,
+  value,
+  onClick,
+  destructive = false,
+}: {
+  label: string;
+  value?: ReactNode;
+  onClick?: () => void;
+  destructive?: boolean;
+}) {
+  const inner = (
+    <>
+      <span className={`truncate text-[13px] ${destructive ? "text-red-500" : "text-[var(--gyokan-text)]"}`}>
+        {label}
+      </span>
+      <span className="flex min-w-0 shrink-0 items-center gap-1">
+        {value != null && (
+          <span className="gyokan-muted max-w-[45vw] truncate text-[13px] sm:max-w-[220px]">{value}</span>
+        )}
+        {onClick && <Icon name="chevronRight" className="h-3.5 w-3.5 shrink-0 text-gray-300" />}
+      </span>
+    </>
+  );
+  if (!onClick) {
+    return <div className="flex items-center justify-between gap-2 px-4 py-2.5">{inner}</div>;
+  }
   return (
     <button
       type="button"
-      onClick={onOpen}
-      className="flex w-full items-center justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px] transition-colors hover:bg-[color-mix(in_srgb,var(--gyokan-border)_35%,var(--gyokan-bg2))]"
+      onClick={onClick}
+      className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors hover:bg-black/[0.02] active:bg-black/[0.04]"
     >
-      <span className="gyokan-muted">テーマ</span>
-      <span className="max-w-[55%] truncate font-medium text-[var(--gyokan-accent2)]">
-        {theme.name}
-      </span>
+      {inner}
     </button>
   );
 }
+
+function SettingsToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+      <span className="truncate text-[13px] text-[var(--gyokan-text)]">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={`relative h-6 w-10 shrink-0 rounded-full transition-colors duration-200 ${
+          checked ? "bg-[var(--gyokan-accent2)]" : "bg-gray-200"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
+            checked ? "translate-x-4" : "translate-x-0"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+// Shared edit sheet for every plain-text setting (app name, project/case
+// label) — tapping the row opens this instead of an always-visible input.
+function SettingsEditSheet({
+  open,
+  title,
+  value,
+  maxLength,
+  placeholder,
+  onSave,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  value: string;
+  maxLength: number;
+  placeholder: string;
+  onSave: (value: string) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    if (open) setDraft(value);
+  }, [open, value]);
+
+  return (
+    <DetailOverlay open={open} onClose={onClose} title={title}>
+      <input
+        autoFocus
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[14px] text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
+      />
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50"
+        >
+          キャンセル
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onSave(draft);
+            onClose();
+          }}
+          className="flex-1 rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[13px] font-medium text-white hover:bg-blue-600"
+        >
+          保存
+        </button>
+      </div>
+    </DetailOverlay>
+  );
+}
+
+function ColumnsPickerSheet({
+  open,
+  onClose,
+  value,
+  caseLabel,
+  onSelect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  value: number;
+  caseLabel: string;
+  onSelect: (n: number) => void;
+}) {
+  return (
+    <DetailOverlay open={open} onClose={onClose} title={`進行中の${caseLabel}の列数`}>
+      <div className="flex flex-col gap-1">
+        {Array.from(
+          { length: MAX_HOME_CASE_COLUMNS - MIN_HOME_CASE_COLUMNS + 1 },
+          (_, i) => MIN_HOME_CASE_COLUMNS + i,
+        ).map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => {
+              onSelect(n);
+              onClose();
+            }}
+            className="flex items-center justify-between rounded-xl px-3 py-2.5 text-[14px] transition-colors hover:bg-black/[0.03]"
+          >
+            <span className="text-[var(--gyokan-text)]">{n}列</span>
+            {value === n && <Icon name="check" className="h-4 w-4 text-[var(--gyokan-accent2)]" />}
+          </button>
+        ))}
+      </div>
+    </DetailOverlay>
+  );
+}
+
+function LogoutConfirmSheet({
+  open,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <DetailOverlay open={open} onClose={onClose} title="ログアウト">
+      <p className="mb-4 text-[13px] text-gray-500">ログアウトしますか？</p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50"
+        >
+          キャンセル
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onConfirm();
+          }}
+          className="flex-1 rounded-xl bg-red-500 py-2.5 text-[13px] font-semibold text-white hover:bg-red-600"
+        >
+          ログアウト
+        </button>
+      </div>
+    </DetailOverlay>
+  );
+}
+
+type SettingsEditField = {
+  key: "appTitle" | "projectLabel" | "caseLabel";
+  title: string;
+  value: string;
+  maxLength: number;
+  placeholder: string;
+};
 
 function AppSettingsPanel({
   userEmail,
@@ -4919,6 +5122,7 @@ function AppSettingsPanel({
   appTitle,
   onAppTitleChange,
   onOpenTheme,
+  onShowCompletedTasks,
   onSignOut,
 }: {
   userEmail?: string | null;
@@ -4927,6 +5131,7 @@ function AppSettingsPanel({
   appTitle: string;
   onAppTitleChange: (title: string) => void;
   onOpenTheme: () => void;
+  onShowCompletedTasks: () => void;
   onSignOut: () => void;
 }) {
   const {
@@ -4941,6 +5146,18 @@ function AppSettingsPanel({
     setCaseLabel,
     setHomeCaseColumns,
   } = useDisplaySettings();
+  const { theme } = useGyokanTheme();
+
+  const [editField, setEditField] = useState<SettingsEditField | null>(null);
+  const [columnsPickerOpen, setColumnsPickerOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+
+  const saveEditField = (value: string) => {
+    if (!editField) return;
+    if (editField.key === "appTitle") onAppTitleChange(value);
+    else if (editField.key === "projectLabel") setProjectLabel(value);
+    else setCaseLabel(value);
+  };
 
   return (
     <section className="space-y-4">
@@ -4954,106 +5171,102 @@ function AppSettingsPanel({
           案件の保存に失敗しました: {caseSaveError}
         </p>
       )}
-      <Card className="p-6">
-        <h3 className="gyokan-heading mb-4 text-[15px] font-semibold">設定</h3>
-        <ul className="space-y-2">
-          <li className="rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
-            <label className="block">
-              <span className="gyokan-muted mb-2 block">アプリ名</span>
-              <input
-                type="text"
-                value={appTitle}
-                onChange={(e) => onAppTitleChange(e.target.value)}
-                maxLength={24}
-                placeholder={DEFAULT_APP_TITLE}
-                className="w-full rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[13px] font-medium text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
-              />
-            </label>
-          </li>
-          <li className="rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
-            <SettingsToggle
-              checked={showProjects}
-              onChange={setShowProjects}
-              label={`${projectLabel}の表示`}
-            />
-            <label className="mt-3 block">
-              <span className="gyokan-muted mb-2 block">{projectLabel}の名称</span>
-              <input
-                type="text"
-                value={projectLabel}
-                onChange={(e) => setProjectLabel(e.target.value)}
-                maxLength={16}
-                placeholder={DEFAULT_PROJECT_LABEL}
-                className="w-full rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[13px] font-medium text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
-              />
-            </label>
-          </li>
-          <li className="rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
-            <SettingsToggle
-              checked={showCases}
-              onChange={setShowCases}
-              label={`${caseLabel}の表示`}
-            />
-            <label className="mt-3 block">
-              <span className="gyokan-muted mb-2 block">{caseLabel}の名称</span>
-              <input
-                type="text"
-                value={caseLabel}
-                onChange={(e) => setCaseLabel(e.target.value)}
-                maxLength={16}
-                placeholder={DEFAULT_CASE_LABEL}
-                className="w-full rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[13px] font-medium text-[var(--gyokan-text)] outline-none focus:border-[var(--gyokan-accent2)] focus:ring-2 focus:ring-[var(--gyokan-accent2)]/15"
-              />
-            </label>
-            <div className="mt-3">
-              <span className="gyokan-muted mb-2 block">進行中の{caseLabel}の列数</span>
-              <div className="flex gap-1.5">
-                {Array.from(
-                  { length: MAX_HOME_CASE_COLUMNS - MIN_HOME_CASE_COLUMNS + 1 },
-                  (_, i) => MIN_HOME_CASE_COLUMNS + i,
-                ).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setHomeCaseColumns(n)}
-                    aria-pressed={homeCaseColumns === n}
-                    className={`flex h-9 flex-1 items-center justify-center rounded-lg text-[13px] font-medium transition-colors ${
-                      homeCaseColumns === n
-                        ? "bg-[var(--gyokan-accent2)] text-white"
-                        : "bg-white/80 text-[var(--gyokan-text)] hover:bg-white"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </li>
-          {[
-            ["通知", "オン"],
-            ["データ保存", "Supabase"],
-          ].map(([k, v]) => (
-            <li key={k} className="flex justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
-              <span className="gyokan-muted">{k}</span>
-              <span className="max-w-[55%] truncate font-medium gyokan-muted">{v}</span>
-            </li>
-          ))}
-          <li>
-            <SettingsThemeButton onOpen={onOpenTheme} />
-          </li>
-          <li className="flex justify-between rounded-2xl bg-[var(--gyokan-bg2)] px-4 py-3 text-[13px]">
-            <span className="gyokan-muted">アカウント</span>
-            <span className="max-w-[55%] truncate font-medium gyokan-muted">{userEmail ?? "ログイン中"}</span>
-          </li>
-        </ul>
-        <button
-          type="button"
-          onClick={onSignOut}
-          className="mt-4 w-full rounded-xl border border-black/[0.08] px-4 py-2.5 text-[13px] font-medium text-gray-600 transition-colors hover:bg-gray-50"
-        >
-          ログアウト
-        </button>
-      </Card>
+
+      <SettingsCard>
+        <SettingsRow
+          label="アプリ名"
+          value={appTitle.trim() || DEFAULT_APP_TITLE}
+          onClick={() =>
+            setEditField({
+              key: "appTitle",
+              title: "アプリ名",
+              value: appTitle,
+              maxLength: 24,
+              placeholder: DEFAULT_APP_TITLE,
+            })
+          }
+        />
+        <SettingsDivider />
+        <SettingsRow label="テーマ" value={theme.name} onClick={onOpenTheme} />
+      </SettingsCard>
+
+      <SettingsCard>
+        <SettingsToggleRow label={`${projectLabel}の表示`} checked={showProjects} onChange={setShowProjects} />
+        <SettingsDivider />
+        <SettingsRow
+          label={`${projectLabel}の名称`}
+          value={projectLabel}
+          onClick={() =>
+            setEditField({
+              key: "projectLabel",
+              title: `${projectLabel}の名称`,
+              value: projectLabel,
+              maxLength: 16,
+              placeholder: DEFAULT_PROJECT_LABEL,
+            })
+          }
+        />
+        <SettingsDivider />
+        <SettingsToggleRow label={`${caseLabel}の表示`} checked={showCases} onChange={setShowCases} />
+        <SettingsDivider />
+        <SettingsRow
+          label={`${caseLabel}の名称`}
+          value={caseLabel}
+          onClick={() =>
+            setEditField({
+              key: "caseLabel",
+              title: `${caseLabel}の名称`,
+              value: caseLabel,
+              maxLength: 16,
+              placeholder: DEFAULT_CASE_LABEL,
+            })
+          }
+        />
+        <SettingsDivider />
+        <SettingsRow
+          label={`進行中の${caseLabel}の列数`}
+          value={`${homeCaseColumns}列`}
+          onClick={() => setColumnsPickerOpen(true)}
+        />
+      </SettingsCard>
+
+      <SettingsCard>
+        <SettingsRow label="通知" value="オン" />
+        <SettingsDivider />
+        <SettingsRow label="データ保存" value="Supabase" />
+        <SettingsDivider />
+        <SettingsRow label="アカウント" value={userEmail ?? "ログイン中"} />
+      </SettingsCard>
+
+      <SettingsCard>
+        <SettingsRow label="完了済みタスクを見る" onClick={onShowCompletedTasks} />
+        <SettingsDivider />
+        <SettingsRow label="ログアウト" destructive onClick={() => setLogoutConfirmOpen(true)} />
+      </SettingsCard>
+
+      <SettingsEditSheet
+        open={!!editField}
+        title={editField?.title ?? ""}
+        value={editField?.value ?? ""}
+        maxLength={editField?.maxLength ?? 24}
+        placeholder={editField?.placeholder ?? ""}
+        onSave={saveEditField}
+        onClose={() => setEditField(null)}
+      />
+
+      <ColumnsPickerSheet
+        open={columnsPickerOpen}
+        onClose={() => setColumnsPickerOpen(false)}
+        value={homeCaseColumns}
+        caseLabel={caseLabel}
+        onSelect={setHomeCaseColumns}
+      />
+
+      <LogoutConfirmSheet
+        open={logoutConfirmOpen}
+        onClose={() => setLogoutConfirmOpen(false)}
+        onConfirm={onSignOut}
+      />
     </section>
   );
 }
@@ -5173,6 +5386,7 @@ export default function Home() {
   const [themePickerOpen, setThemePickerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [allCasesListOpen, setAllCasesListOpen] = useState(false);
+  const [completedTasksOpen, setCompletedTasksOpen] = useState(false);
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
   const [displaySettings, setDisplaySettings] = useState(DEFAULT_DISPLAY_SETTINGS);
   const [appMode, setAppMode] = useState<"tasks" | "private">("tasks");
@@ -5307,6 +5521,16 @@ export default function Home() {
       ),
     [tasks, viewDateISO, caseById],
   );
+
+  // "完了済みタスクを見る" in settings — all completed tasks belonging to
+  // the mode the panel was opened from, most recently completed first, not
+  // scoped to the currently-viewed date (unlike the buckets above).
+  const completedTasksForMode = useMemo(() => {
+    const wantPrivate = appMode === "private";
+    return tasks
+      .filter((t) => t.done && ((t.scope ?? "work") === "private") === wantPrivate)
+      .sort((a, b) => (b.completedAt ?? b.date).localeCompare(a.completedAt ?? a.date));
+  }, [tasks, appMode]);
 
   const showPrivateTaskSection = privateTaskBuckets.hasAny;
 
@@ -5734,7 +5958,7 @@ export default function Home() {
       type="button"
       onClick={() => setAppMode(appMode === "tasks" ? "private" : "tasks")}
       aria-label={appMode === "tasks" ? "プライベートモードに切り替え" : "タスク管理モードに切り替え"}
-      className="relative flex shrink-0 items-center rounded-full bg-black/[0.08] p-[3px] transition-colors"
+      className="relative flex shrink-0 items-center rounded-full bg-black/[0.08] p-1 transition-colors"
     >
       {/* A single invisible placeholder (sized to the longer label,
           "プライベート") plus a small fixed spacer set the button's total
@@ -5744,13 +5968,13 @@ export default function Home() {
           and shares the placeholder's min-width so it doesn't resize between
           the two (differently-long) labels, sliding by that same fixed
           spacer width instead of a fraction of its own size. */}
-      <span className="invisible min-w-[62px] whitespace-nowrap rounded-full px-2 py-1 text-center text-[11px] font-semibold">
+      <span className="invisible min-w-[70px] whitespace-nowrap rounded-full px-2.5 py-1.5 text-center text-[13px] font-semibold">
         プライベート
       </span>
-      <span aria-hidden="true" className="w-[7px] shrink-0" />
+      <span aria-hidden="true" className="w-[9px] shrink-0" />
       <span
-        className={`absolute inset-y-[3px] left-[3px] flex min-w-[62px] items-center justify-center whitespace-nowrap rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-gray-800 shadow-sm transition-transform duration-200 ease-out ${
-          appMode === "private" ? "translate-x-[7px]" : "translate-x-0"
+        className={`absolute inset-y-1 left-1 flex min-w-[70px] items-center justify-center whitespace-nowrap rounded-full bg-white px-2.5 py-1.5 text-[13px] font-semibold text-gray-800 shadow-sm transition-transform duration-200 ease-out ${
+          appMode === "private" ? "translate-x-[9px]" : "translate-x-0"
         }`}
       >
         {appMode === "tasks" ? "タスク管理" : "プライベート"}
@@ -5993,7 +6217,6 @@ export default function Home() {
                 {modeToggle}
               </div>
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
-                <button type="button" className="shrink-0 rounded-xl p-2 text-gray-500 hover:bg-white"><Icon name="menu" className="h-5 w-5" /></button>
                 {modeToggle}
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
@@ -6108,6 +6331,7 @@ export default function Home() {
                 appTitle={appTitle}
                 onAppTitleChange={handleAppTitleChange}
                 onOpenTheme={() => setThemePickerOpen(true)}
+                onShowCompletedTasks={() => setCompletedTasksOpen(true)}
                 onSignOut={() => void signOut()}
               />
             ) : (
@@ -6257,8 +6481,40 @@ export default function Home() {
             setSettingsOpen(false);
             setThemePickerOpen(true);
           }}
+          onShowCompletedTasks={() => {
+            setSettingsOpen(false);
+            setCompletedTasksOpen(true);
+          }}
           onSignOut={() => void signOut()}
         />
+      </DetailOverlay>
+
+      <DetailOverlay
+        open={completedTasksOpen}
+        onClose={() => setCompletedTasksOpen(false)}
+        title="完了済みタスク"
+      >
+        {completedTasksForMode.length === 0 ? (
+          <p className="py-6 text-center text-[13px] text-gray-400">
+            完了済みのタスクはまだありません
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {completedTasksForMode.map((task) => (
+              <TaskRowContent
+                key={task.id}
+                task={task}
+                viewDateISO={viewDateISO}
+                onToggle={toggleTask}
+                onDelete={deleteTask}
+                onOpen={(t) => {
+                  setCompletedTasksOpen(false);
+                  setSelectedTask(t);
+                }}
+              />
+            ))}
+          </div>
+        )}
       </DetailOverlay>
 
       <DetailOverlay
