@@ -23,6 +23,7 @@ type DisplaySettingsContextValue = DisplaySettings & {
   setProjectLabel: (value: string) => void;
   setCaseLabel: (value: string) => void;
   setHomeCaseColumns: (value: number) => void;
+  setDefaultEventColor: (value: string) => void;
 };
 
 const DisplaySettingsContext = createContext<DisplaySettingsContextValue | null>(null);
@@ -74,6 +75,7 @@ export function DisplaySettingsProvider({
       setProjectLabel: (projectLabel) => updateSettings({ projectLabel }),
       setCaseLabel: (caseLabel) => updateSettings({ caseLabel }),
       setHomeCaseColumns: (homeCaseColumns) => updateSettings({ homeCaseColumns }),
+      setDefaultEventColor: (defaultEventColor) => updateSettings({ defaultEventColor }),
     }),
     [settings, updateSettings],
   );
@@ -91,6 +93,7 @@ const FALLBACK: DisplaySettingsContextValue = {
   setProjectLabel: () => {},
   setCaseLabel: () => {},
   setHomeCaseColumns: () => {},
+  setDefaultEventColor: () => {},
 };
 
 export function useDisplaySettings() {

@@ -60,6 +60,7 @@ import {
   readDisplaySettings,
   writeDisplaySettings,
 } from "@/lib/gyokan/display-settings";
+import { EVENT_COLOR_PALETTE } from "@/lib/gyokan/event-colors";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -3070,6 +3071,8 @@ function TodayTasksSection({
   privateOngoingRangeTasks,
   showPrivateSection,
   renderTaskList,
+  renderWorkTodayAndOverdue,
+  renderPrivateTodayAndOverdue,
   onAddTask,
   className = "",
 }: {
@@ -3088,6 +3091,8 @@ function TodayTasksSection({
     dragScope: "today" | "upcoming" | "range" | "private-today" | "private-upcoming" | "private-range",
     options?: { showOriginalDeadline?: boolean; subdued?: boolean },
   ) => ReactNode;
+  renderWorkTodayAndOverdue: (today: Task[], overdue: Task[]) => ReactNode;
+  renderPrivateTodayAndOverdue: (today: Task[], overdue: Task[]) => ReactNode;
   onAddTask: () => void;
   className?: string;
 }) {
@@ -3130,6 +3135,7 @@ function TodayTasksSection({
                 incompleteOtherTasks={workIncompleteOtherTasks}
                 ongoingRangeTasks={workOngoingRangeTasks}
                 renderTaskList={renderTaskList}
+                renderTodayAndOverdue={renderWorkTodayAndOverdue}
               />
             </div>
 
@@ -3145,6 +3151,7 @@ function TodayTasksSection({
                     incompleteOtherTasks={privateIncompleteOtherTasks}
                     ongoingRangeTasks={privateOngoingRangeTasks}
                     renderTaskList={renderTaskList}
+                    renderTodayAndOverdue={renderPrivateTodayAndOverdue}
                   />
                 </div>
               </>
@@ -3380,6 +3387,100 @@ function SortableTaskList({
           ))}
         </div>
       </SortableContext>
+    </DndContext>
+  );
+}
+
+/**
+ * Renders the "today" and "overdue" task sections under a single shared
+ * DndContext so a task can be dragged across the divider between them (in
+ * addition to reordering within either section on its own).
+ */
+function TodayAndOverdueTaskList({
+  todayTasks,
+  overdueTasks,
+  viewDateISO,
+  sensors,
+  onToggle,
+  onDelete,
+  onOpen,
+  onReorderToday,
+  onReorderOverdue,
+  onMoveToToday,
+  subdued = false,
+}: {
+  todayTasks: Task[];
+  overdueTasks: Task[];
+  viewDateISO: string;
+  sensors: ReturnType<typeof useSensors>;
+  onToggle: (id: string) => void;
+  onDelete: (id: string) => void;
+  onOpen: (task: Task) => void;
+  onReorderToday: (event: DragEndEvent) => void;
+  onReorderOverdue: (event: DragEndEvent) => void;
+  onMoveToToday: (taskId: string, overId: string) => void;
+  subdued?: boolean;
+}) {
+  const listClass = "flex flex-col gap-1 lg:grid lg:grid-cols-2 lg:gap-1";
+  const todayIds = useMemo(() => new Set(todayTasks.map((t) => t.id)), [todayTasks]);
+  const overdueIds = useMemo(() => new Set(overdueTasks.map((t) => t.id)), [overdueTasks]);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      if (todayIds.has(activeId) && todayIds.has(overId)) {
+        onReorderToday(event);
+      } else if (overdueIds.has(activeId) && overdueIds.has(overId)) {
+        onReorderOverdue(event);
+      } else if (overdueIds.has(activeId) && todayIds.has(overId)) {
+        onMoveToToday(activeId, overId);
+      }
+    },
+    [todayIds, overdueIds, onReorderToday, onReorderOverdue, onMoveToToday],
+  );
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
+      {todayTasks.length > 0 && (
+        <SortableContext items={todayTasks.map((t) => t.id)} strategy={rectSortingStrategy}>
+          <div className={listClass}>
+            {todayTasks.map((task) => (
+              <SortableTaskRow
+                key={task.id}
+                task={task}
+                viewDateISO={viewDateISO}
+                onToggle={onToggle}
+                onDelete={onDelete}
+                onOpen={onOpen}
+                subdued={subdued}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      )}
+      {overdueTasks.length > 0 && (
+        <div className={todayTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
+          <SortableContext items={overdueTasks.map((t) => t.id)} strategy={rectSortingStrategy}>
+            <div className={listClass}>
+              {overdueTasks.map((task) => (
+                <SortableTaskRow
+                  key={task.id}
+                  task={task}
+                  viewDateISO={viewDateISO}
+                  onToggle={onToggle}
+                  onDelete={onDelete}
+                  onOpen={onOpen}
+                  showOriginalDeadline
+                  subdued={subdued}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </div>
+      )}
     </DndContext>
   );
 }
@@ -4995,6 +5096,7 @@ function TaskListPanel({
   incompleteOtherTasks,
   ongoingRangeTasks,
   renderTaskList,
+  renderTodayAndOverdue,
   emptyLabel = "タスクがありません",
 }: {
   displayedTasks: Task[];
@@ -5005,6 +5107,7 @@ function TaskListPanel({
     dragScope: "today" | "upcoming" | "range" | "private-today" | "private-upcoming" | "private-range",
     options?: { showOriginalDeadline?: boolean; subdued?: boolean },
   ) => ReactNode;
+  renderTodayAndOverdue: (today: Task[], overdue: Task[]) => ReactNode;
   emptyLabel?: string;
 }) {
   if (
@@ -5021,12 +5124,8 @@ function TaskListPanel({
 
   return (
     <>
-      {displayedTasks.length > 0 && renderTaskList(displayedTasks, "today")}
-      {incompleteOtherTasks.length > 0 && (
-        <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
-          {renderTaskList(incompleteOtherTasks, "range", { showOriginalDeadline: true })}
-        </div>
-      )}
+      {(displayedTasks.length > 0 || incompleteOtherTasks.length > 0) &&
+        renderTodayAndOverdue(displayedTasks, incompleteOtherTasks)}
       {ongoingRangeTasks.length > 0 && (
         <div
           className={
@@ -5047,6 +5146,7 @@ function PrivateTaskListPanel({
   incompleteOtherTasks,
   ongoingRangeTasks,
   renderTaskList,
+  renderTodayAndOverdue,
 }: {
   displayedTasks: Task[];
   incompleteOtherTasks: Task[];
@@ -5056,19 +5156,12 @@ function PrivateTaskListPanel({
     dragScope: "today" | "upcoming" | "range" | "private-today" | "private-upcoming" | "private-range",
     options?: { showOriginalDeadline?: boolean; subdued?: boolean },
   ) => ReactNode;
+  renderTodayAndOverdue: (today: Task[], overdue: Task[]) => ReactNode;
 }) {
   return (
     <>
-      {displayedTasks.length > 0 &&
-        renderTaskList(displayedTasks, "private-today", { subdued: true })}
-      {incompleteOtherTasks.length > 0 && (
-        <div className={displayedTasks.length > 0 ? "mt-2 border-t border-black/[0.04] pt-2" : ""}>
-          {renderTaskList(incompleteOtherTasks, "private-range", {
-            showOriginalDeadline: true,
-            subdued: true,
-          })}
-        </div>
-      )}
+      {(displayedTasks.length > 0 || incompleteOtherTasks.length > 0) &&
+        renderTodayAndOverdue(displayedTasks, incompleteOtherTasks)}
       {ongoingRangeTasks.length > 0 && (
         <div
           className={
@@ -5288,6 +5381,50 @@ function ColumnsPickerSheet({
   );
 }
 
+function EventColorPickerSheet({
+  open,
+  onClose,
+  value,
+  onSelect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  value: string;
+  onSelect: (color: string) => void;
+}) {
+  return (
+    <DetailOverlay open={open} onClose={onClose} title="予定の既定の色">
+      <div className="flex flex-wrap gap-2">
+        {EVENT_COLOR_PALETTE.map((color) => {
+          const selected = color.toUpperCase() === value.toUpperCase();
+          return (
+            <button
+              key={color}
+              type="button"
+              aria-label={`色を選択 ${color}`}
+              aria-pressed={selected}
+              onClick={() => {
+                onSelect(color);
+                onClose();
+              }}
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-transform ${
+                selected ? "ring-2 ring-offset-1" : ""
+              }`}
+              style={
+                selected
+                  ? ({ backgroundColor: color, "--tw-ring-color": color } as React.CSSProperties)
+                  : { backgroundColor: color }
+              }
+            >
+              {selected && <span className="h-2 w-2 rounded-full bg-white" />}
+            </button>
+          );
+        })}
+      </div>
+    </DetailOverlay>
+  );
+}
+
 function LogoutConfirmSheet({
   open,
   onClose,
@@ -5356,16 +5493,19 @@ function AppSettingsPanel({
     projectLabel,
     caseLabel,
     homeCaseColumns,
+    defaultEventColor,
     setShowProjects,
     setShowCases,
     setProjectLabel,
     setCaseLabel,
     setHomeCaseColumns,
+    setDefaultEventColor,
   } = useDisplaySettings();
   const { theme } = useGyokanTheme();
 
   const [editField, setEditField] = useState<SettingsEditField | null>(null);
   const [columnsPickerOpen, setColumnsPickerOpen] = useState(false);
+  const [eventColorPickerOpen, setEventColorPickerOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const saveEditField = (value: string) => {
@@ -5447,6 +5587,19 @@ function AppSettingsPanel({
       </SettingsCard>
 
       <SettingsCard>
+        <SettingsRow
+          label="予定の既定の色"
+          value={
+            <span
+              className="inline-block h-4 w-4 rounded-full"
+              style={{ backgroundColor: defaultEventColor }}
+            />
+          }
+          onClick={() => setEventColorPickerOpen(true)}
+        />
+      </SettingsCard>
+
+      <SettingsCard>
         <SettingsRow label="通知" value="オン" />
         <SettingsDivider />
         <SettingsRow label="データ保存" value="Supabase" />
@@ -5476,6 +5629,13 @@ function AppSettingsPanel({
         value={homeCaseColumns}
         caseLabel={caseLabel}
         onSelect={setHomeCaseColumns}
+      />
+
+      <EventColorPickerSheet
+        open={eventColorPickerOpen}
+        onClose={() => setEventColorPickerOpen(false)}
+        value={defaultEventColor}
+        onSelect={setDefaultEventColor}
       />
 
       <LogoutConfirmSheet
@@ -5812,6 +5972,72 @@ export default function Home() {
       });
     },
     [],
+  );
+
+  /** Move a task out of one visible list and splice it into another at a given drop position. */
+  const moveTaskIntoList = useCallback(
+    (
+      prev: Task[],
+      taskId: string,
+      targetVisible: Task[],
+      overId: string,
+      transform: (task: Task) => Task,
+    ) => {
+      const moving = prev.find((t) => t.id === taskId);
+      if (!moving) return prev;
+      const overIndex = targetVisible.findIndex((t) => t.id === overId);
+      if (overIndex === -1) return prev;
+
+      const newTarget = [...targetVisible];
+      newTarget.splice(overIndex, 0, transform(moving));
+
+      const targetIds = new Set(targetVisible.map((t) => t.id));
+      let nextIdx = 0;
+      const result: Task[] = [];
+      for (const t of prev) {
+        if (t.id === taskId) continue;
+        if (targetIds.has(t.id)) {
+          result.push(newTarget[nextIdx++]!);
+          continue;
+        }
+        result.push(t);
+      }
+      while (nextIdx < newTarget.length) result.push(newTarget[nextIdx++]!);
+      return result;
+    },
+    [],
+  );
+
+  const handleMoveOverdueTaskToToday = useCallback(
+    (taskId: string, overId: string) => {
+      replaceTasks((prev) => {
+        const todayVisible = prev.filter(
+          (t) => isTopSectionTask(t, viewDateISO) && filterWorkTask(t),
+        );
+        return moveTaskIntoList(prev, taskId, todayVisible, overId, (t) => ({
+          ...t,
+          date: viewDateISO,
+          dateEnd: undefined,
+        }));
+      });
+    },
+    [filterWorkTask, viewDateISO, replaceTasks, moveTaskIntoList],
+  );
+
+  const handlePrivateMoveOverdueTaskToToday = useCallback(
+    (taskId: string, overId: string) => {
+      replaceTasks((prev) => {
+        const todayVisible = prev.filter(
+          (t) => isTopSectionTask(t, viewDateISO) && filterPrivateTask(t),
+        );
+        return moveTaskIntoList(prev, taskId, todayVisible, overId, (t) => ({
+          ...t,
+          date: viewDateISO,
+          dateEnd: undefined,
+        }));
+      });
+    },
+    [filterPrivateTask, viewDateISO, replaceTasks, moveTaskIntoList],
   );
 
   const handleTaskDragEnd = useCallback(
@@ -6167,6 +6393,37 @@ export default function Home() {
     />
   );
 
+  const renderWorkTodayAndOverdue = (today: Task[], overdue: Task[]) => (
+    <TodayAndOverdueTaskList
+      todayTasks={today}
+      overdueTasks={overdue}
+      viewDateISO={viewDateISO}
+      sensors={sensors}
+      onToggle={toggleTask}
+      onDelete={deleteTask}
+      onOpen={setSelectedTask}
+      onReorderToday={handleTaskDragEnd}
+      onReorderOverdue={handleRangeTaskDragEnd}
+      onMoveToToday={handleMoveOverdueTaskToToday}
+    />
+  );
+
+  const renderPrivateTodayAndOverdue = (today: Task[], overdue: Task[]) => (
+    <TodayAndOverdueTaskList
+      todayTasks={today}
+      overdueTasks={overdue}
+      viewDateISO={viewDateISO}
+      sensors={sensors}
+      onToggle={toggleTask}
+      onDelete={deleteTask}
+      onOpen={setSelectedTask}
+      onReorderToday={handlePrivateTaskDragEnd}
+      onReorderOverdue={handlePrivateRangeTaskDragEnd}
+      onMoveToToday={handlePrivateMoveOverdueTaskToToday}
+      subdued
+    />
+  );
+
   const showHomeCaseGrid = mobileTab === "home";
   const showTasks = mobileTab === "home";
 
@@ -6259,6 +6516,8 @@ export default function Home() {
                 privateOngoingRangeTasks={privateTaskBuckets.ongoingRange}
                 showPrivateSection={showPrivateTaskSection}
                 renderTaskList={renderTaskList}
+                renderWorkTodayAndOverdue={renderWorkTodayAndOverdue}
+                renderPrivateTodayAndOverdue={renderPrivateTodayAndOverdue}
                 onAddTask={openTaskModalForView}
                 className={
                   showProjects && !isAllProjects
@@ -6534,6 +6793,8 @@ export default function Home() {
                         privateOngoingRangeTasks={privateTaskBuckets.ongoingRange}
                         showPrivateSection={showPrivateTaskSection}
                         renderTaskList={renderTaskList}
+                        renderWorkTodayAndOverdue={renderWorkTodayAndOverdue}
+                        renderPrivateTodayAndOverdue={renderPrivateTodayAndOverdue}
                         onAddTask={openTaskModalForView}
                       />
                     </>

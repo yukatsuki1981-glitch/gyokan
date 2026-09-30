@@ -176,6 +176,17 @@ export function buildTaskUpsertAttempts(row: TaskUpsertRow): Row[] {
   const legacy = toLegacyTaskUpsert(row);
   const { completed_at: _completedAt, ...modernNoCompletedAt } = modern;
   const { completed_at: _completedAt2, ...withDateAliasNoCompletedAt } = withDateAlias;
+  // Drops just `color` (e.g. migration 20260906_add_task_color.sql not yet
+  // applied) while keeping starred/sort_order/date_end/memo/scope — without
+  // this step, a missing color column alone would otherwise fall all the
+  // way through to modernCore below and silently drop those other fields
+  // from the write too.
+  const { color: _colorOnly, ...modernNoColor } = modernNoCompletedAt;
+  const withDateAliasNoColor: Row = {
+    ...modernNoColor,
+    date: row.task_date,
+    ...(legacyTime ? { time: legacyTime } : {}),
+  };
   const {
     starred: _starred,
     sort_order: _sortOrder,
@@ -196,6 +207,8 @@ export function buildTaskUpsertAttempts(row: TaskUpsertRow): Row[] {
     withDateAlias,
     modernNoCompletedAt,
     withDateAliasNoCompletedAt,
+    modernNoColor,
+    withDateAliasNoColor,
     modernCore,
     withDateAliasCore,
     legacy,

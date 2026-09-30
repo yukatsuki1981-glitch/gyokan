@@ -30,6 +30,7 @@ import {
 } from "@/lib/gyokan/events";
 import { DEFAULT_EVENT_COLOR, EVENT_COLOR_PALETTE, eventColorStyle } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
+import { useDisplaySettings } from "@/components/display-settings-provider";
 import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
 import { GripIcon, TrashIcon, XIcon } from "./icons";
 
@@ -196,6 +197,7 @@ export function DayEventPopup({
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
   onClose: () => void;
 }) {
+  const { defaultEventColor } = useDisplaySettings();
   const [view, setView] = useState<View>(() => (dayEvents.length === 0 ? "add" : "list"));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -203,7 +205,7 @@ export function DayEventPopup({
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("");
   const [memo, setMemo] = useState("");
-  const [color, setColor] = useState(DEFAULT_EVENT_COLOR);
+  const [color, setColor] = useState(defaultEventColor);
 
   // The sheet is sized from the *visual* viewport, not 95vh of the layout
   // viewport. With the keyboard open the layout viewport doesn't shrink, so
@@ -439,7 +441,7 @@ export function DayEventPopup({
     setStartTime("09:00");
     setEndTime("");
     setMemo("");
-    setColor(DEFAULT_EVENT_COLOR);
+    setColor(defaultEventColor);
     setEditingId(null);
   };
 

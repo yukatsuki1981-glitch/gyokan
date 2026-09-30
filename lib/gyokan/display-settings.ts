@@ -1,3 +1,5 @@
+import { DEFAULT_EVENT_COLOR, EVENT_COLOR_PALETTE } from "./event-colors";
+
 export const DEFAULT_PROJECT_LABEL = "プロジェクト";
 export const DEFAULT_CASE_LABEL = "案件";
 export const DEFAULT_HOME_CASE_COLUMNS = 4;
@@ -10,6 +12,7 @@ export type DisplaySettings = {
   projectLabel: string;
   caseLabel: string;
   homeCaseColumns: number;
+  defaultEventColor: string;
 };
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -18,6 +21,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   projectLabel: DEFAULT_PROJECT_LABEL,
   caseLabel: DEFAULT_CASE_LABEL,
   homeCaseColumns: DEFAULT_HOME_CASE_COLUMNS,
+  defaultEventColor: DEFAULT_EVENT_COLOR,
 };
 
 const STORAGE_PREFIX = "gyokan-display-settings";
@@ -38,6 +42,12 @@ function normalizeHomeCaseColumns(value: unknown): number {
   return Math.min(MAX_HOME_CASE_COLUMNS, Math.max(MIN_HOME_CASE_COLUMNS, n));
 }
 
+function normalizeDefaultEventColor(value: unknown): string {
+  return typeof value === "string" && EVENT_COLOR_PALETTE.includes(value.toUpperCase())
+    ? value.toUpperCase()
+    : DEFAULT_EVENT_COLOR;
+}
+
 export function readDisplaySettings(userId?: string | null): DisplaySettings {
   if (typeof window === "undefined") return DEFAULT_DISPLAY_SETTINGS;
   try {
@@ -50,6 +60,7 @@ export function readDisplaySettings(userId?: string | null): DisplaySettings {
       projectLabel: normalizeLabel(parsed.projectLabel, DEFAULT_PROJECT_LABEL),
       caseLabel: normalizeLabel(parsed.caseLabel, DEFAULT_CASE_LABEL),
       homeCaseColumns: normalizeHomeCaseColumns(parsed.homeCaseColumns),
+      defaultEventColor: normalizeDefaultEventColor(parsed.defaultEventColor),
     };
   } catch {
     return DEFAULT_DISPLAY_SETTINGS;
@@ -65,13 +76,15 @@ export function writeDisplaySettings(settings: DisplaySettings, userId?: string 
       projectLabel: normalizeLabel(settings.projectLabel, DEFAULT_PROJECT_LABEL),
       caseLabel: normalizeLabel(settings.caseLabel, DEFAULT_CASE_LABEL),
       homeCaseColumns: normalizeHomeCaseColumns(settings.homeCaseColumns),
+      defaultEventColor: normalizeDefaultEventColor(settings.defaultEventColor),
     };
     const isDefault =
       next.showProjects === DEFAULT_DISPLAY_SETTINGS.showProjects &&
       next.showCases === DEFAULT_DISPLAY_SETTINGS.showCases &&
       next.projectLabel === DEFAULT_PROJECT_LABEL &&
       next.caseLabel === DEFAULT_CASE_LABEL &&
-      next.homeCaseColumns === DEFAULT_HOME_CASE_COLUMNS;
+      next.homeCaseColumns === DEFAULT_HOME_CASE_COLUMNS &&
+      next.defaultEventColor === DEFAULT_EVENT_COLOR;
     if (isDefault) {
       localStorage.removeItem(storageKey(userId));
       return;
