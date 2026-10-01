@@ -3394,7 +3394,14 @@ function SortableTaskList({
 /**
  * Renders the "today" and "overdue" task sections under a single shared
  * DndContext so a task can be dragged across the divider between them (in
- * addition to reordering within either section on its own).
+ * addition to reordering within either section on its own). The today/
+ * overdue arrays never change until the actual drop commits — dnd-kit's
+ * sortable animation assumes a SortableContext's membership stays fixed
+ * during a drag and shifts items purely via CSS transform; mutating
+ * membership mid-drag (to show a live "ghost" preview) fights that and
+ * produces bogus transform offsets that don't settle correctly. Instead,
+ * the exact drop position is resolved once, at drop time, from which half
+ * of the target row the pointer is over.
  */
 function TodayAndOverdueTaskList({
   todayTasks,
@@ -3418,7 +3425,7 @@ function TodayAndOverdueTaskList({
   onOpen: (task: Task) => void;
   onReorderToday: (event: DragEndEvent) => void;
   onReorderOverdue: (event: DragEndEvent) => void;
-  onMoveToToday: (taskId: string, overId: string) => void;
+  onMoveToToday: (taskId: string, index: number) => void;
   subdued?: boolean;
 }) {
   const listClass = "flex flex-col gap-1 lg:grid lg:grid-cols-2 lg:gap-1";
@@ -3431,15 +3438,29 @@ function TodayAndOverdueTaskList({
       if (!over || active.id === over.id) return;
       const activeId = String(active.id);
       const overId = String(over.id);
+
       if (todayIds.has(activeId) && todayIds.has(overId)) {
         onReorderToday(event);
       } else if (overdueIds.has(activeId) && overdueIds.has(overId)) {
         onReorderOverdue(event);
       } else if (overdueIds.has(activeId) && todayIds.has(overId)) {
-        onMoveToToday(activeId, overId);
+        const overIndex = todayTasks.findIndex((t) => t.id === overId);
+        const activeRect = active.rect.current.translated;
+        const overRect = over.rect;
+        // Which half of the target row the pointer ended up over decides
+        // before/after — comparing centers (not edges) cancels out the
+        // arbitrary offset between the row's own top edge and wherever
+        // within it the user actually grabbed the drag handle.
+        const isBelowOverItem = !!(
+          activeRect &&
+          overRect &&
+          activeRect.top + activeRect.height / 2 > overRect.top + overRect.height / 2
+        );
+        const insertIndex = overIndex >= 0 ? overIndex + (isBelowOverItem ? 1 : 0) : todayTasks.length;
+        onMoveToToday(activeId, insertIndex);
       }
     },
-    [todayIds, overdueIds, onReorderToday, onReorderOverdue, onMoveToToday],
+    [todayIds, overdueIds, todayTasks, onReorderToday, onReorderOverdue, onMoveToToday],
   );
 
   return (
@@ -5980,16 +6001,15 @@ export default function Home() {
       prev: Task[],
       taskId: string,
       targetVisible: Task[],
-      overId: string,
+      index: number,
       transform: (task: Task) => Task,
     ) => {
       const moving = prev.find((t) => t.id === taskId);
       if (!moving) return prev;
-      const overIndex = targetVisible.findIndex((t) => t.id === overId);
-      if (overIndex === -1) return prev;
+      const insertAt = Math.max(0, Math.min(index, targetVisible.length));
 
       const newTarget = [...targetVisible];
-      newTarget.splice(overIndex, 0, transform(moving));
+      newTarget.splice(insertAt, 0, transform(moving));
 
       const targetIds = new Set(targetVisible.map((t) => t.id));
       let nextIdx = 0;
@@ -6009,12 +6029,12 @@ export default function Home() {
   );
 
   const handleMoveOverdueTaskToToday = useCallback(
-    (taskId: string, overId: string) => {
+    (taskId: string, index: number) => {
       replaceTasks((prev) => {
         const todayVisible = prev.filter(
           (t) => isTopSectionTask(t, viewDateISO) && filterWorkTask(t),
         );
-        return moveTaskIntoList(prev, taskId, todayVisible, overId, (t) => ({
+        return moveTaskIntoList(prev, taskId, todayVisible, index, (t) => ({
           ...t,
           date: viewDateISO,
           dateEnd: undefined,
@@ -6025,12 +6045,12 @@ export default function Home() {
   );
 
   const handlePrivateMoveOverdueTaskToToday = useCallback(
-    (taskId: string, overId: string) => {
+    (taskId: string, index: number) => {
       replaceTasks((prev) => {
         const todayVisible = prev.filter(
           (t) => isTopSectionTask(t, viewDateISO) && filterPrivateTask(t),
         );
-        return moveTaskIntoList(prev, taskId, todayVisible, overId, (t) => ({
+        return moveTaskIntoList(prev, taskId, todayVisible, index, (t) => ({
           ...t,
           date: viewDateISO,
           dateEnd: undefined,
