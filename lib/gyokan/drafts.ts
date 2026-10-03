@@ -1,6 +1,6 @@
 import { enrichTaskWithCase, buildCaseById } from "./task-case";
 import type { AppCase, AppEvent, AppMemo, AppTask } from "./types";
-import { formatCaseDeadlineForInput, parseCaseDeadlineInput } from "./date-format";
+import { parseCaseDeadlineInput } from "./date-format";
 import {
   applyEventDraft,
   eventDraftFieldsDiffer,

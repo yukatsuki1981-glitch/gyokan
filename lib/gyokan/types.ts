@@ -69,11 +69,6 @@ export type DbDailyDiary = {
   created_at: string;
 };
 
-export type DbUserPreferences = {
-  user_id: string;
-  last_view_date: string | null;
-};
-
 export type DbEvent = {
   id: string;
   user_id: string;

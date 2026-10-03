@@ -27,7 +27,6 @@ export type GyokanThemeColors = {
 export type GyokanThemeFonts = {
   display: string;
   body: string;
-  mono: string;
 };
 
 export type GyokanTheme = {
@@ -65,7 +64,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-geist-sans)",
       body: "var(--font-geist-sans)",
-      mono: "var(--font-geist-mono)",
     },
   },
   {
@@ -86,7 +84,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-noto-serif-jp)",
       body: "var(--font-noto-sans-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
   {
@@ -107,7 +104,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-shippori-mincho)",
       body: "var(--font-noto-sans-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
   {
@@ -129,7 +125,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-zen-maru-gothic)",
       body: "var(--font-noto-sans-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
   {
@@ -150,7 +145,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-zen-maru-gothic)",
       body: "var(--font-noto-sans-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
   {
@@ -172,7 +166,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-shippori-mincho)",
       body: "var(--font-noto-sans-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
   {
@@ -193,7 +186,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-shippori-mincho)",
       body: "var(--font-noto-serif-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
   {
@@ -214,7 +206,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-noto-serif-jp)",
       body: "var(--font-noto-sans-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
   {
@@ -235,7 +226,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-shippori-mincho)",
       body: "var(--font-noto-serif-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
   {
@@ -256,7 +246,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-shippori-mincho)",
       body: "var(--font-noto-sans-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
   {
@@ -277,7 +266,6 @@ export const GYOKAN_THEMES: GyokanTheme[] = [
     fonts: {
       display: "var(--font-noto-serif-jp)",
       body: "var(--font-noto-sans-jp)",
-      mono: "var(--font-dm-mono)",
     },
   },
 ];
@@ -290,10 +278,6 @@ export function isPaidThemeId(id: string): id is GyokanThemeId {
 
 export function getThemeById(id: string | null | undefined): GyokanTheme {
   return GYOKAN_THEMES.find((t) => t.id === id) ?? GYOKAN_THEMES[0];
-}
-
-export function isFreeTheme(id: GyokanThemeId): boolean {
-  return getThemeById(id).free;
 }
 
 export function readStoredThemeId(isPaidMember: boolean): GyokanThemeId {
@@ -336,6 +320,5 @@ export function applyThemeToDocument(theme: GyokanTheme) {
   root.style.setProperty("--gyokan-highlight", colors.highlight ?? colors.accent2);
   root.style.setProperty("--gyokan-font-display", fonts.display);
   root.style.setProperty("--gyokan-font-body", fonts.body);
-  root.style.setProperty("--gyokan-font-mono", fonts.mono);
   root.style.colorScheme = theme.id === "yofukashi" ? "dark" : "light";
 }

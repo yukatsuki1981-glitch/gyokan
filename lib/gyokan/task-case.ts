@@ -41,10 +41,6 @@ export function taskBelongsToProject(
   return task.project === project;
 }
 
-export function isPrivateProjectName(project: string) {
-  return project === PRIVATE_PROJECT_NAME;
-}
-
 export function taskBelongsToPrivateProject(
   task: AppTask,
   caseById: Record<string, AppCase>,

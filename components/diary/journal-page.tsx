@@ -365,41 +365,6 @@ export function JournalMobilePager({
   );
 }
 
-export function JournalMobileDateNav({
-  onPrev,
-  onNext,
-  canGoPrev = true,
-  canGoNext = true,
-}: {
-  onPrev: () => void;
-  onNext: () => void;
-  canGoPrev?: boolean;
-  canGoNext?: boolean;
-}) {
-  return (
-    <div className="mb-3 flex items-center justify-center gap-10">
-      <button
-        type="button"
-        onClick={onPrev}
-        disabled={!canGoPrev}
-        className="rounded-lg px-3 py-1 text-[22px] text-[#8a7a68] hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-25"
-        aria-label="前の日記"
-      >
-        ‹
-      </button>
-      <button
-        type="button"
-        onClick={onNext}
-        disabled={!canGoNext}
-        className="rounded-lg px-3 py-1 text-[22px] text-[#8a7a68] hover:bg-black/[0.04] disabled:pointer-events-none disabled:opacity-25"
-        aria-label="次の日記"
-      >
-        ›
-      </button>
-    </div>
-  );
-}
-
 export function JournalDotIndicator({
   dates,
   focusDate,

@@ -12,7 +12,6 @@ html[data-theme="default"] {
   --gyokan-highlight: #007AFF;
   --gyokan-font-display: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --gyokan-font-body: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --gyokan-font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 html[data-theme="default"] .gyokan-panel {
@@ -38,7 +37,6 @@ html[data-theme="mono"] {
   --gyokan-highlight: #404040;
   --gyokan-font-display: var(--font-noto-serif-jp), serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
 
 html[data-theme="forest"] {
@@ -54,7 +52,6 @@ html[data-theme="forest"] {
   --gyokan-highlight: #4F7A3E;
   --gyokan-font-display: var(--font-shippori-mincho), serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
 
 html[data-theme="marine"] {
@@ -70,7 +67,6 @@ html[data-theme="marine"] {
   --gyokan-highlight: #E97A5C;
   --gyokan-font-display: var(--font-zen-maru-gothic, sans-serif), sans-serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
 
 html[data-theme="sakura"] {
@@ -86,7 +82,6 @@ html[data-theme="sakura"] {
   --gyokan-highlight: #D98A9C;
   --gyokan-font-display: var(--font-zen-maru-gothic, sans-serif), sans-serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
 
 html[data-theme="sunset"] {
@@ -102,7 +97,6 @@ html[data-theme="sunset"] {
   --gyokan-highlight: #6B4A8A;
   --gyokan-font-display: var(--font-shippori-mincho), serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
 
 html[data-theme="momiji"] {
@@ -118,7 +112,6 @@ html[data-theme="momiji"] {
   --gyokan-highlight: #C9683F;
   --gyokan-font-display: var(--font-shippori-mincho), serif;
   --gyokan-font-body: var(--font-noto-serif-jp), serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
 
 html[data-theme="yukigeshiki"] {
@@ -134,7 +127,6 @@ html[data-theme="yukigeshiki"] {
   --gyokan-highlight: #6FA3C2;
   --gyokan-font-display: var(--font-noto-serif-jp), serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
 
 html[data-theme="kami"] {
@@ -150,7 +142,6 @@ html[data-theme="kami"] {
   --gyokan-highlight: #7A6A4D;
   --gyokan-font-display: var(--font-shippori-mincho), serif;
   --gyokan-font-body: var(--font-noto-serif-jp), serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
 
 html[data-theme="yofukashi"] {
@@ -166,7 +157,6 @@ html[data-theme="yofukashi"] {
   --gyokan-highlight: #B6A8E0;
   --gyokan-font-display: var(--font-shippori-mincho), serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
   color-scheme: dark;
 }
 
@@ -183,7 +173,6 @@ html[data-theme="furikaeri"] {
   --gyokan-highlight: #AD8C5C;
   --gyokan-font-display: var(--font-noto-serif-jp), serif;
   --gyokan-font-body: var(--font-noto-sans-jp), sans-serif;
-  --gyokan-font-mono: var(--font-dm-mono), monospace;
 }
 
 .gyokan-app {
@@ -196,10 +185,6 @@ html[data-theme="furikaeri"] {
 .gyokan-app :is(h1, h2, h3, h4, h5, h6) {
   font-family: var(--gyokan-font-display);
   color: var(--gyokan-text);
-}
-
-.gyokan-app .gyokan-tabular {
-  font-family: var(--gyokan-font-mono);
 }
 
 .gyokan-card {

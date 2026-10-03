@@ -18,11 +18,9 @@ import {
   parseCaseCreatedAt,
   sortCasesByProjectOrder,
   sortCaseDetailTasks,
-  sortTasksInCase,
 } from "@/lib/gyokan/case-order";
 import {
   caseSelectLabel,
-  pickDefaultCaseId,
   taskBelongsToPrivateProject,
   isWorkTaskInView,
 } from "@/lib/gyokan/task-case";
@@ -181,12 +179,6 @@ function tomorrowISO() {
   return isoDate(d);
 }
 
-function yesterdayISO() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return isoDate(d);
-}
-
 function shiftISODate(iso: string, delta: number) {
   const d = new Date(iso + "T12:00:00");
   d.setDate(d.getDate() + delta);
@@ -209,13 +201,6 @@ function taskSectionLabel(viewDate: string) {
 }
 
 const PROJECT_OPTIONS_FALLBACK = [...DEFAULT_PROJECT_NAMES];
-const STATUS_OPTIONS: { label: string; tone: CaseItem["statusTone"] }[] = [
-  { label: "売却活動中", tone: "blue" },
-  { label: "提案準備中", tone: "amber" },
-  { label: "情報収集中", tone: "emerald" },
-  { label: "内見調整中", tone: "violet" },
-];
-
 const TONE = {
   blue: { badge: "bg-blue-50 text-blue-600", bar: "bg-blue-500" },
   amber: { badge: "bg-amber-50 text-amber-600", bar: "bg-amber-400" },
@@ -389,14 +374,6 @@ function buildProjectTimeline(
   });
 }
 
-function normalizeMemo(item: ProjectMemo): ProjectMemo {
-  return {
-    ...item,
-    date: item.date ?? formatCaseDate(new Date()),
-    body: item.body ?? "",
-  };
-}
-
 function formatCaseDateForInput(date: string) {
   return date.replace(/\./g, "-").replace(/\//g, "-");
 }
@@ -418,16 +395,6 @@ function parseCaseDeadlineInput(value: string) {
   const [y, m, d] = value.split("-");
   if (!y || !m || !d) return "";
   return `${y}/${m}/${d}`;
-}
-
-function normalizeCase(item: CaseItem): CaseItem {
-  return {
-    ...item,
-    deadline: item.deadline ?? "",
-    createdAt: item.createdAt ?? "2026.02.01",
-    completedAt: item.completedAt ?? null,
-    sortOrder: item.sortOrder ?? 0,
-  };
 }
 
 function normalizeTask(item: Task): Task {
@@ -570,9 +537,6 @@ const CALENDAR_CELL_ROW_H = 80;
 const CALENDAR_TASK_PREVIEW_MAX = 5;
 
 const CALENDAR_TASK_CHARS = 5;
-const CALENDAR_MONTH_HEADER_H = 40;
-const CALENDAR_WEEKDAY_HEADER_H = 28;
-const CALENDAR_MONTH_PADDING_V = 16;
 
 function truncateCalendarTaskTitle(title: string, max = CALENDAR_TASK_CHARS) {
   const trimmed = title.trim();
@@ -938,24 +902,16 @@ function Icon({ name, className = "h-5 w-5" }: { name: string; className?: strin
   };
 
   const map: Record<string, ReactNode> = {
-    menu: <svg {...p}><path d="M4 7h16M4 12h16M4 17h16" /></svg>,
     chevronLeft: <svg {...p}><path d="M15 6l-6 6 6 6" /></svg>,
     chevronRight: <svg {...p}><path d="M9 6l6 6-6 6" /></svg>,
     folder: <svg {...p}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>,
     folderOpen: <svg {...p}><path d="M5 19V7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2H5zM3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>,
     plus: <svg {...p}><path d="M12 5v14M5 12h14" /></svg>,
     home: <svg {...p}><path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></svg>,
-    calendar: <svg {...p}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg>,
-    cases: <svg {...p}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>,
-    more: <svg {...p}><circle cx="6" cy="12" r="1.25" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none" /><circle cx="18" cy="12" r="1.25" fill="currentColor" stroke="none" /></svg>,
     grip: <svg {...p} strokeWidth={2}><circle cx="9" cy="6" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="6" r="1" fill="currentColor" stroke="none" /><circle cx="9" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="9" cy="18" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="18" r="1" fill="currentColor" stroke="none" /></svg>,
     check: <svg {...p} strokeWidth={2.5}><path d="M5 12l4 4L19 6" /></svg>,
-    bookmark: <svg {...p}><path d="M6 4h12v16l-6-4-6 4z" /></svg>,
-    bookmarkFill: <svg {...p} fill="currentColor"><path d="M6 4h12v16l-6-4-6 4z" stroke="none" /></svg>,
-    message: <svg {...p}><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 1 1 16 0z" /></svg>,
     memo: <svg {...p}><path d="M8 4h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="M12 11h4M12 15h4M8 11h.01M8 15h.01" /></svg>,
     diary: <svg {...p}><path d="M6 4h9l3 3v13a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="M15 4v4h4M8 13h8M8 17h6" /></svg>,
-    bell: <svg {...p}><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2" /><path d="M10 20a2 2 0 0 0 4 0" /></svg>,
     refresh: (
       <svg {...p}>
         <path d="M4 12a8 8 0 0 1 13.7-5.7" />

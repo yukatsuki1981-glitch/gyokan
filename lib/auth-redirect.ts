@@ -21,8 +21,3 @@ export function getAuthRedirectOrigin() {
 export function getAuthCallbackUrl() {
   return `${getAuthRedirectOrigin()}/auth/callback`;
 }
-
-/** Server Actions / Route Handlers (no window). */
-export function getServerAuthCallbackUrl() {
-  return `${getConfiguredSiteUrl()}/auth/callback`;
-}

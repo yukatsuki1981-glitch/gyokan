@@ -33,8 +33,3 @@ export function formatDateShortJa(iso: string) {
     weekday: "short",
   }).format(d);
 }
-
-export function weekdayJa(iso: string) {
-  const d = new Date(iso + "T12:00:00");
-  return new Intl.DateTimeFormat("ja-JP", { weekday: "short" }).format(d);
-}

@@ -31,7 +31,6 @@ import {
   sortByOrder,
   toLegacyProjectInsert,
   buildTaskUpsertAttempts,
-  toLegacyTaskUpsert,
 } from "./schema-compat";
 import { enrichTaskWithCase } from "./task-case";
 import type {

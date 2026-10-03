@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import {
-  DM_Mono,
   Geist,
-  Geist_Mono,
   Noto_Sans_JP,
   Noto_Serif_JP,
   Shippori_Mincho_B1,
@@ -13,11 +11,6 @@ import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
@@ -42,23 +35,20 @@ const shipporiMincho = Shippori_Mincho_B1({
   preload: false,
 });
 
-const dmMono = DM_Mono({
-  variable: "--font-dm-mono",
-  subsets: ["latin"],
-  weight: ["400", "500"],
-});
-
 // Zen Maru Gothic (marine/sakura themes only) and Klee One (diary route only)
 // are intentionally not loaded here — see components/zen-maru-gothic-loader.tsx
 // and app/diary/layout.tsx. Loading them globally cost every visitor ~460KB of
 // unused CJK font-face CSS regardless of theme or route.
+//
+// No monospace face is loaded: nothing in the UI renders in one. The themes'
+// former --gyokan-font-mono (and its only consumer, .gyokan-tabular) were
+// unused, so Geist Mono and DM Mono were downloaded — and preloaded — for
+// nothing.
 const fontVariables = [
   geistSans.variable,
-  geistMono.variable,
   notoSansJP.variable,
   notoSerifJP.variable,
   shipporiMincho.variable,
-  dmMono.variable,
 ].join(" ");
 
 export const metadata: Metadata = {

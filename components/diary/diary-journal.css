@@ -263,8 +263,7 @@
   filter: drop-shadow(-4px 5px 7px rgba(72, 52, 32, 0.3));
 }
 
-.journal-body-text,
-.journal-handwriting {
+.journal-body-text {
   font-family: var(--font-klee-one), "Hiragino Maru Gothic ProN", cursive, sans-serif;
   font-size: var(--journal-font-size);
   line-height: var(--journal-line-h);

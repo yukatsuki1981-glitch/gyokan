@@ -2,11 +2,6 @@
 @import "./theme-styles.css";
 
 :root {
-  --background: var(--gyokan-bg);
-  --foreground: var(--gyokan-text);
-  --glass: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(0, 0, 0, 0.06);
-
   /* Mobile bottom bar (tasks-mode nav / private-mode footer): the single
      source of truth for its rendered height. MobileBarShell in app/page.tsx
      is the only consumer of the two parts below; anything that needs to
@@ -18,10 +13,7 @@
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 body {

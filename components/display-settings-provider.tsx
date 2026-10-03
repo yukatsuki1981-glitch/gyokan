@@ -99,35 +99,3 @@ const FALLBACK: DisplaySettingsContextValue = {
 export function useDisplaySettings() {
   return useContext(DisplaySettingsContext) ?? FALLBACK;
 }
-
-export function SettingsToggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  label: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="gyokan-muted">{label}</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={() => onChange(!checked)}
-        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors duration-200 ${
-          checked ? "bg-[var(--gyokan-accent2)]" : "bg-gray-200"
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-200 ${
-            checked ? "translate-x-5" : "translate-x-0"
-          }`}
-        />
-      </button>
-    </div>
-  );
-}
