@@ -12,7 +12,6 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
@@ -30,6 +29,7 @@ import {
 } from "@/lib/gyokan/events";
 import { DEFAULT_EVENT_COLOR, EVENT_COLOR_PALETTE, eventColorStyle } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
+import { reorderWithinVisible } from "@/lib/gyokan/reorder";
 import { useDisplaySettings } from "@/components/display-settings-provider";
 import { ThemedTaskCheckbox } from "@/components/themed-task-checkbox";
 import { GripIcon, TrashIcon, XIcon } from "./icons";
@@ -47,25 +47,6 @@ function timeRangeLabel(event: AppEvent): string {
   if (!event.endTime) return start;
   const end = localTimeHHMMFromTimestamp(event.endTime);
   return `${start} - ${end}`;
-}
-
-// Mirrors reorderTasksInList in app/page.tsx: reorder within the visible
-// (this-day) subset, then splice the result back into the full array so
-// other days' relative order (and their sortOrder values) is untouched.
-function reorderEventsInList(
-  prev: AppEvent[],
-  visible: AppEvent[],
-  activeId: string,
-  overId: string,
-): AppEvent[] {
-  const oldIndex = visible.findIndex((e) => e.id === activeId);
-  const newIndex = visible.findIndex((e) => e.id === overId);
-  if (oldIndex === -1 || newIndex === -1) return prev;
-
-  const reordered = arrayMove(visible, oldIndex, newIndex);
-  const visibleIds = new Set(visible.map((e) => e.id));
-  let nextIdx = 0;
-  return prev.map((e) => (visibleIds.has(e.id) ? reordered[nextIdx++]! : e));
 }
 
 function SortableEventRow({
@@ -239,8 +220,9 @@ export function DayEventPopup({
       const { active, over } = event;
       if (!over || active.id === over.id) return;
       onReplaceEvents((prev) => {
+        // Only this day's events are on screen; the rest keep their order.
         const visible = prev.filter((e) => localDateISOFromTimestamp(e.startTime) === dateISO);
-        return reorderEventsInList(prev, visible, String(active.id), String(over.id));
+        return reorderWithinVisible(prev, visible, String(active.id), String(over.id));
       });
     },
     [dateISO, onReplaceEvents],
