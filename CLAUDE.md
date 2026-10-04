@@ -12,6 +12,14 @@
 - コマンド: `npm run dev` / `npm run typecheck` / `npm run lint`(既存の lint エラーあり。触っていない箇所のものは無視してよい)
 - `middleware.ts` は Next.js 16 で非推奨(`proxy` への移行推奨)だが現状は動作している
 
+### ローカルビルドのフォント取得エラー(このPC固有)
+- このPC(Windows)で `npm run build` を実行すると、Turbopack 内蔵の HTTP クライアントの問題で Google Fonts の取得に失敗することがある(`Error while requesting resource` / `Can't resolve '@vercel/turbopack-next/internal/font/google/font'`)
+- 環境変数 `NEXT_TURBOPACK_EXPERIMENTAL_USE_SYSTEM_TLS_CERTS=1` を付けて実行すると解消する(`npm run dev` も同様)
+  - PowerShell: `$env:NEXT_TURBOPACK_EXPERIMENTAL_USE_SYSTEM_TLS_CERTS=1; npm run build`
+  - Git Bash: `NEXT_TURBOPACK_EXPERIMENTAL_USE_SYSTEM_TLS_CERTS=1 npm run build`
+- このPC固有の環境の問題で、Vercel 上の本番ビルドには影響しない(本番サイトがフォントを `/_next/static/media/` から自前配信できていることで確認済み)
+- 設定ファイル(`next.config.ts` 等)には変更を加えていない
+
 ## ディレクトリ概要
 
 - `app/page.tsx` — メイン画面。巨大な単一ファイル(タスク管理モードもプライベートモードもここ)
