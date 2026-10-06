@@ -9,6 +9,7 @@ import {
   memoDraftId,
   readDraft,
   clearDraft,
+  resolveTaskDraft,
   type CaseDraftFields,
   type MemoDraftFields,
   type TaskDraftFields,
@@ -1679,7 +1680,9 @@ function TaskDetailEditor({
     color: source.color,
   }), []);
 
-  const initialDraft = readDraft<TaskDraftFields>("task", item.id);
+  // Resolved once: an unsaved draft only contributes the fields that were
+  // actually edited, never values the server has since moved past.
+  const [initialDraft] = useState(() => resolveTaskDraft(item));
   const initialCaseId = initialDraft?.caseId ?? item.caseId ?? "";
   const [title, setTitle] = useState(initialDraft?.title ?? item.title);
   const [underProjectDirect, setUnderProjectDirect] = useState(
@@ -1696,7 +1699,7 @@ function TaskDetailEditor({
   useEffect(() => {
     if (item.id === itemIdRef.current) return;
     itemIdRef.current = item.id;
-    const draft = readDraft<TaskDraftFields>("task", item.id);
+    const draft = resolveTaskDraft(item);
     const next = draft ?? loadTaskFields(item);
     setTitle(next.title);
     setUnderProjectDirect(!next.caseId && !!item.project.trim());
@@ -5784,6 +5787,8 @@ export default function Home() {
     dataReady,
     loadError,
     caseSaveError,
+    taskSaveError,
+    dismissTaskSaveError,
     projectNames,
     projects,
     projectColors,
@@ -6546,6 +6551,32 @@ export default function Home() {
       />
       <ThemeDecorationLayer />
       <StoryMessageOverlay tasks={tasks} dataReady={dataReady} isAuthenticated={!!user} />
+      {taskSaveError && (
+        // Fixed rather than inline: a drag that fails to save usually
+        // happens well below the top of the page.
+        <div
+          role="alert"
+          className="fixed inset-x-0 z-[300] flex justify-center px-3"
+          style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+        >
+          <div className="flex w-full max-w-md items-start gap-2 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600 shadow-[0_8px_24px_rgba(0,0,0,0.12)] ring-1 ring-red-200">
+            <p className="min-w-0 flex-1">
+              タスクの保存に失敗しました: {taskSaveError}
+              <span className="mt-1 block text-[12px] text-red-500/80">
+                画面の変更はまだ保存されていません。通信状態を確認して、もう一度操作してください。
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={dismissTaskSaveError}
+              aria-label="閉じる"
+              className="shrink-0 rounded-md p-1 text-red-400 hover:bg-red-100 hover:text-red-600"
+            >
+              <Icon name="x" className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
       <div className={`relative z-[2] ${appMode === "private" ? "max-lg:h-full max-lg:overflow-hidden" : ""}`}>
       <PullToRefresh enabled={isClient && appMode !== "private"} onRefresh={handleRefresh} />
       <div

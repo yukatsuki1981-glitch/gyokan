@@ -558,8 +558,26 @@ export async function upsertTasksBatch(
 ) {
   if (items.length === 0) return;
   const rows = items.map((item) => mapTaskToDb(item, userId, nameToId, caseById));
+
+  // One request per payload shape rather than one per row: moving a single
+  // task can shift the sort_order of many others, and saving those one at a
+  // time took long enough that a reload would cut the save off midway.
+  // Rows are grouped by their exact key set so a bulk upsert never turns a
+  // column one row omits into an explicit null.
+  const groups = new Map<string, typeof rows>();
   for (const row of rows) {
-    await upsertTaskRow(supabase, row);
+    const shape = Object.keys(row).sort().join(",");
+    groups.set(shape, [...(groups.get(shape) ?? []), row]);
+  }
+
+  for (const group of groups.values()) {
+    const { error } = await supabase.from("tasks").upsert(group);
+    if (!error) continue;
+    if (isAuthOrPolicyError(error)) throw error;
+    // The per-row path knows how to step down to older schemas.
+    for (const row of group) {
+      await upsertTaskRow(supabase, row);
+    }
   }
 }
 

@@ -78,6 +78,7 @@ export function normalizeTaskRow(row: Row, index: number): DbTask {
     memo: String(row.memo ?? ""),
     color: (row.color as string | null | undefined) ?? null,
     scope: row.scope === "private" ? "private" : "work",
+    updated_at: (row.updated_at as string | null | undefined) ?? null,
   };
 }
 

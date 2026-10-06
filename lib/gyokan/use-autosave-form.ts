@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { type DraftKind, writeDraft } from "./drafts";
+import { clearDraft, type DraftKind, writeDraft } from "./drafts";
 
 type UseAutosaveFormOptions<T> = {
   kind: DraftKind;
@@ -36,9 +36,18 @@ export function useAutosaveForm<T>({
   baselineRef.current = baseline;
   onPersistRef.current = onPersist;
 
+  // Only keep a draft while there is something unsaved in it. A draft that
+  // merely mirrors the values the form opened with would otherwise outlive
+  // the form and later roll back changes saved elsewhere (e.g. a deadline
+  // moved by drag-and-drop). The baseline is stored alongside so a reader
+  // can tell which fields were actually edited.
   useEffect(() => {
-    writeDraft(kind, entityId, values);
-  }, [kind, entityId, values]);
+    if (isEqual(values, baselineRef.current)) {
+      clearDraft(kind, entityId);
+      return;
+    }
+    writeDraft(kind, entityId, values, baselineRef.current);
+  }, [kind, entityId, values, isEqual]);
 
   const flush = useCallback(async () => {
     const current = valuesRef.current;

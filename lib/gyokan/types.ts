@@ -24,6 +24,8 @@ export type DbTask = {
   memo: string;
   color: string | null;
   scope: Scope;
+  /** Server-side last write time (set by the tasks_set_updated_at trigger). */
+  updated_at: string | null;
 };
 
 export type DbCase = {
@@ -98,6 +100,8 @@ export type AppTask = {
   memo?: string;
   color?: "red" | "yellow";
   scope?: Scope;
+  /** When the server last saved this task, as loaded; used to spot stale drafts. Never written back. */
+  updatedAt?: string;
 };
 
 export type AppCase = {

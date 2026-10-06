@@ -78,6 +78,7 @@ export function mapDbTask(row: DbTask, idToName: Record<string, string>): AppTas
     memo: row.memo ?? "",
     color: row.color === "red" || row.color === "yellow" ? row.color : undefined,
     scope: row.scope === "private" ? "private" : "work",
+    updatedAt: row.updated_at ?? undefined,
   };
 }
 

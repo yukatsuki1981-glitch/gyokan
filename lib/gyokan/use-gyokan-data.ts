@@ -43,6 +43,7 @@ import {
   upsertTasksBatch,
 } from "./repository";
 import {
+  applyTaskDraft,
   caseDraftDiffers,
   clearDraft,
   mergeCasesWithDrafts,
@@ -50,10 +51,10 @@ import {
   mergeTasksWithDrafts,
   memoDraftDiffers,
   readDraft,
+  resolveTaskDraft,
   taskDraftDiffers,
   type CaseDraftFields,
   type MemoDraftFields,
-  type TaskDraftFields,
 } from "./drafts";
 import {
   consolidateDailyDiariesByDate,
@@ -92,6 +93,30 @@ function formatLoadError(err: unknown): string {
   return "データの読み込みに失敗しました";
 }
 
+/** Every task field mapTaskToDb writes; tasks whose key is unchanged need no save. */
+function storedTaskKey(task: AppTask) {
+  return JSON.stringify([
+    task.title,
+    task.time,
+    task.date,
+    task.dateEnd ?? null,
+    task.done,
+    task.completedAt ?? null,
+    task.project,
+    task.caseId ?? null,
+    task.starred ?? false,
+    task.sortOrder,
+    task.memo ?? "",
+    task.color ?? null,
+    task.scope ?? "work",
+  ]);
+}
+
+function tasksWithChangedStoredFields(prev: AppTask[], next: AppTask[]) {
+  const before = new Map(prev.map((task) => [task.id, storedTaskKey(task)]));
+  return next.filter((task) => before.get(task.id) !== storedTaskKey(task));
+}
+
 function formatCaseDate(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -120,6 +145,8 @@ export function useGyokanData() {
   const [dataReady, setDataReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [caseSaveError, setCaseSaveError] = useState<string | null>(null);
+  const [taskSaveError, setTaskSaveError] = useState<string | null>(null);
+  const dismissTaskSaveError = useCallback(() => setTaskSaveError(null), []);
 
   const [projects, setProjects] = useState<AppProject[]>([]);
   const [tasks, setTasks] = useState<AppTask[]>([]);
@@ -184,21 +211,16 @@ export function useGyokanData() {
     }
 
     for (const item of serverTasks) {
-      const draft = readDraft<TaskDraftFields>("task", item.id);
-      if (!draft || !taskDraftDiffers(item, draft)) continue;
-      const dateEnd =
-        draft.useRange && draft.dateEnd && draft.dateEnd !== draft.date
-          ? draft.dateEnd
-          : undefined;
+      // Same resolution as mergeTasksWithDrafts, so a stale draft is never
+      // written back over a newer server value.
+      const fields = resolveTaskDraft(item);
+      if (!fields) continue;
+      if (!taskDraftDiffers(item, fields)) {
+        clearDraft("task", item.id);
+        continue;
+      }
       const merged = enrichTaskWithCase(
-        {
-          ...item,
-          title: draft.title,
-          caseId: draft.caseId || item.caseId,
-          date: draft.date,
-          dateEnd,
-          memo: draft.memo ?? item.memo,
-        },
+        applyTaskDraft(item, fields),
         buildCaseById(casesRef.current),
       );
       try {
@@ -436,6 +458,7 @@ export function useGyokanData() {
       return true;
     } catch (err) {
       console.error("Failed to save task", err);
+      setTaskSaveError(formatLoadError(err));
       return false;
     }
   }, [getSupabase]);
@@ -453,6 +476,7 @@ export function useGyokanData() {
       );
     } catch (err) {
       console.error("Failed to save tasks", err);
+      setTaskSaveError(formatLoadError(err));
     }
   }, [getSupabase]);
 
@@ -666,10 +690,29 @@ export function useGyokanData() {
     void deleteTaskDb(getSupabase(), id);
   }, [getSupabase]);
 
+  // The `prev` the last replaceTasks updater saved from — see below.
+  const replaceSavedFromRef = useRef<AppTask[] | null>(null);
+
   const replaceTasks = useCallback((updater: (prev: AppTask[]) => AppTask[]) => {
     setTasks((prev) => {
       const next = assignSortOrders(updater(prev));
-      void persistTasks(next);
+      // React can run an updater twice with the same `prev` (Strict Mode in
+      // development); save once per actual change.
+      if (replaceSavedFromRef.current === prev) return next;
+      replaceSavedFromRef.current = prev;
+
+      // Only tasks whose stored fields changed are written — reordering
+      // leaves most of the list untouched.
+      const changed = tasksWithChangedStoredFields(prev, next);
+      if (changed.length === 0) return next;
+
+      // Local state already includes any unsaved draft edits (merged in on
+      // load), and those go out with this save. A leftover draft for these
+      // tasks has nothing left to add, and would roll this change back on the
+      // next reload — so drop it now rather than after the save, in case the
+      // page is reloaded before the request completes.
+      for (const task of changed) clearDraft("task", task.id);
+      void persistTasks(changed);
       return next;
     });
   }, [persistTasks]);
@@ -944,6 +987,8 @@ export function useGyokanData() {
     dataReady,
     loadError,
     caseSaveError,
+    taskSaveError,
+    dismissTaskSaveError,
     projects,
     projectNames,
     projectColors,
