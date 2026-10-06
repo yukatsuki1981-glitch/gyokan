@@ -156,7 +156,14 @@ export function mapTaskToDb(
     task_date: normalized.date,
     date_end: normalized.dateEnd ?? null,
     done: normalized.done,
-    ...(completedAt ? { completed_at: completedAt } : {}),
+    // An open task has no completion date: send null so un-completing clears
+    // the stored one. A done task with no date in hand leaves the column alone
+    // rather than blanking a value it may already have.
+    ...(completedAt
+      ? { completed_at: completedAt }
+      : normalized.done
+        ? {}
+        : { completed_at: null }),
     starred: normalized.starred ?? false,
     sort_order: normalized.sortOrder,
     memo: normalized.memo ?? "",
