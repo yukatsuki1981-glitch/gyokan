@@ -28,10 +28,13 @@ type MonthCursor = { year: number; month: number };
 type CalendarCell = { day: number; iso: string; inMonth: boolean };
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
-// A holiday/commemorative-day label occupies one of the day cell's display
-// slots, so days that have one get one fewer task/event preview slot.
-const CHIP_PREVIEW_MAX = 4;
-const CHIP_PREVIEW_MAX_WITH_DAY_LABEL = 3;
+// Display slots per day cell: a 5-week month has taller rows (the grid fills
+// the same height either way) and fits 5, a 6-week month fits 4. A
+// holiday/commemorative-day label occupies one of those slots, so days that
+// have one get one fewer task/event preview slot.
+function daySlots(weekRows: number) {
+  return weekRows >= 6 ? 4 : 5;
+}
 
 // Release-animation tuning for the month swipe — same ease-out deceleration
 // curve/duration used elsewhere in this codebase (the day-popup swipe-
@@ -93,6 +96,7 @@ function DayCell({
   isToday,
   dayTasks,
   dayEvents,
+  weekRows,
   onSelect,
 }: {
   cell: CalendarCell;
@@ -100,6 +104,8 @@ function DayCell({
   isToday: boolean;
   dayTasks: AppTask[];
   dayEvents: AppEvent[];
+  /** Number of week rows in this month's grid (5 or 6). */
+  weekRows: number;
   onSelect: (iso: string) => void;
 }) {
   const dayOfWeek = cellIndex % 7;
@@ -113,7 +119,7 @@ function DayCell({
   ];
   // The day-label line (holiday/commemorative-day name) counts as one of the
   // cell's display slots, so a day that has one gets one fewer chip slot.
-  const previewMax = dayInfo ? CHIP_PREVIEW_MAX_WITH_DAY_LABEL : CHIP_PREVIEW_MAX;
+  const previewMax = daySlots(weekRows) - (dayInfo ? 1 : 0);
   const preview = chips.slice(0, previewMax);
   const overflow = chips.length > previewMax ? chips.length - previewMax : 0;
 
@@ -143,12 +149,15 @@ function DayCell({
         >
           {cell.day}
         </span>
+        {/* The rokuyou gives way (truncates) before the "+n" count does. */}
         {rokuyou && (
-          <span className="shrink-0 truncate text-[7px] font-medium leading-none text-gray-400">
+          <span className="min-w-0 truncate text-[7px] font-medium leading-none text-gray-400">
             {rokuyou}
           </span>
         )}
-        {overflow > 0 && <span className="text-[11px] font-medium text-gray-400">+{overflow}</span>}
+        {overflow > 0 && (
+          <span className="shrink-0 text-[11px] font-medium text-gray-400">+{overflow}</span>
+        )}
       </div>
       {dayInfo && (
         <span
@@ -291,6 +300,7 @@ function MonthPanel({
               isToday={cell.inMonth && cell.iso === today}
               dayTasks={tasksByDate.get(cell.iso) ?? []}
               dayEvents={eventsByDate.get(cell.iso) ?? []}
+              weekRows={rows}
               onSelect={onSelect}
             />
           ))}

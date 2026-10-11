@@ -61,6 +61,12 @@ import {
 } from "@/lib/gyokan/display-settings";
 import { EVENT_COLOR_PALETTE } from "@/lib/gyokan/event-colors";
 import { insertIntoVisible, moveWithinVisible, reorderWithinVisible } from "@/lib/gyokan/reorder";
+import {
+  layoutWeekBands,
+  type BandInput,
+  type WeekBand,
+  type WeekBandLayout,
+} from "@/lib/gyokan/calendar-bands";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -423,7 +429,12 @@ function getTaskCompletedDate(task: Task): string {
 
 function isTaskDoneOnViewDate(task: Task, viewDate: string): boolean {
   if (!task.done) return false;
-  return normalizeTaskISODate(viewDate) === getTaskCompletedDate(task);
+  const day = normalizeTaskISODate(viewDate);
+  if (day === getTaskCompletedDate(task)) return true;
+  // A single-day task completed on another day (e.g. after it went overdue)
+  // still reads as done on its own deadline day. Range tasks only show as
+  // done on the day they were completed.
+  return !isRangeTask(task) && day === normalizeTaskISODate(task.date);
 }
 
 function isRangeTaskCompletedOn(task: Task, viewDate: string): boolean {
@@ -457,6 +468,8 @@ function isOngoingRangeTask(task: Task, viewDate: string) {
 
 function isTopSectionTask(task: Task, viewDate: string) {
   if (!isRangeTask(task) && task.date === viewDate) return true;
+  // A completed single-day task also lists on the day it was actually completed.
+  if (!isRangeTask(task) && task.done && getTaskCompletedDate(task) === viewDate) return true;
   if (isRangeTaskEndingOn(task, viewDate)) return true;
   if (isRangeTaskCompletedOn(task, viewDate) && task.dateEnd !== viewDate) return true;
   return false;
@@ -538,8 +551,51 @@ function buildSingleDayTasksByDate(tasks: Task[]) {
   return map;
 }
 
+/**
+ * Single-day tasks for the mobile month calendar, keyed by the days they
+ * show on: their own date, plus — once completed on a different day — the
+ * day they were completed. Range tasks are drawn as bands instead.
+ */
+function buildCalendarSingleTasksByDate(tasks: Task[]) {
+  const map = new Map<string, Task[]>();
+  const add = (day: string, task: Task) => {
+    const list = map.get(day) ?? [];
+    list.push(task);
+    map.set(day, list);
+  };
+  for (const task of tasks) {
+    if (isRangeTask(task)) continue;
+    add(task.date, task);
+    if (task.done) {
+      const completed = getTaskCompletedDate(task);
+      if (completed && completed !== task.date) add(completed, task);
+    }
+  }
+  return map;
+}
+
+// Range-task bands sit in lanes directly under the day number: the cell's
+// 2px top padding + the 11px number line + a 2px gap, then one lane per
+// CALENDAR_BAND_PITCH.
+const CALENDAR_BAND_TOP = 15;
+const CALENDAR_BAND_H = 11;
+const CALENDAR_BAND_PITCH = 12;
+
+/** A band takes its task's bar colour; uncoloured tasks fall back to the project colour like single-day chips. */
+function calendarBandStyle(task: Task, projectAccent: string): CSSProperties {
+  if (task.done) return { backgroundColor: "rgba(229, 231, 235, 0.9)", color: "rgb(156, 163, 175)" };
+  if (task.color === "red") return { backgroundColor: "#F87171", color: "#FFFFFF" }; // red-400, the "バーの色" swatch
+  if (task.color === "yellow") return { backgroundColor: "#FDE047", color: "#713F12" }; // yellow-300 / yellow-900
+  return { backgroundColor: `${projectAccent}E6`, color: "#FFFFFF" };
+}
+
 const CALENDAR_CELL_ROW_H = 80;
 const CALENDAR_TASK_PREVIEW_MAX = 5;
+
+/** Display slots in a mobile day cell; a holiday/commemorative-day line takes one of them. */
+function calendarDaySlots(dayInfo: ReturnType<typeof getJapaneseCalendarDay>) {
+  return dayInfo ? CALENDAR_TASK_PREVIEW_MAX - 1 : CALENDAR_TASK_PREVIEW_MAX;
+}
 
 const CALENDAR_TASK_CHARS = 5;
 
@@ -3711,6 +3767,9 @@ function MobileCalendarDayCell({
   month,
   selectedDate,
   dayTasks,
+  bands,
+  bandLanes,
+  hiddenBands,
   onSelect,
 }: {
   cell: CalendarCell;
@@ -3719,6 +3778,12 @@ function MobileCalendarDayCell({
   month: number;
   selectedDate: string;
   dayTasks: Task[];
+  /** Range-task bands whose segment in this week starts on this day; drawn from here to the right. */
+  bands: WeekBand<Task>[];
+  /** Lanes the week's bands take up on this day — that much room is kept free under the day number. */
+  bandLanes: number;
+  /** Bands covering this day that didn't fit; counted in "+n". */
+  hiddenBands: number;
   onSelect: (iso: string) => void;
 }) {
   const { colors } = useProjectColors();
@@ -3727,11 +3792,10 @@ function MobileCalendarDayCell({
   const isToday = cellIso === todayISO();
   const dayOfWeek = cellIndex % 7;
   const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cellIso) : null;
-  const taskPreviewMax = dayInfo
-    ? Math.max(1, CALENDAR_TASK_PREVIEW_MAX - 1)
-    : CALENDAR_TASK_PREVIEW_MAX;
-  const preview = dayTasks.slice(0, taskPreviewMax);
-  const overflow = Math.max(0, dayTasks.length - taskPreviewMax);
+  // Band lanes, the holiday line and single-day chips share the same slots.
+  const slots = calendarDaySlots(dayInfo);
+  const preview = dayTasks.slice(0, Math.max(0, slots - bandLanes));
+  const overflow = dayTasks.length - preview.length + hiddenBands;
 
   return (
     <button
@@ -3745,6 +3809,45 @@ function MobileCalendarDayCell({
       >
         {cell.day}
       </span>
+      {bands.map((band) => {
+        const span = band.endCol - band.startCol + 1;
+        const insetLeft = band.continuesBefore ? 0 : 1;
+        const insetRight = band.continuesAfter ? 0 : 1;
+        return (
+          <span
+            key={band.item.id}
+            className="pointer-events-none absolute z-[1] overflow-hidden whitespace-nowrap px-0.5 text-[8px] leading-[11px]"
+            style={{
+              ...calendarBandStyle(band.item, getProjectColor(colors[band.item.project]).accent),
+              top: CALENDAR_BAND_TOP + band.lane * CALENDAR_BAND_PITCH,
+              left: insetLeft,
+              height: CALENDAR_BAND_H,
+              // 100% is this cell's padding box, which excludes its 1px right
+              // border; add those borders back for the cells the band crosses.
+              width: `calc(${span} * 100% + ${span - 1}px - ${insetLeft + insetRight}px)`,
+              borderTopLeftRadius: band.continuesBefore ? 0 : 2,
+              borderBottomLeftRadius: band.continuesBefore ? 0 : 2,
+              borderTopRightRadius: band.continuesAfter ? 0 : 2,
+              borderBottomRightRadius: band.continuesAfter ? 0 : 2,
+            }}
+            title={band.item.title}
+          >
+            {band.item.title}
+          </span>
+        );
+      })}
+      {bandLanes > 0 && (
+        <span
+          aria-hidden
+          className="shrink-0"
+          style={{ height: bandLanes * CALENDAR_BAND_PITCH, marginTop: CALENDAR_BAND_TOP - 13 }}
+        />
+      )}
+      {preview.length === 0 && overflow > 0 && (
+        <span className="absolute bottom-0.5 right-0.5 rounded-sm bg-gray-800 px-0.5 text-[7px] font-semibold leading-none text-white">
+          +{overflow}
+        </span>
+      )}
       {dayInfo && (
         <span
           className={`mt-0.5 shrink-0 truncate px-0.5 text-[7px] leading-[9px] ${
@@ -3838,7 +3941,39 @@ function MobileCalendarWidget({
   }, [selectedDate.slice(0, 7)]);
 
   const months = useMemo(() => buildMonthRange(calendarAnchorISO, 12, 12), [calendarAnchorISO]);
-  const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
+  const tasksByDate = useMemo(() => buildCalendarSingleTasksByDate(tasks), [tasks]);
+
+  // Range tasks are drawn as bands, laid out per week row of each month
+  // panel. Holidays only show on in-month days, so the same calendar week can
+  // have different lane room in two neighbouring panels — hence per panel.
+  const bandLayoutsByMonth = useMemo(() => {
+    const inputs: BandInput<Task>[] = tasks.filter(isRangeTask).map((task) => {
+      // A completed range task shows only on the day it was completed — even
+      // when that falls after its period ended — as a one-day band.
+      const completed = task.done ? getTaskCompletedDate(task) : null;
+      return {
+        item: task,
+        order: task.sortOrder,
+        isVisibleOn: (iso: string) =>
+          completed ? iso === completed : isRangeTaskVisibleOnViewDate(task, iso),
+      };
+    });
+    const map = new Map<string, WeekBandLayout<Task>[]>();
+    for (const { year, month } of months) {
+      const grid = getCalendarGrid(year, month);
+      const weeks: WeekBandLayout<Task>[] = [];
+      for (let start = 0; start < grid.length; start += 7) {
+        const days = Array.from({ length: 7 }, (_, c) => getGridCellIso(year, month, start + c));
+        const inWeek = inputs.filter((input) => days.some(input.isVisibleOn));
+        const capacity = days.map((iso, c) =>
+          calendarDaySlots(grid[start + c]!.inMonth ? getJapaneseCalendarDay(iso) : null),
+        );
+        weeks.push(layoutWeekBands(days, inWeek, capacity));
+      }
+      map.set(`${year}-${month}`, weeks);
+    }
+    return map;
+  }, [tasks, months]);
 
   const [visibleMonthIdx, setVisibleMonthIdx] = useState(12);
 
@@ -4098,6 +4233,8 @@ function MobileCalendarWidget({
   ) => {
     const cellIso = getGridCellIso(year, month, cellIndex);
     const dayTasks = tasksByDate.get(cellIso) ?? [];
+    const col = cellIndex % 7;
+    const week = bandLayoutsByMonth.get(`${year}-${month}`)?.[Math.floor(cellIndex / 7)];
 
   return (
       <MobileCalendarDayCell
@@ -4108,6 +4245,9 @@ function MobileCalendarWidget({
         month={month}
         selectedDate={selectedDate}
         dayTasks={dayTasks}
+        bands={week?.bands.filter((band) => band.startCol === col) ?? []}
+        bandLanes={week?.lanesUsed[col] ?? 0}
+        hiddenBands={week?.hiddenCount[col] ?? 0}
         onSelect={handleDaySelect}
       />
     );
