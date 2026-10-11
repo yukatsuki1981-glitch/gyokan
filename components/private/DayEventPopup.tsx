@@ -41,6 +41,71 @@ function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
   return [...tasks].sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
+const MINUTE_STEP = 5;
+const MINUTES = Array.from({ length: 60 / MINUTE_STEP }, (_, i) => String(i * MINUTE_STEP).padStart(2, "0"));
+
+const timeSelectClass =
+  "min-w-0 flex-1 rounded-xl border border-black/[0.08] bg-white px-2 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)] disabled:text-gray-300";
+
+/**
+ * Hour (any of 0–23) and minute (5-minute steps) pickers for an "HH:MM"
+ * value. Plain selects so every browser — including iOS, whose native time
+ * wheel ignores `step` — offers only 5-minute steps. An existing time off
+ * the 5-minute grid (saved before this) is kept as an extra option rather
+ * than being silently rounded.
+ */
+function TimeSelect({
+  value,
+  onChange,
+  optional = false,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  /** Allows "no time" (value ""), offered as "--" in the hour picker. */
+  optional?: boolean;
+  ariaLabel: string;
+}) {
+  const [hour = "", minute = ""] = value ? value.split(":") : [];
+  const minutes = minute && !MINUTES.includes(minute) ? [...MINUTES, minute].sort() : MINUTES;
+  return (
+    <div className="flex items-center gap-1">
+      <select
+        aria-label={`${ariaLabel}（時）`}
+        value={hour}
+        onChange={(e) => {
+          const nextHour = e.target.value;
+          onChange(nextHour ? `${nextHour}:${minute || "00"}` : "");
+        }}
+        className={timeSelectClass}
+      >
+        {optional && <option value="">--</option>}
+        {HOURS.map((h) => (
+          <option key={h} value={h}>
+            {h}
+          </option>
+        ))}
+      </select>
+      <span className="text-[14px] text-gray-400">:</span>
+      <select
+        aria-label={`${ariaLabel}（分）`}
+        value={hour ? minute || "00" : ""}
+        disabled={!hour}
+        onChange={(e) => onChange(`${hour}:${e.target.value}`)}
+        className={timeSelectClass}
+      >
+        {!hour && <option value="">--</option>}
+        {minutes.map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function timeRangeLabel(event: AppEvent): string {
   if (isAllDayEvent(event)) return "終日";
   const start = localTimeHHMMFromTimestamp(event.startTime);
@@ -620,24 +685,14 @@ export function DayEventPopup({
               </div>
               {!allDay && (
                 <div className="flex gap-2">
-                  <label className="flex flex-1 flex-col gap-1">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="text-[11px] font-medium text-gray-400">開始</span>
-                    <input
-                      type="time"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      className="rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]"
-                    />
-                  </label>
-                  <label className="flex flex-1 flex-col gap-1">
+                    <TimeSelect value={startTime} onChange={setStartTime} ariaLabel="開始" />
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="text-[11px] font-medium text-gray-400">終了（任意）</span>
-                    <input
-                      type="time"
-                      value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      className="rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]"
-                    />
-                  </label>
+                    <TimeSelect value={endTime} onChange={setEndTime} optional ariaLabel="終了" />
+                  </div>
                 </div>
               )}
               <div className="flex flex-col gap-1.5">
