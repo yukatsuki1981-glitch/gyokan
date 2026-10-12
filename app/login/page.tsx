@@ -6,9 +6,20 @@ import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
+/**
+ * Where to go after signing in: "?next=" when it is a path inside this app
+ * (e.g. /invite/<token>), otherwise the home screen. Anything that could leave
+ * the site ("//host", "/\host", full URLs) falls back to "/".
+ */
+function safeNextPath(next: string | null): string {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/";
+  return next;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get("next"));
   const authError = searchParams.get("error") === "auth";
   const authReason = searchParams.get("reason");
   const authDetail = searchParams.get("detail");
@@ -52,7 +63,7 @@ function LoginForm() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (signingInRef.current && session?.user) {
-        window.location.href = "/";
+        window.location.href = nextPath;
         return;
       }
       setExistingSession(session);
@@ -64,7 +75,7 @@ function LoginForm() {
       window.clearTimeout(fallback);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [nextPath]);
 
   const handleSignOut = async () => {
     setSubmitting(true);
@@ -82,7 +93,7 @@ function LoginForm() {
 
   const redirectAfterAuth = () => {
     signingInRef.current = true;
-    window.location.href = "/";
+    window.location.href = nextPath;
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {

@@ -31,6 +31,8 @@ import {
   resolveTaskCompletedAt,
 } from "@/lib/gyokan/task-completed-at";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
+import { useHousehold } from "@/lib/gyokan/use-household";
+import { DISPLAY_NAME_MAX, memberLabel, readPendingInvite } from "@/lib/gyokan/household";
 import {
   DEFAULT_MODE_PREFERENCES,
   isModeShown,
@@ -99,6 +101,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   createContext,
+  Fragment,
   useCallback,
   useContext,
   useEffect,
@@ -5676,7 +5679,7 @@ function LogoutConfirmSheet({
 }
 
 type SettingsEditField = {
-  key: "appTitle" | "projectLabel" | "caseLabel";
+  key: "appTitle" | "projectLabel" | "caseLabel" | "displayName";
   title: string;
   value: string;
   maxLength: number;
@@ -5718,7 +5721,59 @@ function StartupModePickerSheet({
   );
 }
 
+function HouseholdInviteSheet({
+  open,
+  onClose,
+  link,
+}: {
+  open: boolean;
+  onClose: () => void;
+  link: string | null;
+}) {
+  // Reset per link: the caller keys this sheet by the link it shows.
+  const [copied, setCopied] = useState(false);
+  return (
+    <DetailOverlay open={open} onClose={onClose} title="家族を招待">
+      <p className="mb-3 text-[13px] text-gray-500">
+        このリンクを家族に送ってください。家族がリンクを開いてログイン(または新規登録)し、参加を確認すると、プライベートモードの予定の共有が始まります。リンクは1回だけ使えます。
+      </p>
+      <input
+        type="text"
+        readOnly
+        value={link ?? "リンクを作成しています…"}
+        onFocus={(e) => e.currentTarget.select()}
+        aria-label="招待リンク"
+        className="w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[12px] text-[var(--gyokan-text)] outline-none"
+      />
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50"
+        >
+          閉じる
+        </button>
+        <button
+          type="button"
+          disabled={!link}
+          onClick={() => {
+            if (!link) return;
+            void navigator.clipboard?.writeText(link).then(
+              () => setCopied(true),
+              () => setCopied(false),
+            );
+          }}
+          className="flex-1 rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[13px] font-medium text-white hover:bg-blue-600 disabled:opacity-50"
+        >
+          {copied ? "コピーしました" : "リンクをコピー"}
+        </button>
+      </div>
+    </DetailOverlay>
+  );
+}
+
 function AppSettingsPanel({
+  userId,
   userEmail,
   loadError,
   caseSaveError,
@@ -5742,7 +5797,18 @@ function AppSettingsPanel({
   onOpenTheme: () => void;
   onShowCompletedTasks: () => void;
   onSignOut: () => void;
+  userId: string;
 }) {
+  const household = useHousehold(userId);
+  const [inviteSheetOpen, setInviteSheetOpen] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const openInvite = async () => {
+    setInviteLink(null);
+    const link = await household.createInviteLink();
+    if (!link) return;
+    setInviteLink(link);
+    setInviteSheetOpen(true);
+  };
   const {
     showProjects,
     showCases,
@@ -5786,6 +5852,7 @@ function AppSettingsPanel({
     if (!editField) return;
     if (editField.key === "appTitle") onAppTitleChange(value);
     else if (editField.key === "projectLabel") setProjectLabel(value);
+    else if (editField.key === "displayName") void household.saveDisplayName(value);
     else setCaseLabel(value);
   };
 
@@ -5907,6 +5974,45 @@ function AppSettingsPanel({
         />
       </SettingsCard>
 
+      {/* Sharing private-mode events with family (households). */}
+      <SettingsCard>
+        <SettingsRow
+          label="表示名"
+          value={household.myDisplayName ?? "未設定"}
+          onClick={() =>
+            setEditField({
+              key: "displayName",
+              title: "表示名",
+              value: household.myDisplayName ?? "",
+              maxLength: DISPLAY_NAME_MAX,
+              placeholder: "家族に表示される名前",
+            })
+          }
+        />
+        {household.members
+          .filter((member) => !member.isMe)
+          .map((member) => (
+            <Fragment key={member.userId}>
+              <SettingsDivider />
+              <SettingsRow label="共有している家族" value={memberLabel(member)} />
+            </Fragment>
+          ))}
+        <SettingsDivider />
+        <SettingsRow
+          label="家族を招待"
+          value={household.isFull ? `上限(${household.memberLimit}人)に達しています` : undefined}
+          onClick={household.isFull || household.loading ? undefined : () => void openInvite()}
+        />
+      </SettingsCard>
+      <p className="-mt-2 px-1 text-[12px] text-gray-400">
+        プライベートモードの予定を、家族と一緒に見て、追加・編集できます。タスクは共有されません。
+      </p>
+      {household.error && (
+        <p role="alert" className="-mt-2 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
+          {household.error}
+        </p>
+      )}
+
       <SettingsCard>
         <SettingsRow label="通知" value="オン" />
         <SettingsDivider />
@@ -5931,6 +6037,12 @@ function AppSettingsPanel({
         onClose={() => setEditField(null)}
       />
 
+      <HouseholdInviteSheet
+        key={inviteLink ?? "none"}
+        open={inviteSheetOpen}
+        onClose={() => setInviteSheetOpen(false)}
+        link={inviteLink}
+      />
       <ColumnsPickerSheet
         open={columnsPickerOpen}
         onClose={() => setColumnsPickerOpen(false)}
@@ -6102,8 +6214,28 @@ export default function Home() {
   useEffect(() => {
     if (!modePreferences || startupModeAppliedRef.current) return;
     startupModeAppliedRef.current = true;
-    setAppMode(startupMode(modePreferences) === "private" ? "private" : "tasks");
+    // "?mode=private" (e.g. right after joining a family's shared calendar)
+    // opens private mode once, when it's shown; the parameter is then dropped.
+    const url = new URL(window.location.href);
+    const requested = url.searchParams.get("mode");
+    if (requested) {
+      url.searchParams.delete("mode");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+    const opening =
+      requested === "private" && isModeShown(modePreferences, "private")
+        ? "private"
+        : startupMode(modePreferences);
+    setAppMode(opening === "private" ? "private" : "tasks");
   }, [modePreferences]);
+
+  // An invite opened while signed out is picked up again here once signed
+  // in (Google sign-in and sign-up confirmation e-mails both land on "/").
+  useEffect(() => {
+    if (!user || !dataReady) return;
+    const pendingInvite = readPendingInvite();
+    if (pendingInvite) router.replace(`/invite/${pendingInvite}`);
+  }, [user, dataReady, router]);
 
   const handleModePreferencesChange = useCallback(
     (next: ModePreferences) => {
@@ -7080,6 +7212,7 @@ export default function Home() {
               )
             ) : mobileTab === "more" ? (
               <AppSettingsPanel
+                userId={user.id}
                 userEmail={user.email}
                 loadError={loadError}
                 caseSaveError={caseSaveError}
@@ -7230,6 +7363,7 @@ export default function Home() {
 
       <DetailOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)} title="設定">
         <AppSettingsPanel
+          userId={user.id}
           userEmail={user.email}
           loadError={loadError}
           caseSaveError={caseSaveError}
