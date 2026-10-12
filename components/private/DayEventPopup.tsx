@@ -714,6 +714,26 @@ export function DayEventPopup({
                   />
                 </label>
               )}
+              <div className="flex rounded-xl bg-black/[0.05] p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setAllDay(false)}
+                  className={`flex-1 rounded-[10px] py-1.5 text-[13px] font-medium transition-colors ${
+                    !allDay ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                  }`}
+                >
+                  時間指定
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAllDay(true)}
+                  className={`flex-1 rounded-[10px] py-1.5 text-[13px] font-medium transition-colors ${
+                    allDay ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                  }`}
+                >
+                  終日
+                </button>
+              </div>
               <label className="flex items-center gap-2 text-[13px] text-gray-600">
                 <input
                   type="checkbox"
@@ -763,26 +783,6 @@ export function DayEventPopup({
                   </div>
                 </div>
               )}
-              <div className="flex rounded-xl bg-black/[0.05] p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setAllDay(false)}
-                  className={`flex-1 rounded-[10px] py-1.5 text-[13px] font-medium transition-colors ${
-                    !allDay ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-                  }`}
-                >
-                  時間指定
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAllDay(true)}
-                  className={`flex-1 rounded-[10px] py-1.5 text-[13px] font-medium transition-colors ${
-                    allDay ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-                  }`}
-                >
-                  終日
-                </button>
-              </div>
               {!allDay && (
                 <div className="flex gap-2">
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
