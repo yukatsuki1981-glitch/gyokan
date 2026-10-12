@@ -21,9 +21,11 @@ import { CSS } from "@dnd-kit/utilities";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import {
   combineLocalDateAndTime,
+  eventCoversDate,
+  eventDateSpan,
   eventFieldsFromItem,
   isAllDayEvent,
-  localDateISOFromTimestamp,
+  isMultiDayEvent,
   localTimeHHMMFromTimestamp,
   sortEventsByOrder,
 } from "@/lib/gyokan/events";
@@ -44,6 +46,9 @@ function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
 const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
 const MINUTE_STEP = 5;
 const MINUTES = Array.from({ length: 60 / MINUTE_STEP }, (_, i) => String(i * MINUTE_STEP).padStart(2, "0"));
+
+const dateInputClass =
+  "rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]";
 
 const timeSelectClass =
   "min-w-0 flex-1 rounded-xl border border-black/[0.08] bg-white px-2 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)] disabled:text-gray-300";
@@ -106,7 +111,17 @@ function TimeSelect({
   );
 }
 
+function shortDateLabel(iso: string) {
+  const [, m, d] = iso.split("-");
+  return `${Number(m)}/${Number(d)}`;
+}
+
 function timeRangeLabel(event: AppEvent): string {
+  if (isMultiDayEvent(event)) {
+    const { start, end } = eventDateSpan(event);
+    if (isAllDayEvent(event)) return `${shortDateLabel(start)}～${shortDateLabel(end)}`;
+    return `${shortDateLabel(start)} ${localTimeHHMMFromTimestamp(event.startTime)}～${shortDateLabel(end)} ${localTimeHHMMFromTimestamp(event.endTime!)}`;
+  }
   if (isAllDayEvent(event)) return "終日";
   const start = localTimeHHMMFromTimestamp(event.startTime);
   if (!event.endTime) return start;
@@ -250,6 +265,9 @@ export function DayEventPopup({
   const [allDay, setAllDay] = useState(false);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("");
+  const [startDate, setStartDate] = useState(dateISO);
+  const [endDate, setEndDate] = useState(dateISO);
+  const [useRange, setUseRange] = useState(false);
   const [memo, setMemo] = useState("");
   const [color, setColor] = useState(defaultEventColor);
 
@@ -285,8 +303,9 @@ export function DayEventPopup({
       const { active, over } = event;
       if (!over || active.id === over.id) return;
       onReplaceEvents((prev) => {
-        // Only this day's events are on screen; the rest keep their order.
-        const visible = prev.filter((e) => localDateISOFromTimestamp(e.startTime) === dateISO);
+        // Only the events covering this day are on screen, in list order; the
+        // rest keep their order.
+        const visible = sortEventsByOrder(prev.filter((e) => eventCoversDate(e, dateISO)));
         return reorderWithinVisible(prev, visible, String(active.id), String(over.id));
       });
     },
@@ -487,6 +506,9 @@ export function DayEventPopup({
     setAllDay(false);
     setStartTime("09:00");
     setEndTime("");
+    setStartDate(dateISO);
+    setEndDate(dateISO);
+    setUseRange(false);
     setMemo("");
     setColor(defaultEventColor);
     setEditingId(null);
@@ -503,6 +525,10 @@ export function DayEventPopup({
     setAllDay(fields.allDay);
     setStartTime(fields.startTime || "09:00");
     setEndTime(fields.endTime);
+    const span = eventDateSpan(event);
+    setStartDate(span.start);
+    setEndDate(span.end);
+    setUseRange(span.end > span.start);
     setMemo(fields.memo);
     setColor(fields.color || DEFAULT_EVENT_COLOR);
     setEditingId(event.id);
@@ -512,18 +538,25 @@ export function DayEventPopup({
   const handleSave = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
+    // A period whose end isn't after its start is just a single day.
+    const lastDay = useRange && endDate > startDate ? endDate : null;
     const payload = allDay
       ? {
           title: trimmed,
-          startTime: combineLocalDateAndTime(dateISO, "00:00"),
-          endTime: null,
+          startTime: combineLocalDateAndTime(startDate, "00:00"),
+          // A multi-day all-day event ends at midnight of its last day.
+          endTime: lastDay ? combineLocalDateAndTime(lastDay, "00:00") : null,
           memo: memo.trim() || undefined,
           color,
         }
       : {
           title: trimmed,
-          startTime: combineLocalDateAndTime(dateISO, startTime),
-          endTime: endTime ? combineLocalDateAndTime(dateISO, endTime) : null,
+          startTime: combineLocalDateAndTime(startDate, startTime),
+          endTime: lastDay
+            ? combineLocalDateAndTime(lastDay, endTime || startTime)
+            : endTime
+              ? combineLocalDateAndTime(startDate, endTime)
+              : null,
           memo: memo.trim() || undefined,
           color,
         };
@@ -663,6 +696,72 @@ export function DayEventPopup({
                   className="rounded-xl border border-black/[0.08] bg-white px-3 py-2 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]"
                 />
               </label>
+              {/* Same date / period controls as the tasks-mode task form. */}
+              {!useRange && (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-gray-400">日付</span>
+                  <input
+                    type="date"
+                    aria-label="日付"
+                    value={startDate}
+                    onChange={(e) => {
+                      if (!e.target.value) return;
+                      setStartDate(e.target.value);
+                      setEndDate(e.target.value);
+                    }}
+                    className={dateInputClass}
+                  />
+                </label>
+              )}
+              <label className="flex items-center gap-2 text-[13px] text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={useRange}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setUseRange(checked);
+                    if (checked) {
+                      if (endDate < startDate) setEndDate(startDate);
+                      // A period's end time is required; start from the start time.
+                      if (!endTime) setEndTime(startTime);
+                    }
+                  }}
+                  className="rounded border-gray-300"
+                />
+                期間を選択
+              </label>
+              {useRange && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-gray-400">期間</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      aria-label="開始日"
+                      value={startDate}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (!next) return;
+                        setStartDate(next);
+                        if (endDate < next) setEndDate(next);
+                      }}
+                      className={`${dateInputClass} min-w-0 flex-1`}
+                    />
+                    <span className="shrink-0 text-[13px] text-gray-400">～</span>
+                    <input
+                      type="date"
+                      aria-label="終了日"
+                      value={endDate}
+                      min={startDate}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (!next) return;
+                        setEndDate(next < startDate ? startDate : next);
+                      }}
+                      className={`${dateInputClass} min-w-0 flex-1`}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="flex rounded-xl bg-black/[0.05] p-0.5">
                 <button
                   type="button"
@@ -690,8 +789,15 @@ export function DayEventPopup({
                     <TimeSelect value={startTime} onChange={setStartTime} ariaLabel="開始" />
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="text-[11px] font-medium text-gray-400">終了（任意）</span>
-                    <TimeSelect value={endTime} onChange={setEndTime} optional ariaLabel="終了" />
+                    <span className="text-[11px] font-medium text-gray-400">
+                      {useRange ? "終了" : "終了（任意）"}
+                    </span>
+                    <TimeSelect
+                      value={useRange ? endTime || startTime : endTime}
+                      onChange={setEndTime}
+                      optional={!useRange}
+                      ariaLabel="終了"
+                    />
                   </div>
                 </div>
               )}

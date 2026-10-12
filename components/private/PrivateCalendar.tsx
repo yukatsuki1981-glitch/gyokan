@@ -2,7 +2,13 @@
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type Ref } from "react";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
-import { groupEventsByDate, truncateEventTitle } from "@/lib/gyokan/events";
+import {
+  eventCoversDate,
+  groupEventsByDate,
+  isMultiDayEvent,
+  truncateEventTitle,
+} from "@/lib/gyokan/events";
+import { layoutWeekBands, type BandInput, type WeekBandLayout } from "@/lib/gyokan/calendar-bands";
 import { eventColorStyle } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
@@ -35,6 +41,18 @@ const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 function daySlots(weekRows: number) {
   return weekRows >= 6 ? 4 : 5;
 }
+
+function cellSlots(weekRows: number, dayInfo: ReturnType<typeof getJapaneseCalendarDay>) {
+  return daySlots(weekRows) - (dayInfo ? 1 : 0);
+}
+
+// Multi-day event bands sit in lanes right under the day header, lined up
+// with the chips: the cell's 2px top padding + the 24px header row + a 2px
+// gap, then one lane per chip pitch (17px chip + 2px gap).
+const CELL_HEADER_BOTTOM = 26;
+const BAND_TOP = 28;
+const BAND_H = 17;
+const BAND_PITCH = 19;
 
 // Release-animation tuning for the month swipe — same ease-out deceleration
 // curve/duration used elsewhere in this codebase (the day-popup swipe-
@@ -97,15 +115,22 @@ function DayCell({
   dayTasks,
   dayEvents,
   weekRows,
+  bandLanes,
+  hiddenBands,
   onSelect,
 }: {
   cell: CalendarCell;
   cellIndex: number;
   isToday: boolean;
   dayTasks: AppTask[];
+  /** Single-day events only; multi-day events are drawn as bands over the week row. */
   dayEvents: AppEvent[];
   /** Number of week rows in this month's grid (5 or 6). */
   weekRows: number;
+  /** Lanes the week's multi-day bands take up on this day — kept free under the day header. */
+  bandLanes: number;
+  /** Multi-day bands covering this day that didn't fit; counted in "+n". */
+  hiddenBands: number;
   onSelect: (iso: string) => void;
 }) {
   const dayOfWeek = cellIndex % 7;
@@ -117,11 +142,11 @@ function DayCell({
     ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
     ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
   ];
-  // The day-label line (holiday/commemorative-day name) counts as one of the
-  // cell's display slots, so a day that has one gets one fewer chip slot.
-  const previewMax = daySlots(weekRows) - (dayInfo ? 1 : 0);
+  // Band lanes, the day-label line (holiday/commemorative-day name) and the
+  // chips all share the cell's display slots.
+  const previewMax = Math.max(0, cellSlots(weekRows, dayInfo) - bandLanes);
   const preview = chips.slice(0, previewMax);
-  const overflow = chips.length > previewMax ? chips.length - previewMax : 0;
+  const overflow = chips.length - preview.length + hiddenBands;
 
   const numberColor = !cell.inMonth
     ? "text-gray-300"
@@ -140,6 +165,8 @@ function DayCell({
       className={`flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] p-0.5 text-left transition-colors hover:bg-black/[0.02] ${
         cell.inMonth ? "bg-white" : "bg-gray-50/60"
       }`}
+      // Placed explicitly so the week's band overlay can share the row.
+      style={{ gridRow: Math.floor(cellIndex / 7) + 1, gridColumn: dayOfWeek + 1 }}
     >
       <div className="flex shrink-0 items-center gap-1">
         <span
@@ -159,6 +186,13 @@ function DayCell({
           <span className="shrink-0 text-[11px] font-medium text-gray-400">+{overflow}</span>
         )}
       </div>
+      {bandLanes > 0 && (
+        <span
+          aria-hidden
+          className="shrink-0"
+          style={{ height: bandLanes * BAND_PITCH, marginTop: BAND_TOP - CELL_HEADER_BOTTOM }}
+        />
+      )}
       {dayInfo && (
         <span
           className={`mt-0.5 shrink-0 truncate px-0.5 text-[8.4px] leading-[10px] tracking-tight ${
@@ -206,6 +240,7 @@ function MonthPanel({
   month,
   tasksByDate,
   eventsByDate,
+  multiDayEvents,
   onSelect,
   onToday,
   availableHeightPx,
@@ -216,7 +251,10 @@ function MonthPanel({
   year: number;
   month: number;
   tasksByDate: Map<string, AppTask[]>;
+  /** Single-day events by date (shown as chips). */
   eventsByDate: Map<string, AppEvent[]>;
+  /** Events spanning several days (shown as bands). */
+  multiDayEvents: AppEvent[];
   onSelect: (iso: string) => void;
   onToday: () => void;
   // Total pixel budget for the day-grid area — constant across every month
@@ -240,6 +278,26 @@ function MonthPanel({
   const rows = cells.length / 7;
   const today = todayISO();
   const rowHeightPx = availableHeightPx != null ? availableHeightPx / rows : null;
+
+  // Multi-day events, laid out as bands per week row. Holidays only show on
+  // in-month days, so lane room is per day of this panel.
+  const weekBands = useMemo(() => {
+    const inputs: BandInput<AppEvent>[] = multiDayEvents.map((event) => ({
+      item: event,
+      order: event.sortOrder,
+      isVisibleOn: (iso: string) => eventCoversDate(event, iso),
+    }));
+    const weeks: WeekBandLayout<AppEvent>[] = [];
+    for (let start = 0; start < cells.length; start += 7) {
+      const week = cells.slice(start, start + 7);
+      const days = week.map((c) => c.iso);
+      const capacity = week.map((c) =>
+        cellSlots(rows, c.inMonth ? getJapaneseCalendarDay(c.iso) : null),
+      );
+      weeks.push(layoutWeekBands(days, inputs.filter((input) => days.some(input.isVisibleOn)), capacity));
+    }
+    return weeks;
+  }, [cells, rows, multiDayEvents]);
 
   return (
     <div className="flex min-h-0 flex-1 min-w-0 flex-col">
@@ -292,18 +350,63 @@ function MonthPanel({
                 }
           }
         >
-          {cells.map((cell, i) => (
-            <DayCell
-              key={`${cell.iso}-${i}`}
-              cell={cell}
-              cellIndex={i}
-              isToday={cell.inMonth && cell.iso === today}
-              dayTasks={tasksByDate.get(cell.iso) ?? []}
-              dayEvents={eventsByDate.get(cell.iso) ?? []}
-              weekRows={rows}
-              onSelect={onSelect}
-            />
-          ))}
+          {cells.map((cell, i) => {
+            const week = weekBands[Math.floor(i / 7)];
+            return (
+              <DayCell
+                key={`${cell.iso}-${i}`}
+                cell={cell}
+                cellIndex={i}
+                isToday={cell.inMonth && cell.iso === today}
+                dayTasks={tasksByDate.get(cell.iso) ?? []}
+                dayEvents={eventsByDate.get(cell.iso) ?? []}
+                weekRows={rows}
+                bandLanes={week?.lanesUsed[i % 7] ?? 0}
+                hiddenBands={week?.hiddenCount[i % 7] ?? 0}
+                onSelect={onSelect}
+              />
+            );
+          })}
+          {weekBands.map((week, w) =>
+            week.bands.length === 0 ? null : (
+              // One overlay per week row, spanning all seven columns on top of
+              // the day cells; taps fall through to the cells underneath.
+              <div
+                key={`bands-${w}`}
+                aria-hidden
+                className="pointer-events-none relative z-[1] min-h-0 overflow-hidden"
+                style={{ gridRow: w + 1, gridColumn: "1 / -1" }}
+              >
+                {week.bands.map((band) => {
+                  const span = band.endCol - band.startCol + 1;
+                  // Inside the cell padding (2px), and clear of the last cell's 1px right border.
+                  const insetLeft = band.continuesBefore ? 0 : 2;
+                  const insetRight = band.continuesAfter ? 0 : 3;
+                  const colors = eventColorStyle(band.item.color);
+                  return (
+                    <span
+                      key={band.item.id}
+                      className="absolute overflow-hidden whitespace-nowrap px-0.5 py-0.5 text-[10px] font-bold leading-[13px] tracking-tight"
+                      style={{
+                        top: BAND_TOP + band.lane * BAND_PITCH,
+                        height: BAND_H,
+                        left: `calc(${band.startCol} * 100% / 7 + ${insetLeft}px)`,
+                        width: `calc(${span} * 100% / 7 - ${insetLeft + insetRight}px)`,
+                        backgroundColor: colors.bg,
+                        color: colors.text,
+                        borderTopLeftRadius: band.continuesBefore ? 0 : 4,
+                        borderBottomLeftRadius: band.continuesBefore ? 0 : 4,
+                        borderTopRightRadius: band.continuesAfter ? 0 : 4,
+                        borderBottomRightRadius: band.continuesAfter ? 0 : 4,
+                      }}
+                    >
+                      {band.item.title}
+                    </span>
+                  );
+                })}
+              </div>
+            ),
+          )}
         </div>
       </div>
     </div>
@@ -342,7 +445,14 @@ export function PrivateCalendar({
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
+  // Every day an event covers — what the day popup lists.
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
+  // The calendar grid draws single-day events as chips and multi-day ones as bands.
+  const singleDayEventsByDate = useMemo(
+    () => groupEventsByDate(events.filter((event) => !isMultiDayEvent(event))),
+    [events],
+  );
+  const multiDayEvents = useMemo(() => events.filter(isMultiDayEvent), [events]);
   const tasksByDate = useMemo(() => groupTasksByDate(tasks), [tasks]);
   // Three panels — previous / current / next — form the swipeable track,
   // same pattern as elsewhere in this codebase (real-time drag via a
@@ -628,7 +738,8 @@ export function PrivateCalendar({
                 year={p.year}
                 month={p.month}
                 tasksByDate={tasksByDate}
-                eventsByDate={eventsByDate}
+                eventsByDate={singleDayEventsByDate}
+                multiDayEvents={multiDayEvents}
                 onSelect={handleDaySelect}
                 onToday={goToToday}
                 availableHeightPx={availableHeightPx}

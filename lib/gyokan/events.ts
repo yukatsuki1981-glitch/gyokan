@@ -1,3 +1,4 @@
+import { shiftISODate } from "./iso-date";
 import type { AppEvent } from "./types";
 
 export function localDateISOFromTimestamp(timestamp: string): string {
@@ -40,13 +41,37 @@ export function sortEventsByOrder(events: AppEvent[]): AppEvent[] {
   return [...events].sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+/**
+ * The local dates an event covers: from its start date to the date of its
+ * end time. An event without an end time (or one ending on its start date)
+ * covers a single day.
+ */
+export function eventDateSpan(event: AppEvent): { start: string; end: string } {
+  const start = localDateISOFromTimestamp(event.startTime);
+  const end = event.endTime ? localDateISOFromTimestamp(event.endTime) : start;
+  return { start, end: end > start ? end : start };
+}
+
+export function isMultiDayEvent(event: AppEvent): boolean {
+  const { start, end } = eventDateSpan(event);
+  return end > start;
+}
+
+export function eventCoversDate(event: AppEvent, dateISO: string): boolean {
+  const { start, end } = eventDateSpan(event);
+  return dateISO >= start && dateISO <= end;
+}
+
+/** Events by every local date they cover (a multi-day event appears under each of its days), in list order. */
 export function groupEventsByDate(events: AppEvent[]): Map<string, AppEvent[]> {
   const map = new Map<string, AppEvent[]>();
   for (const event of sortEventsByOrder(events)) {
-    const dateISO = localDateISOFromTimestamp(event.startTime);
-    const list = map.get(dateISO) ?? [];
-    list.push(event);
-    map.set(dateISO, list);
+    const { start, end } = eventDateSpan(event);
+    for (let day = start; day <= end; day = shiftISODate(day, 1)) {
+      const list = map.get(day) ?? [];
+      list.push(event);
+      map.set(day, list);
+    }
   }
   return map;
 }
@@ -62,18 +87,25 @@ export type EventDraftFields = {
 
 const ALL_DAY_TIME = "00:00";
 
-/** An event is all-day when it's stored as local midnight with no end time. */
+/**
+ * An event is all-day when it's stored as local midnight with no end time —
+ * or, for a multi-day all-day event, with its end at local midnight of its
+ * last day.
+ */
 export function isAllDayEvent(item: AppEvent): boolean {
-  return localTimeHHMMFromTimestamp(item.startTime) === ALL_DAY_TIME && !item.endTime;
+  if (localTimeHHMMFromTimestamp(item.startTime) !== ALL_DAY_TIME) return false;
+  if (!item.endTime) return true;
+  return localTimeHHMMFromTimestamp(item.endTime) === ALL_DAY_TIME && isMultiDayEvent(item);
 }
 
 export function eventFieldsFromItem(item: AppEvent): EventDraftFields {
+  const allDay = isAllDayEvent(item);
   return {
     title: item.title,
     startTime: localTimeHHMMFromTimestamp(item.startTime),
-    endTime: item.endTime ? localTimeHHMMFromTimestamp(item.endTime) : "",
+    endTime: item.endTime && !allDay ? localTimeHHMMFromTimestamp(item.endTime) : "",
     memo: item.memo ?? "",
-    allDay: isAllDayEvent(item),
+    allDay,
     color: item.color ?? null,
   };
 }
