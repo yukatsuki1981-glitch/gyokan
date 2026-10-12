@@ -11,7 +11,7 @@ import {
   truncateEventTitle,
 } from "@/lib/gyokan/events";
 import { layoutWeekBands, type BandInput, type WeekBandLayout } from "@/lib/gyokan/calendar-bands";
-import { eventColorStyle, eventTimeBadgeColor } from "@/lib/gyokan/event-colors";
+import { eventColorStyle, eventTimeStripColor } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { getRokuyou } from "@/lib/gyokan/rokuyou";
@@ -110,23 +110,21 @@ function buildGridCells(year: number, month: number): CalendarCell[] {
   return cells;
 }
 
-// Start-time badge on timed event chips: 8px tabular digits in two 6.5px
-// rows, 1px padding all round — 15px tall, 1px clear of the 17px chip's
-// edges — and exactly two digits wide (2ch at the badge's own font size),
-// so every badge is the same width and titles all start at the same x.
-const TIME_BADGE_FONT = 8;
-const TIME_BADGE_LINE = 6.5;
-// Room the badge takes from the title: its width (2 digits + 2px padding,
-// 14px with the app font) plus its 1px left margin.
-const TIME_BADGE_RESERVE = 15;
+// Start-time strip on timed event chips: a fixed 17px-wide band down the
+// chip's left edge (so titles always start at the same x) holding 9px
+// tabular digits in two 8.5px rows — the whole 17px chip height.
+const TIME_STRIP_W = 17;
+const TIME_STRIP_FONT = 9;
+const TIME_STRIP_LINE = 8.5;
 
 /**
  * An event's chip in a day cell, exactly one chip-row tall (BAND_H). A
- * timed event shows its start time at the left edge as a small rounded
- * badge — hour over minutes, both two digits, no separator — in white on
- * the label color darkened to a 4.5:1 contrast. The title is cut at 4
- * characters and sized to fit them beside the badge (all-day chips use the
- * same size so titles line up); it's capped at 10px.
+ * timed event shows its start time — hour over minutes, both two digits,
+ * no separator — on a strip down the chip's left edge, a slightly darker
+ * shade of the chip's own color, in the same text color as the title. The
+ * title is cut at 4 characters and sized to fit them beside the strip
+ * (all-day chips have no strip, but use the same size so titles line up);
+ * it's capped at 10px.
  */
 function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
   const colors = eventColorStyle(event.color);
@@ -144,15 +142,16 @@ function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
       title={event.title}
     >
       {timed && (
+        // Full chip height at the left edge; the chip's overflow-hidden and
+        // rounded corners clip it, so it needs no radius of its own.
         <span
           aria-hidden
-          className="ml-px flex shrink-0 flex-col items-center justify-center self-center rounded-[3px] px-px py-px text-white tabular-nums"
+          className="flex shrink-0 flex-col items-center justify-center tabular-nums"
           style={{
-            height: BAND_H - 2,
-            width: "calc(2ch + 2px)",
-            fontSize: TIME_BADGE_FONT,
-            lineHeight: `${TIME_BADGE_LINE}px`,
-            backgroundColor: eventTimeBadgeColor(event.color),
+            width: TIME_STRIP_W,
+            fontSize: TIME_STRIP_FONT,
+            lineHeight: `${TIME_STRIP_LINE}px`,
+            backgroundColor: eventTimeStripColor(event.color),
           }}
         >
           <span>{hh}</span>
@@ -162,10 +161,10 @@ function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
       <span
         className="min-w-0 flex-1 self-center overflow-hidden whitespace-nowrap px-px tracking-tight"
         style={{
-          // 4 characters beside the time badge, in the chip column's width
+          // 4 characters beside the time strip, in the chip column's width
           // (minus the 1px side padding). Bold CJK glyphs run a little over
           // 1em even with the tight tracking, hence 4.2 rather than 4.
-          fontSize: `min(10px, calc((100cqw - ${TIME_BADGE_RESERVE + 2}px) / 4.2))`,
+          fontSize: `min(10px, calc((100cqw - ${TIME_STRIP_W + 2}px) / 4.2))`,
           lineHeight: `${BAND_H}px`,
         }}
       >

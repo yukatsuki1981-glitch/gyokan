@@ -118,29 +118,33 @@ export function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/**
- * The color pushed toward black just far enough that white text on it
- * reaches `minContrast` (WCAG; 4.5 = AA for normal text). A color that
- * already gets there is returned unchanged, so deep colors stay as they are
- * and light ones (yellow, orange) darken the most. Computed, not tabled, so
- * new palette colors work too.
- */
-export function darkenForWhiteText(hex: string, minContrast = 4.5): string {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return hex;
-  for (let step = 0; step <= 100; step++) {
-    const keep = 1 - step / 100;
-    const candidate = `#${rgb
-      .map((v) => Math.round(v * keep).toString(16).padStart(2, "0"))
-      .join("")}`.toUpperCase();
-    if (contrastRatio(candidate, "#FFFFFF") >= minContrast) return candidate;
-  }
-  return "#000000";
+/** CIELAB lightness L* (0–100) — perceptual, unlike HSL lightness. */
+function perceivedLightness(hex: string): number {
+  const y = relativeLuminance(hex);
+  return y > 0.008856 ? 116 * Math.cbrt(y) - 16 : 903.3 * y;
 }
 
-/** Background for the white start-time badge on a timed event's chip: the label color, darkened for white text. */
-export function eventTimeBadgeColor(accentHex: string | null | undefined): string {
-  return darkenForWhiteText(eventColorStyle(accentHex).accent);
+// How much darker (in L*) the time strip is than the chip: enough to read as
+// its own zone at a glance, while staying the same soft family.
+const TIME_STRIP_LIGHTNESS_STEP = 6;
+
+/**
+ * The strip behind a timed event chip's start time: the chip's own soft
+ * background (same hue and saturation), darkened until it is
+ * TIME_STRIP_LIGHTNESS_STEP L* darker. Using a perceptual step rather than a
+ * fixed HSL drop keeps the contrast with the chip even across hues (yellow
+ * needs more darkening than indigo to look as different). Computed from the
+ * label color, so new palette colors work too.
+ */
+export function eventTimeStripColor(accentHex: string | null | undefined): string {
+  const { bg } = eventColorStyle(accentHex);
+  const [h, s, l] = hexToHsl(bg);
+  const target = perceivedLightness(bg) - TIME_STRIP_LIGHTNESS_STEP;
+  for (let next = l; next >= 0; next -= 0.5) {
+    const candidate = hslToHex(h, s, next);
+    if (perceivedLightness(candidate) <= target) return candidate;
+  }
+  return hslToHex(h, s, 0);
 }
 
 /** Derives a soft background + readable text color from an accent hex —
