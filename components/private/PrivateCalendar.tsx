@@ -11,7 +11,7 @@ import {
   truncateEventTitle,
 } from "@/lib/gyokan/events";
 import { layoutWeekBands, type BandInput, type WeekBandLayout } from "@/lib/gyokan/calendar-bands";
-import { eventColorStyle } from "@/lib/gyokan/event-colors";
+import { eventColorStyle, eventTimeBadgeColor } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { getRokuyou } from "@/lib/gyokan/rokuyou";
@@ -110,15 +110,23 @@ function buildGridCells(year: number, month: number): CalendarCell[] {
   return cells;
 }
 
-// Width of the start-time column on timed event chips.
-const CHIP_TIME_W = 13;
+// Start-time badge on timed event chips: 8px tabular digits in two 6.5px
+// rows, 1px padding all round — 15px tall, 1px clear of the 17px chip's
+// edges — and exactly two digits wide (2ch at the badge's own font size),
+// so every badge is the same width and titles all start at the same x.
+const TIME_BADGE_FONT = 8;
+const TIME_BADGE_LINE = 6.5;
+// Room the badge takes from the title: its width (2 digits + 2px padding,
+// 14px with the app font) plus its 1px left margin.
+const TIME_BADGE_RESERVE = 15;
 
 /**
- * An event's chip in a day cell. Exactly one chip-row tall (BAND_H), so a
- * timed event's start time is stacked in three tiny rows at its left edge —
- * hour / "･･" / minutes — instead of making the chip taller. The title is
- * cut at 4 characters and sized to fit them beside that column (all-day
- * chips use the same size so titles line up); it's capped at 10px.
+ * An event's chip in a day cell, exactly one chip-row tall (BAND_H). A
+ * timed event shows its start time at the left edge as a small rounded
+ * badge — hour over minutes, both two digits, no separator — in white on
+ * the label color darkened to a 4.5:1 contrast. The title is cut at 4
+ * characters and sized to fit them beside the badge (all-day chips use the
+ * same size so titles line up); it's capped at 10px.
  */
 function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
   const colors = eventColorStyle(event.color);
@@ -138,21 +146,26 @@ function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
       {timed && (
         <span
           aria-hidden
-          className="flex shrink-0 flex-col items-center justify-center text-[7px] leading-[5.5px] tabular-nums"
-          style={{ width: CHIP_TIME_W }}
+          className="ml-px flex shrink-0 flex-col items-center justify-center self-center rounded-[3px] px-px py-px text-white tabular-nums"
+          style={{
+            height: BAND_H - 2,
+            width: "calc(2ch + 2px)",
+            fontSize: TIME_BADGE_FONT,
+            lineHeight: `${TIME_BADGE_LINE}px`,
+            backgroundColor: eventTimeBadgeColor(event.color),
+          }}
         >
-          <span>{Number(hh)}</span>
-          <span>･･</span>
+          <span>{hh}</span>
           <span>{mm}</span>
         </span>
       )}
       <span
         className="min-w-0 flex-1 self-center overflow-hidden whitespace-nowrap px-px tracking-tight"
         style={{
-          // 4 characters beside the time column, in the chip column's width
+          // 4 characters beside the time badge, in the chip column's width
           // (minus the 1px side padding). Bold CJK glyphs run a little over
           // 1em even with the tight tracking, hence 4.2 rather than 4.
-          fontSize: `min(10px, calc((100cqw - ${CHIP_TIME_W + 2}px) / 4.2))`,
+          fontSize: `min(10px, calc((100cqw - ${TIME_BADGE_RESERVE + 2}px) / 4.2))`,
           lineHeight: `${BAND_H}px`,
         }}
       >

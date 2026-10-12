@@ -102,6 +102,47 @@ function isValidHex(value: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
+/** WCAG relative luminance of a hex color (0 = black, 1 = white). */
+export function relativeLuminance(hex: string): number {
+  const rgb = hexToRgb(hex) ?? [0, 0, 0];
+  const [r, g, b] = rgb.map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio between two hex colors (1–21). */
+export function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * The color pushed toward black just far enough that white text on it
+ * reaches `minContrast` (WCAG; 4.5 = AA for normal text). A color that
+ * already gets there is returned unchanged, so deep colors stay as they are
+ * and light ones (yellow, orange) darken the most. Computed, not tabled, so
+ * new palette colors work too.
+ */
+export function darkenForWhiteText(hex: string, minContrast = 4.5): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  for (let step = 0; step <= 100; step++) {
+    const keep = 1 - step / 100;
+    const candidate = `#${rgb
+      .map((v) => Math.round(v * keep).toString(16).padStart(2, "0"))
+      .join("")}`.toUpperCase();
+    if (contrastRatio(candidate, "#FFFFFF") >= minContrast) return candidate;
+  }
+  return "#000000";
+}
+
+/** Background for the white start-time badge on a timed event's chip: the label color, darkened for white text. */
+export function eventTimeBadgeColor(accentHex: string | null | undefined): string {
+  return darkenForWhiteText(eventColorStyle(accentHex).accent);
+}
+
 /** Derives a soft background + readable text color from an accent hex —
  * same technique as tasks mode's project-color styling, so event chips look
  * consistent with the rest of the app's tag/badge design. */
