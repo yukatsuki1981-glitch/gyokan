@@ -5,7 +5,9 @@ import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import {
   eventCoversDate,
   groupEventsByDate,
+  isAllDayEvent,
   isMultiDayEvent,
+  localTimeHHMMFromTimestamp,
   truncateEventTitle,
 } from "@/lib/gyokan/events";
 import { layoutWeekBands, type BandInput, type WeekBandLayout } from "@/lib/gyokan/calendar-bands";
@@ -108,6 +110,58 @@ function buildGridCells(year: number, month: number): CalendarCell[] {
   return cells;
 }
 
+// Width of the start-time column on timed event chips.
+const CHIP_TIME_W = 13;
+
+/**
+ * An event's chip in a day cell. Exactly one chip-row tall (BAND_H), so a
+ * timed event's start time is stacked in three tiny rows at its left edge —
+ * hour / "･･" / minutes — instead of making the chip taller. The title is
+ * cut at 4 characters and sized to fit them beside that column (all-day
+ * chips use the same size so titles line up); it's capped at 10px.
+ */
+function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
+  const colors = eventColorStyle(event.color);
+  const timed = !isAllDayEvent(event);
+  const [hh, mm] = localTimeHHMMFromTimestamp(event.startTime).split(":");
+  return (
+    <span
+      className="flex shrink-0 items-stretch overflow-hidden rounded-[4px] font-bold"
+      style={{
+        height: BAND_H,
+        backgroundColor: colors.bg,
+        color: colors.text,
+        opacity: muted ? 0.4 : 1,
+      }}
+      title={event.title}
+    >
+      {timed && (
+        <span
+          aria-hidden
+          className="flex shrink-0 flex-col items-center justify-center text-[7px] leading-[5.5px] tabular-nums"
+          style={{ width: CHIP_TIME_W }}
+        >
+          <span>{Number(hh)}</span>
+          <span>･･</span>
+          <span>{mm}</span>
+        </span>
+      )}
+      <span
+        className="min-w-0 flex-1 self-center overflow-hidden whitespace-nowrap px-px tracking-tight"
+        style={{
+          // 4 characters beside the time column, in the chip column's width
+          // (minus the 1px side padding). Bold CJK glyphs run a little over
+          // 1em even with the tight tracking, hence 4.2 rather than 4.
+          fontSize: `min(10px, calc((100cqw - ${CHIP_TIME_W + 2}px) / 4.2))`,
+          lineHeight: `${BAND_H}px`,
+        }}
+      >
+        {truncateEventTitle(event.title)}
+      </span>
+    </span>
+  );
+}
+
 function DayCell({
   cell,
   cellIndex,
@@ -203,7 +257,9 @@ function DayCell({
           {dayInfo.label.slice(0, 5)}
         </span>
       )}
-      <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
+      {/* A size container, so event titles can size themselves to the
+          column width (see EventChip). */}
+      <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden [container-type:inline-size]">
         {preview.map((chip) =>
           chip.kind === "task" ? (
             <span
@@ -216,18 +272,7 @@ function DayCell({
               {truncateEventTitle(chip.task.title)}
             </span>
           ) : (
-            <span
-              key={`e-${chip.event.id}`}
-              className="truncate rounded-[4px] px-0.5 py-0.5 text-[10px] font-bold leading-[13px] tracking-tight"
-              style={{
-                backgroundColor: eventColorStyle(chip.event.color).bg,
-                color: eventColorStyle(chip.event.color).text,
-                opacity: cell.inMonth ? 1 : 0.4,
-              }}
-              title={chip.event.title}
-            >
-              {truncateEventTitle(chip.event.title)}
-            </span>
+            <EventChip key={`e-${chip.event.id}`} event={chip.event} muted={!cell.inMonth} />
           ),
         )}
       </div>
