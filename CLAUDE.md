@@ -48,6 +48,8 @@
 ### 3. モード切り替えスイッチ
 ヘッダーの `modeToggle`(`app/page.tsx`)は「タスク管理」「プライベート」を切り替える。現在のコードでは、白いノブに**現在のモード名**を表示している(`appMode === "tasks" ? "タスク管理" : "プライベート"`)。`aria-label` は「切り替え先」を示す。
 ※ 「タップすると切り替わる先を表示する仕様」と認識されていたが、コードと履歴(コミット 39799fe「Mode-toggle label shows current mode」)は現在のモード表示になっている。意図が異なる場合は要確認・要修正。
+- 設定の「タスク管理/プライベートモードを表示する」「起動時に表示するモード」は `user_preferences` の `show_work_mode` / `show_private_mode` / `default_mode`(マイグレーション `20261012_add_mode_preferences.sql`)。片方だけ表示のときはスイッチを出さず、非表示のモードには `appMode` の補正で入れない(`lib/gyokan/mode-preferences.ts`)。列が無い DB では端末の控え(localStorage)で動き、保存時にエラー表示
+- ステータスバーの色 `<meta name="theme-color">` は `app/layout.tsx` の起動スクリプトが作り、`applyThemeToDocument` がテーマの背景色に追従させる。React の JSX や Next の `viewport.themeColor` で出すと重複するので使わない
 
 ### 4. `scope` 列(work / private)
 `tasks` と `events` の両方に `scope` 列(`work` | `private`)がある(`20260921_add_scope_columns.sql`)。

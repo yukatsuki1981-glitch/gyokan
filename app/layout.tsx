@@ -74,10 +74,13 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  // No `themeColor` here on purpose — see the theme-color tag created by
+  // themeBootstrapScript below.
 };
 
+// Theme id → page background, for the themes the pre-hydration script may apply.
 const allowedThemeBootstrapMap = Object.fromEntries(
-  GYOKAN_THEMES.filter((t) => t.free).map((t) => [t.id, 1]),
+  GYOKAN_THEMES.filter((t) => t.free).map((t) => [t.id, t.colors.bg]),
 );
 
 const themeBootstrapScript = `
@@ -89,6 +92,19 @@ const themeBootstrapScript = `
     var raw = localStorage.getItem(key) || fallback;
     var id = allowed[raw] ? raw : fallback;
     document.documentElement.dataset.theme = id;
+    // The browser's status-bar / top-bar color. Without it iOS Safari (and a
+    // home-screen web app) tints that strip on its own, which showed as a
+    // band darker than the page; it follows the page background, and
+    // applyThemeToDocument keeps it in step on theme changes. Created here
+    // rather than rendered by React: React re-inserts a head <meta> whose
+    // content changed before hydration, leaving two tags.
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "theme-color");
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute("content", allowed[id] || allowed[fallback]);
   } catch (e) {
     document.documentElement.dataset.theme = ${JSON.stringify(DEFAULT_THEME_ID)};
   }

@@ -321,4 +321,17 @@ export function applyThemeToDocument(theme: GyokanTheme) {
   root.style.setProperty("--gyokan-font-display", fonts.display);
   root.style.setProperty("--gyokan-font-body", fonts.body);
   root.style.colorScheme = theme.id === "yofukashi" ? "dark" : "light";
+
+  // Keep the browser's status-bar color on the page background (the tag is
+  // rendered in <head> by app/layout.tsx).
+  const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+  if (metas.length === 0) {
+    const meta = document.createElement("meta");
+    meta.name = "theme-color";
+    meta.content = colors.bg;
+    document.head.appendChild(meta);
+  }
+  metas.forEach((meta) => {
+    meta.content = colors.bg;
+  });
 }

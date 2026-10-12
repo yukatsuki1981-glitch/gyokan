@@ -33,6 +33,7 @@ import {
   buildTaskUpsertAttempts,
 } from "./schema-compat";
 import { enrichTaskWithCase } from "./task-case";
+import { modePreferencesFromRow, modePreferencesToRow } from "./mode-preferences";
 import type {
   AppCase,
   AppDailyDiary,
@@ -49,6 +50,7 @@ import type {
   DbProject,
   DbTask,
   GyokanData,
+  ModePreferences,
 } from "./types";
 
 async function fetchTaskRows(
@@ -149,10 +151,10 @@ async function fetchProjectMemoRows(
   return (res.data as DbMemo[] | null) ?? [];
 }
 
-async function fetchLastViewDate(
+async function fetchUserPreferences(
   supabase: SupabaseClient,
   userId: string,
-): Promise<string | null> {
+): Promise<{ lastViewDate: string | null; modePreferences: ModePreferences | null }> {
   const res = await supabase
     .from("user_preferences")
     .select("*")
@@ -161,11 +163,16 @@ async function fetchLastViewDate(
   if (res.error) {
     if (isMissingTableError(res.error)) {
       console.warn("user_preferences unavailable (run migration if needed):", res.error.message);
-      return null;
+      return { lastViewDate: null, modePreferences: null };
     }
     throw res.error;
   }
-  return res.data?.last_view_date ?? null;
+  const row = res.data as Record<string, unknown> | null;
+  return {
+    lastViewDate: (row?.last_view_date as string | null | undefined) ?? null,
+    // null when the mode columns aren't there yet — the caller falls back.
+    modePreferences: modePreferencesFromRow(row),
+  };
 }
 
 type LegacyTask = {
@@ -285,7 +292,7 @@ export async function fetchGyokanData(
     memoRows,
     dailyMemoRows,
     dailyDiaryRows,
-    lastViewDate,
+    preferences,
   ] = await Promise.all([
     fetchProjectRows(supabase, userId),
     fetchCaseRows(supabase, userId),
@@ -293,7 +300,7 @@ export async function fetchGyokanData(
     fetchProjectMemoRows(supabase, userId),
     fetchDailyMemoRows(supabase, userId),
     fetchDailyDiaryRows(supabase, userId),
-    fetchLastViewDate(supabase, userId),
+    fetchUserPreferences(supabase, userId),
   ]);
 
   let projects = projectRows.map(mapDbProject);
@@ -323,7 +330,8 @@ export async function fetchGyokanData(
     memos: memoRows.map((r) => mapDbMemo(r, idToName)),
     dailyMemos: dailyMemoRows.map(mapDbDailyMemo),
     dailyDiaries: dailyDiaryRows.map(mapDbDailyDiary),
-    lastViewDate,
+    lastViewDate: preferences.lastViewDate,
+    modePreferences: preferences.modePreferences,
   };
 }
 
@@ -711,6 +719,30 @@ export async function saveLastViewDate(
     }
     throw error;
   }
+}
+
+/**
+ * Saves the mode settings into the user's user_preferences row, touching
+ * only those columns (last_view_date etc. are left as they are). Throws when
+ * the save fails — including when the columns don't exist yet because
+ * 20261012_add_mode_preferences.sql hasn't been run; the message then says so.
+ */
+export async function saveModePreferences(
+  supabase: SupabaseClient,
+  userId: string,
+  prefs: ModePreferences,
+) {
+  const { error } = await supabase.from("user_preferences").upsert({
+    user_id: userId,
+    ...modePreferencesToRow(prefs),
+  });
+  if (!error) return;
+  if (isMissingTableError(error) || isSchemaMismatchError(error)) {
+    throw new Error(
+      "サーバーに保存する列がまだありません(マイグレーション 20261012_add_mode_preferences.sql が未実行です)。この端末では設定が反映されています。",
+    );
+  }
+  throw error;
 }
 
 export function projectsToColorMap(projects: AppProject[]): Record<string, string> {

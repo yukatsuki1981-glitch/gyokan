@@ -31,6 +31,7 @@ import {
   fetchGyokanData,
   projectsToColorMap,
   saveLastViewDate,
+  saveModePreferences as saveModePreferencesToDb,
   updateProjectColor,
   upsertCase,
   upsertCasesBatch,
@@ -68,6 +69,12 @@ import {
   readPendingDailyDiaries,
   readPendingDailyMemos,
 } from "./local-cache";
+import {
+  DEFAULT_MODE_PREFERENCES,
+  normalizeModePreferences,
+  readCachedModePreferences,
+  writeCachedModePreferences,
+} from "./mode-preferences";
 import type {
   AppCase,
   AppDailyDiary,
@@ -75,6 +82,7 @@ import type {
   AppMemo,
   AppProject,
   AppTask,
+  ModePreferences,
 } from "./types";
 
 export type {
@@ -155,6 +163,10 @@ export function useGyokanData() {
   const [dailyMemos, setDailyMemos] = useState<AppDailyMemo[]>([]);
   const [dailyDiaries, setDailyDiaries] = useState<AppDailyDiary[]>([]);
   const [lastViewDate, setLastViewDate] = useState<string | null>(null);
+  // null until the first load settles which mode settings apply.
+  const [modePreferences, setModePreferences] = useState<ModePreferences | null>(null);
+  const [modePrefsSaveError, setModePrefsSaveError] = useState<string | null>(null);
+  const dismissModePrefsSaveError = useCallback(() => setModePrefsSaveError(null), []);
 
   const nameToIdRef = useRef<Record<string, string>>({});
   const casesRef = useRef<AppCase[]>([]);
@@ -346,6 +358,12 @@ export function useGyokanData() {
       const consolidatedDailyDiaries = consolidateDailyDiariesByDate(mergedDailyDiaries);
       setDailyDiaries(consolidatedDailyDiaries);
       setLastViewDate(data.lastViewDate);
+      // Server columns first; without them (migration not applied, or no row
+      // yet) this device's copy, then the defaults.
+      if (data.modePreferences) writeCachedModePreferences(uid, data.modePreferences);
+      setModePreferences(
+        data.modePreferences ?? readCachedModePreferences(uid) ?? DEFAULT_MODE_PREFERENCES,
+      );
       setLoadError(null);
       setDataReady(true);
       initialLoadDoneRef.current = true;
@@ -562,6 +580,28 @@ export function useGyokanData() {
     viewDateSaveTimer.current = setTimeout(() => {
       void saveLastViewDate(getSupabase(), uid, date);
     }, 500);
+  }, [getSupabase]);
+
+  /**
+   * Applies new mode settings right away (and on this device for next time),
+   * then saves them to user_preferences. Returns false — with the reason in
+   * modePrefsSaveError — when the server save fails.
+   */
+  const saveModePreferences = useCallback(async (next: ModePreferences): Promise<boolean> => {
+    const uid = userIdRef.current;
+    if (!uid) return false;
+    const prefs = normalizeModePreferences(next);
+    setModePreferences(prefs);
+    writeCachedModePreferences(uid, prefs);
+    try {
+      await saveModePreferencesToDb(getSupabase(), uid, prefs);
+      setModePrefsSaveError(null);
+      return true;
+    } catch (err) {
+      console.error("Failed to save mode preferences", err);
+      setModePrefsSaveError(formatLoadError(err));
+      return false;
+    }
   }, [getSupabase]);
 
   const signInWithGoogle = useCallback(async () => {
@@ -999,6 +1039,10 @@ export function useGyokanData() {
     dailyMemos,
     dailyDiaries,
     lastViewDate,
+    modePreferences,
+    saveModePreferences,
+    modePrefsSaveError,
+    dismissModePrefsSaveError,
     setProjectColor,
     addProject,
     replaceProjects,

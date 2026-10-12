@@ -16,6 +16,12 @@
   --font-sans: var(--font-geist-sans);
 }
 
+/* The root background paints the whole canvas — including the area under the
+   status bar (viewport-fit=cover) and overscroll — so it follows the theme. */
+html {
+  background-color: var(--gyokan-bg);
+}
+
 body {
   background: var(--gyokan-bg);
   color: var(--gyokan-text);

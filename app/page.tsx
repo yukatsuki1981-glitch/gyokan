@@ -31,6 +31,12 @@ import {
   resolveTaskCompletedAt,
 } from "@/lib/gyokan/task-completed-at";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
+import {
+  DEFAULT_MODE_PREFERENCES,
+  isModeShown,
+  startupMode,
+} from "@/lib/gyokan/mode-preferences";
+import type { AppModeKey, ModePreferences } from "@/lib/gyokan/types";
 import { hasDiaryContent } from "@/lib/gyokan/journal-entry";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
@@ -5677,10 +5683,48 @@ type SettingsEditField = {
   placeholder: string;
 };
 
+const MODE_NAMES: Record<AppModeKey, string> = { work: "タスク管理", private: "プライベート" };
+
+function StartupModePickerSheet({
+  open,
+  onClose,
+  value,
+  onSelect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  value: AppModeKey;
+  onSelect: (mode: AppModeKey) => void;
+}) {
+  return (
+    <DetailOverlay open={open} onClose={onClose} title="起動時に表示するモード">
+      <div className="flex flex-col gap-1">
+        {(["work", "private"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => {
+              onSelect(mode);
+              onClose();
+            }}
+            className="flex items-center justify-between rounded-xl px-3 py-2.5 text-[14px] transition-colors hover:bg-black/[0.03]"
+          >
+            <span className="text-[var(--gyokan-text)]">{MODE_NAMES[mode]}</span>
+            {value === mode && <Icon name="check" className="h-4 w-4 text-[var(--gyokan-accent2)]" />}
+          </button>
+        ))}
+      </div>
+    </DetailOverlay>
+  );
+}
+
 function AppSettingsPanel({
   userEmail,
   loadError,
   caseSaveError,
+  modePreferences,
+  onModePreferencesChange,
+  modePrefsSaveError,
   appTitle,
   onAppTitleChange,
   onOpenTheme,
@@ -5690,6 +5734,9 @@ function AppSettingsPanel({
   userEmail?: string | null;
   loadError?: string | null;
   caseSaveError?: string | null;
+  modePreferences: ModePreferences;
+  onModePreferencesChange: (next: ModePreferences) => void;
+  modePrefsSaveError?: string | null;
   appTitle: string;
   onAppTitleChange: (title: string) => void;
   onOpenTheme: () => void;
@@ -5716,6 +5763,24 @@ function AppSettingsPanel({
   const [columnsPickerOpen, setColumnsPickerOpen] = useState(false);
   const [eventColorPickerOpen, setEventColorPickerOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [startupModePickerOpen, setStartupModePickerOpen] = useState(false);
+  const [modeNotice, setModeNotice] = useState<string | null>(null);
+
+  const setModeShown = (mode: AppModeKey, shown: boolean) => {
+    const next: ModePreferences = {
+      ...modePreferences,
+      ...(mode === "work" ? { showWorkMode: shown } : { showPrivateMode: shown }),
+    };
+    // One mode must always be shown: the one being switched off stays on.
+    if (!next.showWorkMode && !next.showPrivateMode) {
+      setModeNotice(
+        `両方のモードを非表示にはできません。${MODE_NAMES[mode]}モードは表示したままにしました。`,
+      );
+      return;
+    }
+    setModeNotice(null);
+    onModePreferencesChange(next);
+  };
 
   const saveEditField = (value: string) => {
     if (!editField) return;
@@ -5754,6 +5819,40 @@ function AppSettingsPanel({
         <SettingsDivider />
         <SettingsRow label="テーマ" value={theme.name} onClick={onOpenTheme} />
       </SettingsCard>
+
+      <SettingsCard>
+        <SettingsToggleRow
+          label="タスク管理モードを表示する"
+          checked={modePreferences.showWorkMode}
+          onChange={(shown) => setModeShown("work", shown)}
+        />
+        <SettingsDivider />
+        <SettingsToggleRow
+          label="プライベートモードを表示する"
+          checked={modePreferences.showPrivateMode}
+          onChange={(shown) => setModeShown("private", shown)}
+        />
+        {modePreferences.showWorkMode && modePreferences.showPrivateMode && (
+          <>
+            <SettingsDivider />
+            <SettingsRow
+              label="起動時に表示するモード"
+              value={MODE_NAMES[modePreferences.defaultMode]}
+              onClick={() => setStartupModePickerOpen(true)}
+            />
+          </>
+        )}
+      </SettingsCard>
+      {modeNotice && (
+        <p role="status" className="-mt-2 rounded-xl bg-amber-50 px-4 py-3 text-[12px] text-amber-700">
+          {modeNotice}
+        </p>
+      )}
+      {modePrefsSaveError && (
+        <p role="alert" className="-mt-2 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
+          モードの設定を保存できませんでした: {modePrefsSaveError}
+        </p>
+      )}
 
       <SettingsCard>
         <SettingsToggleRow label={`${projectLabel}の表示`} checked={showProjects} onChange={setShowProjects} />
@@ -5838,6 +5937,13 @@ function AppSettingsPanel({
         value={homeCaseColumns}
         caseLabel={caseLabel}
         onSelect={setHomeCaseColumns}
+      />
+
+      <StartupModePickerSheet
+        open={startupModePickerOpen}
+        onClose={() => setStartupModePickerOpen(false)}
+        value={modePreferences.defaultMode}
+        onSelect={(mode) => onModePreferencesChange({ ...modePreferences, defaultMode: mode })}
       />
 
       <EventColorPickerSheet
@@ -5929,6 +6035,9 @@ export default function Home() {
     caseSaveError,
     taskSaveError,
     dismissTaskSaveError,
+    modePreferences,
+    saveModePreferences,
+    modePrefsSaveError,
     projectNames,
     projects,
     projectColors,
@@ -5977,7 +6086,39 @@ export default function Home() {
   const [completedTasksOpen, setCompletedTasksOpen] = useState(false);
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
   const [displaySettings, setDisplaySettings] = useState(DEFAULT_DISPLAY_SETTINGS);
-  const [appMode, setAppMode] = useState<"tasks" | "private">("tasks");
+  const [appModeState, setAppMode] = useState<"tasks" | "private">("tasks");
+  const modePrefs = modePreferences ?? DEFAULT_MODE_PREFERENCES;
+  // Only switchable when both modes are shown.
+  const canSwitchMode = modePrefs.showWorkMode && modePrefs.showPrivateMode;
+  // A hidden mode is never the one on screen, whatever got it there.
+  const appMode: "tasks" | "private" = isModeShown(modePrefs, appModeState === "private" ? "private" : "work")
+    ? appModeState
+    : appModeState === "private"
+      ? "tasks"
+      : "private";
+
+  // Open in the configured mode once the settings have loaded.
+  const startupModeAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!modePreferences || startupModeAppliedRef.current) return;
+    startupModeAppliedRef.current = true;
+    setAppMode(startupMode(modePreferences) === "private" ? "private" : "tasks");
+  }, [modePreferences]);
+
+  const handleModePreferencesChange = useCallback(
+    (next: ModePreferences) => {
+      // Leaving a mode that's being hidden: move to the one still shown.
+      setAppMode((current) =>
+        isModeShown(next, current === "private" ? "private" : "work")
+          ? current
+          : current === "private"
+            ? "tasks"
+            : "private",
+      );
+      void saveModePreferences(next);
+    },
+    [saveModePreferences],
+  );
 
   useEffect(() => {
     if (!user?.id) return;
@@ -6527,7 +6668,10 @@ export default function Home() {
   const modeToggle = (
     <button
       type="button"
-      onClick={() => setAppMode(appMode === "tasks" ? "private" : "tasks")}
+      onClick={() => {
+        if (!canSwitchMode) return;
+        setAppMode(appMode === "tasks" ? "private" : "tasks");
+      }}
       aria-label={appMode === "tasks" ? "プライベートモードに切り替え" : "タスク管理モードに切り替え"}
       className="relative flex shrink-0 items-center rounded-full bg-black/[0.08] p-1 transition-colors"
     >
@@ -6812,11 +6956,21 @@ export default function Home() {
               </p>
             )}
             <header className="mb-2 lg:mb-3">
-              <div className="mb-2 hidden lg:flex lg:justify-start">
-                {modeToggle}
-              </div>
+              {canSwitchMode && (
+                <div className="mb-2 hidden lg:flex lg:justify-start">
+                  {modeToggle}
+                </div>
+              )}
               <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
-                {modeToggle}
+                {canSwitchMode ? (
+                  modeToggle
+                ) : (
+                  // With only one mode shown there's nothing to switch to; an
+                  // invisible stand-in keeps the date where it always sits.
+                  <div aria-hidden className="invisible shrink-0">
+                    {modeToggle}
+                  </div>
+                )}
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
                   {!isAllProjects && showProjects && <ProjectColorHeaderLink project={activeProject} />}
@@ -6929,6 +7083,9 @@ export default function Home() {
                 userEmail={user.email}
                 loadError={loadError}
                 caseSaveError={caseSaveError}
+                modePreferences={modePrefs}
+                onModePreferencesChange={handleModePreferencesChange}
+                modePrefsSaveError={modePrefsSaveError}
                 appTitle={appTitle}
                 onAppTitleChange={handleAppTitleChange}
                 onOpenTheme={() => setThemePickerOpen(true)}
@@ -7076,6 +7233,9 @@ export default function Home() {
           userEmail={user.email}
           loadError={loadError}
           caseSaveError={caseSaveError}
+          modePreferences={modePrefs}
+          onModePreferencesChange={handleModePreferencesChange}
+          modePrefsSaveError={modePrefsSaveError}
           appTitle={appTitle}
           onAppTitleChange={handleAppTitleChange}
           onOpenTheme={() => {

@@ -28,6 +28,16 @@ export type DbTask = {
   updated_at: string | null;
 };
 
+/** The app's two modes, as stored in user_preferences.default_mode. */
+export type AppModeKey = "work" | "private";
+
+export type ModePreferences = {
+  /** Which mode the app opens in when both are shown. */
+  defaultMode: AppModeKey;
+  showWorkMode: boolean;
+  showPrivateMode: boolean;
+};
+
 export type DbCase = {
   id: string;
   user_id: string;
@@ -169,4 +179,6 @@ export type GyokanData = {
   dailyMemos: AppDailyMemo[];
   dailyDiaries: AppDailyDiary[];
   lastViewDate: string | null;
+  /** null when user_preferences has no mode columns (migration not applied) or no row yet. */
+  modePreferences: ModePreferences | null;
 };
