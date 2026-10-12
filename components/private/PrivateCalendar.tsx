@@ -110,21 +110,31 @@ function buildGridCells(year: number, month: number): CalendarCell[] {
   return cells;
 }
 
-// Start-time strip on timed event chips: a fixed 17px-wide band down the
-// chip's left edge (so titles always start at the same x) holding 9px
-// tabular digits in two 8.5px rows — the whole 17px chip height.
-const TIME_STRIP_W = 17;
-const TIME_STRIP_FONT = 9;
+// Start-time strip on timed event chips: a fixed 12px-wide band down the
+// chip's left edge — just wide enough for two 7px tabular digits, and the
+// same on every chip so titles start at the same x — holding them in two
+// 8.5px rows, the whole 17px chip height.
+const TIME_STRIP_W = 12;
+const TIME_STRIP_FONT = 7;
 const TIME_STRIP_LINE = 8.5;
+
+// Event titles: the largest size at which 4 characters fit the room left
+// in the chip column (minus the title's 1px side padding), capped at 11px.
+// Bold CJK glyphs with the tight tracking measure about 4.06em for four
+// characters, hence the 4.1 divisor.
+const TITLE_MAX = 11;
+function eventTitleFontSize(reservedPx: number) {
+  return `min(${TITLE_MAX}px, calc((100cqw - ${reservedPx + 2}px) / 4.1))`;
+}
 
 /**
  * An event's chip in a day cell, exactly one chip-row tall (BAND_H). A
  * timed event shows its start time — hour over minutes, both two digits,
  * no separator — on a strip down the chip's left edge, a slightly darker
  * shade of the chip's own color, in the same text color as the title. The
- * title is cut at 4 characters and sized to fit them beside the strip
- * (all-day chips have no strip, but use the same size so titles line up);
- * it's capped at 10px.
+ * title is cut at 4 characters and sized as large as 4 characters fit:
+ * beside the strip on timed chips, across the full chip on all-day ones (so
+ * the two sizes differ).
  */
 function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
   const colors = eventColorStyle(event.color);
@@ -161,10 +171,7 @@ function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
       <span
         className="min-w-0 flex-1 self-center overflow-hidden whitespace-nowrap px-px tracking-tight"
         style={{
-          // 4 characters beside the time strip, in the chip column's width
-          // (minus the 1px side padding). Bold CJK glyphs run a little over
-          // 1em even with the tight tracking, hence 4.2 rather than 4.
-          fontSize: `min(10px, calc((100cqw - ${TIME_STRIP_W + 2}px) / 4.2))`,
+          fontSize: eventTitleFontSize(timed ? TIME_STRIP_W : 0),
           lineHeight: `${BAND_H}px`,
         }}
       >

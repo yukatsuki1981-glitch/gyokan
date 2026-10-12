@@ -262,7 +262,8 @@ export function DayEventPopup({
   const [view, setView] = useState<View>(() => (dayEvents.length === 0 ? "add" : "list"));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
-  const [allDay, setAllDay] = useState(false);
+  // New events start as 終日; editing loads the saved event's own type (openEdit).
+  const [allDay, setAllDay] = useState(true);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("");
   const [startDate, setStartDate] = useState(dateISO);
@@ -503,7 +504,7 @@ export function DayEventPopup({
 
   const resetForm = () => {
     setTitle("");
-    setAllDay(false);
+    setAllDay(true);
     setStartTime("09:00");
     setEndTime("");
     setStartDate(dateISO);
