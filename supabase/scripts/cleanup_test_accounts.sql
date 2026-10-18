@@ -40,6 +40,9 @@ union all select 'household_invites', count(*) from public.household_invites
      or created_by in (select id from targets) or accepted_by in (select id from targets)
 union all select 'profiles', count(*) from public.profiles where user_id in (select id from targets)
 union all select 'events', count(*) from public.events where user_id in (select id from targets)
+-- history of the test accounts' events (deleting their events in STEP 2 adds
+-- one more row per event; those are removed in the same step)
+union all select 'event_history', count(*) from public.event_history where event_user_id in (select id from targets)
 union all select 'tasks', count(*) from public.tasks where user_id in (select id from targets)
 union all select 'cases', count(*) from public.cases where user_id in (select id from targets)
 union all select 'project_memos', count(*) from public.project_memos where user_id in (select id from targets)
@@ -55,6 +58,7 @@ with targets as (
 )
 select
   (select count(*) from public.events        where user_id not in (select id from targets)) as other_events,
+  (select count(*) from public.event_history where event_user_id not in (select id from targets)) as other_event_history,
   (select count(*) from public.tasks         where user_id not in (select id from targets)) as other_tasks,
   (select count(*) from public.projects      where user_id not in (select id from targets)) as other_projects,
   (select count(*) from public.cases         where user_id not in (select id from targets)) as other_cases,
@@ -108,7 +112,7 @@ update public.household_members m
    and h.id in (select hm.household_id from public.household_members hm
                 where hm.user_id in (select id from cleanup_targets));
 
--- Order: invites → events → memberships → households → profiles → personal data
+-- Order: invites → events → event history → memberships → households → profiles → personal data
 -- (children before the rows they point at).
 delete from public.household_invites
  where household_id in (select id from cleanup_households)
@@ -116,6 +120,10 @@ delete from public.household_invites
     or accepted_by in (select id from cleanup_targets);
 
 delete from public.events            where user_id in (select id from cleanup_targets);
+-- After the events: deleting them writes 'delete' rows to event_history (a
+-- trigger), and those go too. Only rows about the test accounts' own events —
+-- the history of any other account's event is never touched.
+delete from public.event_history     where event_user_id in (select id from cleanup_targets);
 delete from public.household_members where user_id in (select id from cleanup_targets);
 delete from public.households        where id in (select id from cleanup_households);
 delete from public.profiles          where user_id in (select id from cleanup_targets);

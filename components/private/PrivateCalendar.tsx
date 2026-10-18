@@ -15,7 +15,8 @@ import { eventColorStyle, eventTimeStripColor } from "@/lib/gyokan/event-colors"
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { getRokuyou } from "@/lib/gyokan/rokuyou";
-import { DayEventPopup } from "./DayEventPopup";
+import type { EventSharing } from "@/lib/gyokan/event-sharing";
+import { DayEventPopup, type EventFormValues } from "./DayEventPopup";
 
 function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
   return [...tasks].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -480,6 +481,7 @@ function MonthPanel({
 export function PrivateCalendar({
   events,
   tasks,
+  sharing,
   onAddEvent,
   onUpdateEvent,
   onDeleteEvent,
@@ -488,17 +490,9 @@ export function PrivateCalendar({
 }: {
   events: AppEvent[];
   tasks: AppTask[];
-  onAddEvent: (data: {
-    title: string;
-    startTime: string;
-    endTime?: string | null;
-    memo?: string;
-    color?: string | null;
-  }) => void;
-  onUpdateEvent: (
-    id: string,
-    patch: { title: string; startTime: string; endTime?: string | null; memo?: string; color?: string | null },
-  ) => void;
+  sharing: EventSharing;
+  onAddEvent: (data: EventFormValues) => void;
+  onUpdateEvent: (id: string, patch: EventFormValues) => void;
   onDeleteEvent: (id: string) => void;
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
   onToggleTask: (id: string) => void;
@@ -822,6 +816,7 @@ export function PrivateCalendar({
           dateLabel={selectedDateLabel}
           dayEvents={selectedDayEvents}
           dayTasks={selectedDayTasks}
+          sharing={sharing}
           onToggleTask={onToggleTask}
           onAddEvent={onAddEvent}
           onUpdateEvent={onUpdateEvent}

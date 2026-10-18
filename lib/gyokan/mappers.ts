@@ -258,6 +258,8 @@ export function mapDbEvent(row: DbEvent): AppEvent {
     sortOrder: row.sort_order ?? 0,
     scope: row.scope === "work" ? "work" : "private",
     color: row.color ?? null,
+    userId: row.user_id,
+    visibility: row.visibility === "only_me" ? "only_me" : "shared",
   };
 }
 
@@ -272,6 +274,7 @@ export function mapEventToDb(event: AppEvent, userId: string) {
     sort_order: event.sortOrder,
     scope: event.scope ?? "private",
     color: event.color ?? null,
+    visibility: event.visibility ?? "shared",
   };
 }
 

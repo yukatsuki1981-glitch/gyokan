@@ -757,14 +757,15 @@ export function assignSortOrders<T extends { sortOrder: number }>(items: T[]): T
   return items.map((item, index) => ({ ...item, sortOrder: index }));
 }
 
-async function fetchEventRows(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<DbEvent[]> {
+/**
+ * My events plus my family's shared private events. No user_id filter: RLS
+ * (events_select_household) returns exactly what I may see — my own rows,
+ * and other household members' scope='private' / visibility='shared' rows.
+ */
+async function fetchEventRows(supabase: SupabaseClient): Promise<DbEvent[]> {
   const res = await supabase
     .from("events")
     .select("*")
-    .eq("user_id", userId)
     .order("sort_order");
   if (res.error) {
     if (isMissingTableError(res.error)) {
@@ -776,26 +777,48 @@ async function fetchEventRows(
   return (res.data as DbEvent[] | null) ?? [];
 }
 
-export async function fetchGyokanEvents(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<AppEvent[]> {
-  const rows = await fetchEventRows(supabase, userId);
+export async function fetchGyokanEvents(supabase: SupabaseClient): Promise<AppEvent[]> {
+  const rows = await fetchEventRows(supabase);
   return rows.map(mapDbEvent);
 }
 
-/** Drops `scope`/`color` from an events row — used when the DB doesn't have
- * those columns yet (migrations 20260921_add_scope_columns.sql /
- * 20260927_add_event_color.sql not applied). Stripping both together on any
- * schema-mismatch error keeps the retry simple regardless of which one is
- * actually missing. */
-function withoutEventCompatColumns<T extends { scope?: unknown; color?: unknown }>(
+/** An event written by someone else in my household (not by me). */
+export function isFamilyEvent(event: Pick<AppEvent, "userId">, myUserId: string) {
+  return !!event.userId && event.userId !== myUserId;
+}
+
+/** Shown when a family member's event can't be saved because it is gone. */
+export const EVENT_GONE_MESSAGE =
+  "この予定は、作成した家族が削除したか「自分だけ」に変更したため、保存できませんでした。";
+
+const VISIBILITY_MIGRATION_MESSAGE =
+  "「自分だけ」を保存するには、データベースの更新(マイグレーション 20261018_event_visibility_and_history.sql)が必要です。";
+
+/** Drops `scope`/`color`/`visibility` from an events row — used when the DB
+ * doesn't have those columns yet (migrations 20260921_add_scope_columns.sql /
+ * 20260927_add_event_color.sql / 20261018_event_visibility_and_history.sql
+ * not applied). Stripping them together on any schema-mismatch error keeps the
+ * retry simple regardless of which one is actually missing. A 自分だけ event
+ * is never saved this way: without the column it would be visible to the
+ * family, so that save fails instead. */
+function withoutEventCompatColumns<T extends { scope?: unknown; color?: unknown; visibility?: unknown }>(
   row: T,
-): Omit<T, "scope" | "color"> {
-  const { scope: _scope, color: _color, ...rest } = row;
+): Omit<T, "scope" | "color" | "visibility"> {
+  if (row.visibility === "only_me") throw new Error(VISIBILITY_MIGRATION_MESSAGE);
+  const { scope: _scope, color: _color, visibility: _visibility, ...rest } = row;
   return rest;
 }
 
+function isEventCompatError(error: { message?: string; code?: string }) {
+  return (
+    isMissingColumnError(error, "scope") ||
+    isMissingColumnError(error, "color") ||
+    isMissingColumnError(error, "visibility") ||
+    isSchemaMismatchError(error)
+  );
+}
+
+/** Saves one of my own events (insert or update). */
 export async function upsertEvent(
   supabase: SupabaseClient,
   event: AppEvent,
@@ -804,16 +827,60 @@ export async function upsertEvent(
   const row = mapEventToDb(event, userId);
   const { error } = await supabase.from("events").upsert(row);
   if (!error) return;
-  if (
-    isMissingColumnError(error, "scope") ||
-    isMissingColumnError(error, "color") ||
-    isSchemaMismatchError(error)
-  ) {
+  if (isEventCompatError(error)) {
     const { error: retryError } = await supabase.from("events").upsert(withoutEventCompatColumns(row));
     if (!retryError) return;
     throw retryError;
   }
   throw error;
+}
+
+/**
+ * Saves an edit to a family member's event. An update, never an upsert: if
+ * the event was deleted or made 自分だけ meanwhile, an upsert would re-create
+ * it as mine. user_id / scope / visibility are not sent — only the creator may
+ * change them (the DB keeps them in any case, see events_keep_creator).
+ * Throws EVENT_GONE_MESSAGE when no row was updated.
+ */
+export async function updateFamilyEvent(supabase: SupabaseClient, event: AppEvent) {
+  const { id, user_id: _userId, scope: _scope, visibility: _visibility, ...fields } = mapEventToDb(event, "");
+  const res = await supabase.from("events").update(fields).eq("id", id).select("id");
+  if (res.error) {
+    if (!isEventCompatError(res.error)) throw res.error;
+    const { color: _color, ...withoutColor } = fields;
+    const retry = await supabase.from("events").update(withoutColor).eq("id", id).select("id");
+    if (retry.error) throw retry.error;
+    if ((retry.data ?? []).length === 0) throw new Error(EVENT_GONE_MESSAGE);
+    return;
+  }
+  if ((res.data ?? []).length === 0) throw new Error(EVENT_GONE_MESSAGE);
+}
+
+/**
+ * Saves new sort orders after a reorder, for my events and my family's alike.
+ * Uses set_event_sort_orders (an UPDATE under RLS: an event deleted or hidden
+ * meanwhile is skipped, never re-created). Before the stage 3 migration, falls
+ * back to upserting my own events only.
+ */
+export async function saveEventSortOrders(
+  supabase: SupabaseClient,
+  items: AppEvent[],
+  userId: string,
+) {
+  if (items.length === 0) return;
+  const { error } = await supabase.rpc("set_event_sort_orders", {
+    p_ids: items.map((item) => item.id),
+    p_orders: items.map((item) => item.sortOrder),
+  });
+  if (!error) return;
+  const missingFunction =
+    error.code === "PGRST202" || (error.message?.includes("Could not find the function") ?? false);
+  if (!missingFunction) throw error;
+  await upsertEventsBatch(
+    supabase,
+    items.filter((item) => !isFamilyEvent(item, userId)),
+    userId,
+  );
 }
 
 export async function upsertEventsBatch(
@@ -825,16 +892,57 @@ export async function upsertEventsBatch(
   const rows = items.map((item) => mapEventToDb(item, userId));
   const { error } = await supabase.from("events").upsert(rows);
   if (!error) return;
-  if (
-    isMissingColumnError(error, "scope") ||
-    isMissingColumnError(error, "color") ||
-    isSchemaMismatchError(error)
-  ) {
+  if (isEventCompatError(error)) {
     const { error: retryError } = await supabase.from("events").upsert(rows.map(withoutEventCompatColumns));
     if (!retryError) return;
     throw retryError;
   }
   throw error;
+}
+
+/** One edit or delete of an event (table event_history, written by a DB trigger). */
+export type EventHistoryEntry = {
+  id: number;
+  action: "update" | "delete";
+  changedBy: string | null;
+  changedAt: string;
+  changedFields: string[];
+};
+
+export const EVENT_HISTORY_LIMIT = 10;
+
+/**
+ * The latest edits of an event, newest first. RLS returns only what I may
+ * see. Empty when the table doesn't exist yet (migration not applied).
+ */
+export async function fetchEventHistory(
+  supabase: SupabaseClient,
+  eventId: string,
+): Promise<EventHistoryEntry[]> {
+  const res = await supabase
+    .from("event_history")
+    .select("id, action, changed_by, changed_at, changed_fields")
+    .eq("event_id", eventId)
+    .order("changed_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(EVENT_HISTORY_LIMIT);
+  if (res.error) {
+    if (isMissingTableError(res.error)) return [];
+    throw res.error;
+  }
+  return ((res.data ?? []) as {
+    id: number;
+    action: "update" | "delete";
+    changed_by: string | null;
+    changed_at: string;
+    changed_fields: string[] | null;
+  }[]).map((row) => ({
+    id: row.id,
+    action: row.action,
+    changedBy: row.changed_by,
+    changedAt: row.changed_at,
+    changedFields: row.changed_fields ?? [],
+  }));
 }
 
 export async function deleteEventDb(supabase: SupabaseClient, id: string) {

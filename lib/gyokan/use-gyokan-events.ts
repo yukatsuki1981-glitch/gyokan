@@ -7,9 +7,12 @@ import { newUuid } from "./mappers";
 import {
   assignSortOrders,
   deleteEventDb,
+  EVENT_GONE_MESSAGE,
   fetchGyokanEvents,
+  isFamilyEvent,
+  saveEventSortOrders,
+  updateFamilyEvent,
   upsertEvent,
-  upsertEventsBatch,
 } from "./repository";
 import {
   clearDraft,
@@ -19,7 +22,8 @@ import {
   type EventDraftFields,
 } from "./drafts";
 import { applyEventDraft } from "./events";
-import type { AppEvent } from "./types";
+import { itemsWithChangedSortOrder } from "./reorder";
+import type { AppEvent, EventVisibility } from "./types";
 
 export type { AppEvent } from "./types";
 
@@ -67,7 +71,8 @@ export function useGyokanEvents() {
       if (!draft || !eventDraftDiffers(item, draft)) continue;
       const merged = applyEventDraft(item, draft);
       try {
-        await upsertEvent(supabase, merged, uid);
+        if (isFamilyEvent(merged, uid)) await updateFamilyEvent(supabase, merged);
+        else await upsertEvent(supabase, merged, uid);
         clearDraft("event", item.id);
       } catch (err) {
         console.error("Failed to flush event draft", err);
@@ -80,7 +85,7 @@ export function useGyokanEvents() {
     if (!silent) setDataReady(false);
     setLoadError(null);
     try {
-      const rows = await fetchGyokanEvents(getSupabase(), uid);
+      const rows = await fetchGyokanEvents(getSupabase());
       setEvents(mergeEventsWithDrafts(rows));
       setLoadError(null);
       setDataReady(true);
@@ -92,6 +97,26 @@ export function useGyokanEvents() {
       initialLoadDoneRef.current = true;
     }
   }, [getSupabase, flushPendingEventDrafts]);
+
+  // Family members change shared events too: re-read whenever the app comes
+  // back to the front (tab switched back, phone app resumed, page restored
+  // from the back/forward cache). Opening the app afresh loads on mount.
+  useEffect(() => {
+    const reloadIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const uid = userIdRef.current;
+      if (uid && initialLoadDoneRef.current) void loadEvents(uid, { silent: true });
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) reloadIfVisible();
+    };
+    document.addEventListener("visibilitychange", reloadIfVisible);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", reloadIfVisible);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [loadEvents]);
 
   useEffect(() => {
     let mounted = true;
@@ -144,22 +169,28 @@ export function useGyokanEvents() {
     const uid = userIdRef.current;
     if (!uid) return false;
     try {
-      await upsertEvent(getSupabase(), event, uid);
+      // A family member's event is updated, never upserted (an upsert would
+      // re-create it as mine if they deleted it meanwhile).
+      if (isFamilyEvent(event, uid)) await updateFamilyEvent(getSupabase(), event);
+      else await upsertEvent(getSupabase(), event, uid);
       clearDraft("event", event.id);
       setSaveError(null);
       return true;
     } catch (err) {
       console.error("Failed to save event", err);
       setSaveError(formatLoadError(err));
+      // Gone on the server: show the calendar as it really is.
+      if (formatLoadError(err) === EVENT_GONE_MESSAGE) void loadEvents(uid, { silent: true });
       return false;
     }
-  }, [getSupabase]);
+  }, [getSupabase, loadEvents]);
 
-  const persistEvents = useCallback(async (list: AppEvent[]) => {
+  /** Saves the sort orders of the events whose position changed. */
+  const persistSortOrders = useCallback(async (changed: AppEvent[]) => {
     const uid = userIdRef.current;
-    if (!uid) return;
+    if (!uid || changed.length === 0) return;
     try {
-      await upsertEventsBatch(getSupabase(), list, uid);
+      await saveEventSortOrders(getSupabase(), changed, uid);
       setSaveError(null);
     } catch (err) {
       console.error("Failed to save events", err);
@@ -173,6 +204,7 @@ export function useGyokanEvents() {
     endTime?: string | null;
     memo?: string;
     color?: string | null;
+    visibility?: EventVisibility;
   }) => {
     const event: AppEvent = {
       id: newUuid(),
@@ -183,6 +215,8 @@ export function useGyokanEvents() {
       sortOrder: 0,
       scope: "private",
       color: data.color ?? null,
+      userId: userIdRef.current ?? undefined,
+      visibility: data.visibility ?? "shared",
     };
     setEvents((prev) => {
       const next = assignSortOrders([...prev, event]);
@@ -194,7 +228,15 @@ export function useGyokanEvents() {
 
   const updateEvent = useCallback((
     id: string,
-    patch: { title: string; startTime: string; endTime?: string | null; memo?: string; color?: string | null },
+    patch: {
+      title: string;
+      startTime: string;
+      endTime?: string | null;
+      memo?: string;
+      color?: string | null;
+      /** Only the creator may change it; ignored for a family member's event. */
+      visibility?: EventVisibility;
+    },
   ): Promise<boolean> => {
     let updated: AppEvent | undefined;
     setEvents((prev) => {
@@ -207,6 +249,8 @@ export function useGyokanEvents() {
           endTime: patch.endTime ?? null,
           memo: patch.memo ?? "",
           color: patch.color ?? null,
+          visibility:
+            patch.visibility && !isFamilyEvent(e, userIdRef.current ?? "") ? patch.visibility : e.visibility,
         };
       });
       updated = next.find((e) => e.id === id);
@@ -219,16 +263,19 @@ export function useGyokanEvents() {
   const deleteEvent = useCallback((id: string) => {
     clearDraft("event", id);
     setEvents((prev) => prev.filter((e) => e.id !== id));
-    void deleteEventDb(getSupabase(), id);
+    deleteEventDb(getSupabase(), id).catch((err) => {
+      console.error("Failed to delete event", err);
+      setSaveError(formatLoadError(err));
+    });
   }, [getSupabase]);
 
   const replaceEvents = useCallback((updater: (prev: AppEvent[]) => AppEvent[]) => {
     setEvents((prev) => {
       const next = assignSortOrders(updater(prev));
-      void persistEvents(next);
+      void persistSortOrders(itemsWithChangedSortOrder(prev, next));
       return next;
     });
-  }, [persistEvents]);
+  }, [persistSortOrders]);
 
   return {
     user,
