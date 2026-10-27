@@ -14,6 +14,7 @@ const RESULTS_PAGE = 50;
 
 function formatResultDate(iso: string) {
   const d = new Date(iso + "T12:00:00");
+  if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat("ja-JP", {
     year: "numeric",
     month: "long",

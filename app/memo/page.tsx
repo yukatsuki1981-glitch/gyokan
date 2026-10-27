@@ -8,6 +8,7 @@ import { MemoModeView } from "@/components/memo/memo-mode-view";
 import { DiaryMobileNav } from "@/components/diary/diary-mobile-nav";
 import { isGyokanPaidMember } from "@/lib/gyokan/membership";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
+import { toISODate } from "@/lib/gyokan/iso-date";
 
 const loading = (
   <div className="flex min-h-screen items-center justify-center bg-[var(--gyokan-bg)] text-[13px] text-gray-400">
@@ -19,7 +20,8 @@ const loading = (
 function MemoPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const dateParam = searchParams.get("date") ?? undefined;
+  // A malformed ?date= (e.g. "abc") is ignored: the page opens on the latest day.
+  const dateParam = toISODate(searchParams.get("date")) ?? undefined;
 
   const { user, authReady, authChecked, dataReady, dailyMemos, memos } = useGyokanData();
 

@@ -1,3 +1,4 @@
+import { toISODate } from "./iso-date";
 import { getDiaryEntryForDate, isJournalEntryEmpty } from "./journal-entry";
 import type { AppDailyDiary, AppDailyMemo, AppMemo } from "./types";
 
@@ -238,6 +239,9 @@ export function diarySearchEntries(diaries: AppDailyDiary[]): SearchableEntry[] 
   const dates = [...new Set(diaries.map((d) => d.date))];
   const out: SearchableEntry[] = [];
   for (const date of dates) {
+    // diary_date is a date column (always YYYY-MM-DD); checked anyway so a
+    // bad value can never reach the date formatting of the result list.
+    if (!toISODate(date)) continue;
     const entry = getDiaryEntryForDate(diaries, date);
     // Same days the diary pages show (a photo-only day has no text, but is
     // still found by a period-only search).
@@ -248,23 +252,25 @@ export function diarySearchEntries(diaries: AppDailyDiary[]): SearchableEntry[] 
   return out;
 }
 
-/** Daily memos (one entry per day, as the memo board joins them) and project memos (one entry each). */
+/**
+ * Daily memos (one entry per day, as the memo board joins them) and project
+ * memos (one entry each). Dates come out as YYYY-MM-DD: project memos store
+ * theirs as text like "2026.10.27" (daily memos use a date column). A memo
+ * whose date can't be read is left out — it has no day to be shown on.
+ */
 export function memoSearchEntries(dailyMemos: AppDailyMemo[], projectMemos: AppMemo[]): SearchableEntry[] {
-  const daily = [...joinSameDay(dailyMemos)]
-    .filter(([, text]) => text.trim())
-    .map(([date, text]) => ({
-      id: `daily_memo:${date}`,
-      date,
-      text,
-      source: "daily_memo" as const,
-    }));
-  const project = projectMemos.filter((m) => m.body.trim()).map((m) => ({
-    id: `project_memo:${m.id}`,
-    date: m.date,
-    text: m.body,
-    source: "project_memo" as const,
-    label: m.project,
-  }));
+  const daily: SearchableEntry[] = [];
+  for (const [rawDate, text] of joinSameDay(dailyMemos)) {
+    const date = toISODate(rawDate);
+    if (!date || !text.trim()) continue;
+    daily.push({ id: `daily_memo:${date}`, date, text, source: "daily_memo" });
+  }
+  const project: SearchableEntry[] = [];
+  for (const m of projectMemos) {
+    const date = toISODate(m.date);
+    if (!date || !m.body.trim()) continue;
+    project.push({ id: `project_memo:${m.id}`, date, text: m.body, source: "project_memo", label: m.project });
+  }
   return [...daily, ...project];
 }
 
