@@ -4630,6 +4630,16 @@ function DailyMemoBoard({
         body={dayMemo?.body ?? ""}
         onSave={onSave}
       />
+      <Link
+        href={
+          dayMemo?.body.trim()
+            ? `/memo?date=${encodeURIComponent(writeDate)}`
+            : "/memo"
+        }
+        className="mt-3 block text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)]"
+      >
+        全てのメモを見る
+      </Link>
     </div>
   );
 }
