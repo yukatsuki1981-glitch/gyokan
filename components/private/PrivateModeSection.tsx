@@ -68,7 +68,7 @@ export function PrivateModeSection({
   );
 
   return (
-    <div className="flex min-h-full flex-col bg-[#fafafa] lg:h-full lg:bg-transparent">
+    <div className="flex min-h-full flex-col bg-[#fafafa] lg:h-full lg:min-h-0 lg:flex-1 lg:bg-transparent">
       {!ready ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="h-7 w-7 animate-pulse rounded-full bg-gray-200" />

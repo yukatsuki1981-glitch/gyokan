@@ -7069,11 +7069,18 @@ export default function Home() {
         <main
           className={`min-w-0 flex-1 lg:h-full lg:overflow-y-auto lg:pb-0 ${
             appMode === "private"
-              ? "max-lg:flex max-lg:h-full max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden max-lg:pb-0"
+              ? // Private mode is a column flex at every width, so the calendar
+                // below gets a definite height to fill. On PC <main> used to be
+                // a plain scroll box: the calendar's container was only as tall
+                // as its content, and the calendar — which measures that once
+                // and fixes its row heights — froze at the height of whatever
+                // events were there on first render (an account with few events
+                // got rows too short to show more than part of one chip).
+                "flex h-full min-h-0 flex-col overflow-hidden pb-0"
               : "pb-[var(--gyokan-mobile-bar-h)]"
           }`}
         >
-          <div className="mx-auto w-full max-lg:shrink-0 max-w-3xl px-2.5 pt-2 sm:px-4 lg:max-w-none lg:px-5 lg:pt-2">
+          <div className="mx-auto w-full shrink-0 max-w-3xl px-2.5 pt-2 sm:px-4 lg:max-w-none lg:px-5 lg:pt-2">
             {loadError && (
               <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
                 データの読み込みに問題があります: {loadError}
@@ -7147,7 +7154,9 @@ export default function Home() {
                   // without an explicit width the calendar strip inside
                   // rendered far wider than the screen and got clipped after
                   // ~3.5 columns.
-                  "max-lg:w-full max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-y-auto max-lg:pb-2"
+                  // On PC this is the column's flex-1 too, giving the calendar
+                  // the rest of the screen's height.
+                  "max-lg:w-full max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-y-auto max-lg:pb-2 lg:flex lg:min-h-0 lg:w-full lg:flex-1 lg:flex-col"
                 : ""
             }`}
           >
