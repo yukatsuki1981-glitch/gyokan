@@ -28,9 +28,14 @@ import { PrivateCalendar } from "./PrivateCalendar";
 export function PrivateModeSection({
   tasks,
   onToggleTask,
+  viewDateISO,
+  onViewDateChange,
 }: {
   tasks: AppTask[];
   onToggleTask: (id: string) => void;
+  /** The app's selected date; the month calendar shows (and moves) its month. */
+  viewDateISO: string;
+  onViewDateChange: (iso: string) => void;
 }) {
   const { user, authReady, dataReady, loadError, saveError, events, addEvent, updateEvent, deleteEvent, replaceEvents } =
     useGyokanEvents();
@@ -94,6 +99,8 @@ export function PrivateModeSection({
             onDeleteEvent={deleteEvent}
             onReplaceEvents={replaceEvents}
             onToggleTask={onToggleTask}
+            viewDateISO={viewDateISO}
+            onViewDateChange={onViewDateChange}
           />
         </>
       )}

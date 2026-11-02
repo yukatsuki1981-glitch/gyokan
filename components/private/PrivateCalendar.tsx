@@ -16,6 +16,7 @@ import { eventColorStyle, eventTimeStripColor } from "@/lib/gyokan/event-colors"
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { getRokuyou } from "@/lib/gyokan/rokuyou";
+import { shiftISOMonth } from "@/lib/gyokan/iso-date";
 import type { EventSharing } from "@/lib/gyokan/event-sharing";
 import { DayEventPopup, type EventFormValues } from "./DayEventPopup";
 
@@ -78,6 +79,11 @@ function isoOf(year: number, month: number, day: number) {
 function todayISO() {
   const d = new Date();
   return isoOf(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function monthOfISO(iso: string): MonthCursor {
+  const [y, m] = iso.split("-").map((v) => parseInt(v, 10));
+  return { year: y, month: m - 1 };
 }
 
 function shiftCursor(cursor: MonthCursor, delta: number): MonthCursor {
@@ -500,6 +506,8 @@ export function PrivateCalendar({
   onDeleteEvent,
   onReplaceEvents,
   onToggleTask,
+  viewDateISO,
+  onViewDateChange,
 }: {
   events: AppEvent[];
   tasks: AppTask[];
@@ -509,10 +517,31 @@ export function PrivateCalendar({
   onDeleteEvent: (id: string) => void;
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
   onToggleTask: (id: string) => void;
+  /**
+   * The app's selected date (header label, right-hand mini calendar). The
+   * month shown here always follows it — the header's ＜/＞ move it by a month
+   * — and swiping or 「今日」 here move it in turn, so all three stay on one
+   * month.
+   */
+  viewDateISO: string;
+  onViewDateChange: (iso: string) => void;
 }) {
-  const [cursor, setCursor] = useState<MonthCursor>(() => {
-    const d = new Date();
-    return { year: d.getFullYear(), month: d.getMonth() };
+  const viewMonth = monthOfISO(viewDateISO);
+  const [cursor, setCursor] = useState<MonthCursor>(viewMonth);
+  // Follow the selected date's month (adjusted during render, React's
+  // pattern for state derived from a prop, rather than in an effect).
+  const viewMonthKey = `${viewMonth.year}-${viewMonth.month}`;
+  const [followedMonthKey, setFollowedMonthKey] = useState(viewMonthKey);
+  if (followedMonthKey !== viewMonthKey) {
+    setFollowedMonthKey(viewMonthKey);
+    setCursor(viewMonth);
+  }
+  // Read by the swipe handler, which is attached once.
+  const viewDateRef = useRef(viewDateISO);
+  const onViewDateChangeRef = useRef(onViewDateChange);
+  useLayoutEffect(() => {
+    viewDateRef.current = viewDateISO;
+    onViewDateChangeRef.current = onViewDateChange;
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -752,6 +781,8 @@ export function PrivateCalendar({
         animateTrackTo(fromPx, dir === 1 ? -2 * w : 0, () => {
           suppressGridAnimRef.current = true;
           setCursor((prev) => shiftCursor(prev, dir));
+          // The selected date moves to the same day of the new month.
+          onViewDateChangeRef.current(shiftISOMonth(viewDateRef.current, dir));
         });
       } else {
         animateTrackTo(fromPx, -w, null);
@@ -783,7 +814,8 @@ export function PrivateCalendar({
   const goToToday = useCallback(() => {
     const d = new Date();
     setCursor({ year: d.getFullYear(), month: d.getMonth() });
-  }, []);
+    onViewDateChange(todayISO());
+  }, [onViewDateChange]);
 
   const selectedDayEvents = selectedDate ? eventsByDate.get(selectedDate) ?? [] : [];
   const selectedDayTasks = selectedDate ? tasksByDate.get(selectedDate) ?? [] : [];

@@ -40,6 +40,7 @@ import {
 } from "@/lib/gyokan/mode-preferences";
 import type { AppModeKey, ModePreferences } from "@/lib/gyokan/types";
 import { hasDiaryContent } from "@/lib/gyokan/journal-entry";
+import { shiftISOMonth } from "@/lib/gyokan/iso-date";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
@@ -7119,19 +7120,25 @@ export default function Home() {
 
               <div className="hidden flex-wrap items-center gap-3 lg:flex">
                 <div className="flex items-center gap-1">
+                  {/* Tasks mode steps a day; private mode steps a month (the
+                      month calendar, mini calendar and this label follow). */}
                   <button
                     type="button"
-                    onClick={() => setViewDateISO((d) => shiftISODate(d, -1))}
+                    onClick={() =>
+                      setViewDateISO((d) => (appMode === "private" ? shiftISOMonth(d, -1) : shiftISODate(d, -1)))
+                    }
                     className="rounded-lg p-1.5 text-gray-500 hover:bg-white"
-                    aria-label="前の日"
+                    aria-label={appMode === "private" ? "前の月" : "前の日"}
                   >
                     <Icon name="chevronLeft" className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => setViewDateISO((d) => shiftISODate(d, 1))}
+                    onClick={() =>
+                      setViewDateISO((d) => (appMode === "private" ? shiftISOMonth(d, 1) : shiftISODate(d, 1)))
+                    }
                     className="rounded-lg p-1.5 text-gray-500 hover:bg-white"
-                    aria-label="次の日"
+                    aria-label={appMode === "private" ? "次の月" : "次の日"}
                   >
                     <Icon name="chevronRight" className="h-4 w-4" />
                   </button>
@@ -7162,7 +7169,12 @@ export default function Home() {
           >
 
             {appMode === "private" ? (
-              <PrivateModeSection tasks={tasks} onToggleTask={toggleTask} />
+              <PrivateModeSection
+                tasks={tasks}
+                onToggleTask={toggleTask}
+                viewDateISO={viewDateISO}
+                onViewDateChange={setViewDateISO}
+              />
             ) : showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
