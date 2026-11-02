@@ -3622,10 +3622,16 @@ function CalendarWidget({
   tasks,
   selectedDate,
   onSelectDate,
+  onShiftMonth,
 }: {
   tasks: Task[];
   selectedDate: string;
   onSelectDate: (iso: string) => void;
+  /**
+   * When given (private mode), ＜/＞ move the selected date by a month
+   * instead of only paging this widget, so the month calendar follows.
+   */
+  onShiftMonth?: (delta: number) => void;
 }) {
   const selected = new Date(selectedDate + "T12:00:00");
   const [viewDate, setViewDate] = useState(() => selected);
@@ -3640,8 +3646,8 @@ function CalendarWidget({
 
   const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
 
-  const goPrev = () => setViewDate(new Date(year, month - 1, 1));
-  const goNext = () => setViewDate(new Date(year, month + 1, 1));
+  const goPrev = () => (onShiftMonth ? onShiftMonth(-1) : setViewDate(new Date(year, month - 1, 1)));
+  const goNext = () => (onShiftMonth ? onShiftMonth(1) : setViewDate(new Date(year, month + 1, 1)));
   const goToday = () => {
     const today = todayISO();
     onSelectDate(today);
@@ -7267,6 +7273,12 @@ export default function Home() {
               tasks={tasks}
               selectedDate={viewDateISO}
               onSelectDate={goToDate}
+              // Private mode: the header label, this widget and the month
+              // calendar always show one month, so paging here moves the
+              // selected date (same day, or the month's last day).
+              onShiftMonth={
+                appMode === "private" ? (delta) => setViewDateISO((d) => shiftISOMonth(d, delta)) : undefined
+              }
             />
           </Card>
           <Card className="mb-4 p-4">
