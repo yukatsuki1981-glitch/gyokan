@@ -36,8 +36,30 @@ export function cellLaneCapacity(weekRows: number, hasDayLabel: boolean, rowHeig
   return Math.min(designLanes(weekRows, hasDayLabel), lanesThatFit(rowHeightPx, hasDayLabel));
 }
 
-/** What a day cell shows: the first `shown` chips, and "+hidden" for the rest (incl. bands that didn't fit). */
-export function dayCellPreview(chipCount: number, bandLanes: number, hiddenBands: number, capacity: number) {
-  const shown = Math.min(chipCount, Math.max(0, capacity - bandLanes));
+/**
+ * Chips (17px, 2px apart) that fit in the cell's chip area as rendered — its
+ * measured height, below the date row, band lanes and day label. null: not
+ * measured yet (no cap).
+ */
+export function chipsThatFitIn(chipAreaHeightPx: number | null) {
+  if (chipAreaHeightPx == null) return Infinity;
+  return Math.max(0, Math.floor((chipAreaHeightPx + LANE_GAP) / (LANE_H + LANE_GAP)));
+}
+
+/**
+ * What a day cell shows: the first `shown` chips, and "+hidden" for the rest
+ * (incl. bands that didn't fit). `capacity` is the day's lane limit (bands +
+ * chips); `measuredFit` (chipsThatFitIn of the real chip area), when known,
+ * caps the chips too — so a chip is never drawn half-clipped, and never left
+ * out while there is room for it.
+ */
+export function dayCellPreview(
+  chipCount: number,
+  bandLanes: number,
+  hiddenBands: number,
+  capacity: number,
+  measuredFit = Infinity,
+) {
+  const shown = Math.min(chipCount, Math.max(0, capacity - bandLanes), measuredFit);
   return { shown, hidden: chipCount - shown + hiddenBands };
 }

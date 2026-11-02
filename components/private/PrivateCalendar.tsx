@@ -11,7 +11,12 @@ import {
   truncateEventTitle,
 } from "@/lib/gyokan/events";
 import { layoutWeekBands, type BandInput, type WeekBandLayout } from "@/lib/gyokan/calendar-bands";
-import { cellLaneCapacity, dayCellPreview } from "@/lib/gyokan/private-calendar-layout";
+import {
+  cellLaneCapacity,
+  chipsThatFitIn,
+  dayCellPreview,
+  designLanes,
+} from "@/lib/gyokan/private-calendar-layout";
 import { eventColorStyle, eventTimeStripColor } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
@@ -230,13 +235,29 @@ function DayCell({
     ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
     ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
   ];
+  // The chip area's real height as rendered (ResizeObserver; its first
+  // callback arrives before paint). It decides how many chips fit, instead
+  // of an estimate from the row height — so the count always matches the
+  // space on screen, and whatever doesn't fit is in "+n".
+  const chipAreaRef = useRef<HTMLDivElement>(null);
+  const [chipAreaH, setChipAreaH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = chipAreaRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setChipAreaH(el.clientHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Band lanes, the day-label line (holiday/commemorative-day name) and the
-  // chips all share the cell's display slots.
+  // chips all share the cell's display slots: by design 4/5 per day; once the
+  // chip area is measured, as many chips as it really holds.
   const { shown, hidden: overflow } = dayCellPreview(
     chips.length,
     bandLanes,
     hiddenBands,
-    cellSlots(weekRows, dayInfo, rowHeightPx),
+    chipAreaH == null ? cellSlots(weekRows, dayInfo, rowHeightPx) : designLanes(weekRows, !!dayInfo),
+    chipsThatFitIn(chipAreaH),
   );
   const preview = chips.slice(0, shown);
 
@@ -297,7 +318,10 @@ function DayCell({
       )}
       {/* A size container, so event titles can size themselves to the
           column width (see EventChip). */}
-      <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden [container-type:inline-size]">
+      <div
+        ref={chipAreaRef}
+        className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden [container-type:inline-size]"
+      >
         {preview.map((chip) =>
           chip.kind === "task" ? (
             <span
