@@ -133,9 +133,10 @@ function eventTitleFontSize(reservedPx: number) {
  * timed event shows its start time — hour over minutes, both two digits,
  * no separator — on a strip down the chip's left edge, a slightly darker
  * shade of the chip's own color, in the same text color as the title. The
- * title is cut at 4 characters and sized as large as 4 characters fit:
- * beside the strip on timed chips, across the full chip on all-day ones (so
- * the two sizes differ).
+ * title is sized as large as 4 characters fit (capped at 11px): beside the
+ * strip on timed chips, across the full chip on all-day ones (so the two
+ * sizes differ). On phones it is cut at 4 characters; on PC (lg) the whole
+ * title runs to the chip's edge and ends in "…" only when it doesn't fit.
  */
 function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
   const colors = eventColorStyle(event.color);
@@ -170,13 +171,16 @@ function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
         </span>
       )}
       <span
-        className="min-w-0 flex-1 self-center overflow-hidden whitespace-nowrap px-px tracking-tight"
+        className="min-w-0 flex-1 self-center overflow-hidden whitespace-nowrap px-px tracking-tight lg:text-ellipsis"
         style={{
           fontSize: eventTitleFontSize(timed ? TIME_STRIP_W : 0),
           lineHeight: `${BAND_H}px`,
         }}
       >
-        {truncateEventTitle(event.title)}
+        {/* Phones: cut at 4 characters, as before. PC: as much of the title
+            as the chip's width holds, ending in "…" only when it doesn't fit. */}
+        <span className="lg:hidden">{truncateEventTitle(event.title)}</span>
+        <span className="hidden lg:inline">{event.title}</span>
       </span>
     </span>
   );
