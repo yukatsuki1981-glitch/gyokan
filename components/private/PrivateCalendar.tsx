@@ -550,16 +550,13 @@ export function PrivateCalendar({
   viewDateISO: string;
   onViewDateChange: (iso: string) => void;
 }) {
-  const viewMonth = monthOfISO(viewDateISO);
-  const [cursor, setCursor] = useState<MonthCursor>(viewMonth);
-  // Follow the selected date's month (adjusted during render, React's
-  // pattern for state derived from a prop, rather than in an effect).
-  const viewMonthKey = `${viewMonth.year}-${viewMonth.month}`;
-  const [followedMonthKey, setFollowedMonthKey] = useState(viewMonthKey);
-  if (followedMonthKey !== viewMonthKey) {
-    setFollowedMonthKey(viewMonthKey);
-    setCursor(viewMonth);
-  }
+  // The month shown is always the selected date's month — no month state of
+  // its own, so the calendar can never show a different month from the
+  // header label and the mini calendar. Swiping and 「今日」 change the
+  // selected date; the calendar follows from it. (One object per month, so
+  // the effects keyed on `cursor` run only when the month really changes.)
+  const viewMonthKey = viewDateISO.slice(0, 7);
+  const cursor = useMemo<MonthCursor>(() => monthOfISO(`${viewMonthKey}-01`), [viewMonthKey]);
   // Read by the swipe handler, which is attached once.
   const viewDateRef = useRef(viewDateISO);
   const onViewDateChangeRef = useRef(onViewDateChange);
@@ -804,8 +801,8 @@ export function PrivateCalendar({
         const dir: 1 | -1 = currentDx < 0 ? 1 : -1;
         animateTrackTo(fromPx, dir === 1 ? -2 * w : 0, () => {
           suppressGridAnimRef.current = true;
-          setCursor((prev) => shiftCursor(prev, dir));
-          // The selected date moves to the same day of the new month.
+          // The selected date moves to the same day of the next/previous
+          // month (or its last day); the calendar shows that month.
           onViewDateChangeRef.current(shiftISOMonth(viewDateRef.current, dir));
         });
       } else {
@@ -836,8 +833,6 @@ export function PrivateCalendar({
   }, []);
 
   const goToToday = useCallback(() => {
-    const d = new Date();
-    setCursor({ year: d.getFullYear(), month: d.getMonth() });
     onViewDateChange(todayISO());
   }, [onViewDateChange]);
 
