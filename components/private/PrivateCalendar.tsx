@@ -11,6 +11,7 @@ import {
   truncateEventTitle,
 } from "@/lib/gyokan/events";
 import { layoutWeekBands, type BandInput, type WeekBandLayout } from "@/lib/gyokan/calendar-bands";
+import { cellLaneCapacity, dayCellPreview } from "@/lib/gyokan/private-calendar-layout";
 import { eventColorStyle, eventTimeStripColor } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
@@ -37,16 +38,16 @@ type MonthCursor = { year: number; month: number };
 type CalendarCell = { day: number; iso: string; inMonth: boolean };
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
-// Display slots per day cell: a 5-week month has taller rows (the grid fills
-// the same height either way) and fits 5, a 6-week month fits 4. A
-// holiday/commemorative-day label occupies one of those slots, so days that
-// have one get one fewer task/event preview slot.
-function daySlots(weekRows: number) {
-  return weekRows >= 6 ? 4 : 5;
-}
-
-function cellSlots(weekRows: number, dayInfo: ReturnType<typeof getJapaneseCalendarDay>) {
-  return daySlots(weekRows) - (dayInfo ? 1 : 0);
+// Display slots per day cell: by design 5 in a 5-week month, 4 in a 6-week
+// month, a holiday/commemorative-day label taking one — capped by what the
+// row's measured height really holds, so a chip is never clipped without
+// being counted in "+n" (lib/gyokan/private-calendar-layout.ts).
+function cellSlots(
+  weekRows: number,
+  dayInfo: ReturnType<typeof getJapaneseCalendarDay>,
+  rowHeightPx: number | null,
+) {
+  return cellLaneCapacity(weekRows, !!dayInfo, rowHeightPx);
 }
 
 // Multi-day event bands sit in lanes right under the day header, lined up
@@ -193,6 +194,7 @@ function DayCell({
   dayTasks,
   dayEvents,
   weekRows,
+  rowHeightPx,
   bandLanes,
   hiddenBands,
   onSelect,
@@ -205,6 +207,8 @@ function DayCell({
   dayEvents: AppEvent[];
   /** Number of week rows in this month's grid (5 or 6). */
   weekRows: number;
+  /** The row's height once measured (null before): caps how many chips fit. */
+  rowHeightPx: number | null;
   /** Lanes the week's multi-day bands take up on this day — kept free under the day header. */
   bandLanes: number;
   /** Multi-day bands covering this day that didn't fit; counted in "+n". */
@@ -222,9 +226,13 @@ function DayCell({
   ];
   // Band lanes, the day-label line (holiday/commemorative-day name) and the
   // chips all share the cell's display slots.
-  const previewMax = Math.max(0, cellSlots(weekRows, dayInfo) - bandLanes);
-  const preview = chips.slice(0, previewMax);
-  const overflow = chips.length - preview.length + hiddenBands;
+  const { shown, hidden: overflow } = dayCellPreview(
+    chips.length,
+    bandLanes,
+    hiddenBands,
+    cellSlots(weekRows, dayInfo, rowHeightPx),
+  );
+  const preview = chips.slice(0, shown);
 
   const numberColor = !cell.inMonth
     ? "text-gray-300"
@@ -361,12 +369,12 @@ function MonthPanel({
       const week = cells.slice(start, start + 7);
       const days = week.map((c) => c.iso);
       const capacity = week.map((c) =>
-        cellSlots(rows, c.inMonth ? getJapaneseCalendarDay(c.iso) : null),
+        cellSlots(rows, c.inMonth ? getJapaneseCalendarDay(c.iso) : null, rowHeightPx),
       );
       weeks.push(layoutWeekBands(days, inputs.filter((input) => days.some(input.isVisibleOn)), capacity));
     }
     return weeks;
-  }, [cells, rows, multiDayEvents]);
+  }, [cells, rows, multiDayEvents, rowHeightPx]);
 
   return (
     <div className="flex min-h-0 flex-1 min-w-0 flex-col">
@@ -430,6 +438,7 @@ function MonthPanel({
                 dayTasks={tasksByDate.get(cell.iso) ?? []}
                 dayEvents={eventsByDate.get(cell.iso) ?? []}
                 weekRows={rows}
+                rowHeightPx={rowHeightPx}
                 bandLanes={week?.lanesUsed[i % 7] ?? 0}
                 hiddenBands={week?.hiddenCount[i % 7] ?? 0}
                 onSelect={onSelect}
