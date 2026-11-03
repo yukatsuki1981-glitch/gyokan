@@ -296,7 +296,7 @@ function DayCell({
     <button
       type="button"
       onClick={() => onSelect(cell.iso)}
-      className={`flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] p-0.5 text-left transition-colors hover:bg-black/[0.02] ${
+      className={`relative flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] p-0.5 text-left transition-colors hover:bg-black/[0.02] ${
         cell.inMonth ? "bg-white" : "bg-gray-50/60"
       }`}
       // Placed explicitly so the week's band overlay can share the row.
@@ -316,11 +316,14 @@ function DayCell({
             {rokuyou}
           </span>
         )}
-        {/* leading-none: the count must never make this row taller than the
-            24px day number (a larger minimum font size would otherwise grow
-            it and squeeze the chips below). */}
+        {/* PC: the count sits in this row, top right. leading-none: it must
+            never make the row taller than the 24px day number (a larger
+            minimum font size would otherwise grow it and squeeze the chips
+            below). Phones: bottom right of the cell instead (see below). */}
         {overflow > 0 && (
-          <span className="shrink-0 text-[11px] font-medium leading-none text-gray-400">+{overflow}</span>
+          <span className="hidden shrink-0 text-[11px] font-medium leading-none text-gray-400 lg:inline">
+            +{overflow}
+          </span>
         )}
       </div>
       {bandLanes > 0 && (
@@ -366,6 +369,16 @@ function DayCell({
           );
         })}
       </div>
+      {/* Phones: the count at the cell's bottom right, over the chips (it may
+          cover the end of the last chip's title) on a soft backing so it
+          stays readable. It takes no room of its own — the chip count is
+          unchanged — and, being inside the cell, opens the day like the
+          rest of it. */}
+      {overflow > 0 && (
+        <span className="absolute bottom-[2px] right-[2px] z-[2] rounded-[3px] bg-white/85 px-[3px] text-[10px] font-semibold leading-[12px] text-gray-500 shadow-[0_0_0_0.5px_rgba(0,0,0,0.06)] lg:hidden">
+          +{overflow}
+        </span>
+      )}
     </button>
   );
 }
