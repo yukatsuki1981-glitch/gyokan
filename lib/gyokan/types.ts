@@ -8,6 +8,13 @@ export type DbProject = {
 
 export type Scope = "work" | "private";
 
+/**
+ * Who can see a private-mode event: everyone in the household ("shared", the
+ * default) or only its creator ("only_me"). Migration
+ * 20261018_event_visibility_and_history.sql.
+ */
+export type EventVisibility = "shared" | "only_me";
+
 export type DbTask = {
   id: string;
   user_id: string;
@@ -93,6 +100,8 @@ export type DbEvent = {
   updated_at: string;
   scope: Scope;
   color: string | null;
+  /** Missing before migration 20261018_event_visibility_and_history.sql. */
+  visibility?: EventVisibility;
 };
 
 export type AppTask = {
@@ -169,6 +178,9 @@ export type AppEvent = {
   sortOrder: number;
   scope?: Scope;
   color?: string | null;
+  /** Creator (events.user_id) — a family member's id for their shared events. */
+  userId?: string;
+  visibility?: EventVisibility;
 };
 
 export type GyokanData = {

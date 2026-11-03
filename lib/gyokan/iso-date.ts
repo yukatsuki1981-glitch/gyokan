@@ -49,3 +49,14 @@ export function formatDateShortJa(iso: string) {
     weekday: "short",
   }).format(d);
 }
+
+/**
+ * Moves a YYYY-MM-DD date by whole months, keeping the day of the month —
+ * or the month's last day when it has no such day (01-31 + 1 → 02-28/29).
+ */
+export function shiftISOMonth(iso: string, delta: number) {
+  const [y, m, d] = iso.split("-").map((v) => parseInt(v, 10));
+  const first = new Date(y, m - 1 + delta, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return isoDate(new Date(first.getFullYear(), first.getMonth(), Math.min(d, lastDay)));
+}

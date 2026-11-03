@@ -11,11 +11,18 @@ import {
   truncateEventTitle,
 } from "@/lib/gyokan/events";
 import { layoutWeekBands, type BandInput, type WeekBandLayout } from "@/lib/gyokan/calendar-bands";
-import { eventColorStyle, eventTimeStripColor } from "@/lib/gyokan/event-colors";
+import {
+  cellLaneCapacity,
+  dayCellPreview,
+  designLanes,
+} from "@/lib/gyokan/private-calendar-layout";
+import { DEFAULT_EVENT_COLOR, eventColorStyle, eventTimeStripColor } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { getRokuyou } from "@/lib/gyokan/rokuyou";
-import { DayEventPopup } from "./DayEventPopup";
+import { shiftISOMonth } from "@/lib/gyokan/iso-date";
+import type { EventSharing } from "@/lib/gyokan/event-sharing";
+import { DayEventPopup, type EventFormValues } from "./DayEventPopup";
 
 function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
   return [...tasks].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -36,25 +43,36 @@ type MonthCursor = { year: number; month: number };
 type CalendarCell = { day: number; iso: string; inMonth: boolean };
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
-// Display slots per day cell: a 5-week month has taller rows (the grid fills
-// the same height either way) and fits 5, a 6-week month fits 4. A
-// holiday/commemorative-day label occupies one of those slots, so days that
-// have one get one fewer task/event preview slot.
-function daySlots(weekRows: number) {
-  return weekRows >= 6 ? 4 : 5;
-}
-
-function cellSlots(weekRows: number, dayInfo: ReturnType<typeof getJapaneseCalendarDay>) {
-  return daySlots(weekRows) - (dayInfo ? 1 : 0);
+// Display slots per day cell: by design 5 in a 5-week month, 4 in a 6-week
+// month, a holiday/commemorative-day label taking one — capped by what the
+// row's measured height really holds, so a chip is never clipped without
+// being counted in "+n" (lib/gyokan/private-calendar-layout.ts).
+function cellSlots(
+  weekRows: number,
+  dayInfo: ReturnType<typeof getJapaneseCalendarDay>,
+  rowHeightPx: number | null,
+) {
+  return cellLaneCapacity(weekRows, !!dayInfo, rowHeightPx);
 }
 
 // Multi-day event bands sit in lanes right under the day header, lined up
 // with the chips: the cell's 2px top padding + the 24px header row + a 2px
-// gap, then one lane per chip pitch (17px chip + 2px gap).
+// gap, then one lane per chip pitch (17px chip + 2px gap). On PC (lg) the
+// header row is 20px (see DayCell), so the bands start 4px higher there —
+// the overlay sets --band-top per breakpoint.
 const CELL_HEADER_BOTTOM = 26;
 const BAND_TOP = 28;
+const BAND_TOP_LG = 24;
 const BAND_H = 17;
 const BAND_PITCH = 19;
+
+// "+n" on PC: quieter than a chip but in its green family — the default
+// event chip's background at 55% (about #F1F9F6 on a white cell) and a
+// softer green text (#3A7F5A, ~4.5:1 against that background).
+const OVERFLOW_BADGE = {
+  bg: `${eventColorStyle(DEFAULT_EVENT_COLOR).bg}8C`,
+  text: "#3A7F5A",
+};
 
 // Release-animation tuning for the month swipe — same ease-out deceleration
 // curve/duration used elsewhere in this codebase (the day-popup swipe-
@@ -76,6 +94,11 @@ function isoOf(year: number, month: number, day: number) {
 function todayISO() {
   const d = new Date();
   return isoOf(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function monthOfISO(iso: string): MonthCursor {
+  const [y, m] = iso.split("-").map((v) => parseInt(v, 10));
+  return { year: y, month: m - 1 };
 }
 
 function shiftCursor(cursor: MonthCursor, delta: number): MonthCursor {
@@ -132,11 +155,20 @@ function eventTitleFontSize(reservedPx: number) {
  * timed event shows its start time — hour over minutes, both two digits,
  * no separator — on a strip down the chip's left edge, a slightly darker
  * shade of the chip's own color, in the same text color as the title. The
- * title is cut at 4 characters and sized as large as 4 characters fit:
- * beside the strip on timed chips, across the full chip on all-day ones (so
- * the two sizes differ).
+ * title is sized as large as 4 characters fit (capped at 11px): beside the
+ * strip on timed chips, across the full chip on all-day ones (so the two
+ * sizes differ). On phones it is cut at 4 characters; on PC (lg) the whole
+ * title runs to the chip's edge and ends in "…" only when it doesn't fit.
  */
-function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
+function EventChip({
+  event,
+  muted,
+  style,
+}: {
+  event: AppEvent;
+  muted: boolean;
+  style?: React.CSSProperties;
+}) {
   const colors = eventColorStyle(event.color);
   const timed = !isAllDayEvent(event);
   const [hh, mm] = localTimeHHMMFromTimestamp(event.startTime).split(":");
@@ -148,6 +180,7 @@ function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
         backgroundColor: colors.bg,
         color: colors.text,
         opacity: muted ? 0.4 : 1,
+        ...style,
       }}
       title={event.title}
     >
@@ -169,13 +202,16 @@ function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
         </span>
       )}
       <span
-        className="min-w-0 flex-1 self-center overflow-hidden whitespace-nowrap px-px tracking-tight"
+        className="min-w-0 flex-1 self-center overflow-hidden whitespace-nowrap px-px tracking-tight lg:text-ellipsis"
         style={{
           fontSize: eventTitleFontSize(timed ? TIME_STRIP_W : 0),
           lineHeight: `${BAND_H}px`,
         }}
       >
-        {truncateEventTitle(event.title)}
+        {/* Phones: cut at 4 characters, as before. PC: as much of the title
+            as the chip's width holds, ending in "…" only when it doesn't fit. */}
+        <span className="lg:hidden">{truncateEventTitle(event.title)}</span>
+        <span className="hidden lg:inline">{event.title}</span>
       </span>
     </span>
   );
@@ -188,6 +224,7 @@ function DayCell({
   dayTasks,
   dayEvents,
   weekRows,
+  rowHeightPx,
   bandLanes,
   hiddenBands,
   onSelect,
@@ -200,6 +237,8 @@ function DayCell({
   dayEvents: AppEvent[];
   /** Number of week rows in this month's grid (5 or 6). */
   weekRows: number;
+  /** The row's height once measured (null before): caps how many chips fit. */
+  rowHeightPx: number | null;
   /** Lanes the week's multi-day bands take up on this day — kept free under the day header. */
   bandLanes: number;
   /** Multi-day bands covering this day that didn't fit; counted in "+n". */
@@ -215,11 +254,44 @@ function DayCell({
     ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
     ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
   ];
-  // Band lanes, the day-label line (holiday/commemorative-day name) and the
-  // chips all share the cell's display slots.
-  const previewMax = Math.max(0, cellSlots(weekRows, dayInfo) - bandLanes);
-  const preview = chips.slice(0, previewMax);
-  const overflow = chips.length - preview.length + hiddenBands;
+  // Up to the design number of chips (4/5 per day, less band lanes and a
+  // day label) are laid out; then the real layout decides how many of them
+  // show: those whose box ends inside this cell's chip area, measured from
+  // the rendered chips themselves — no assumed chip height or spacing, so
+  // text-size / display-scaling settings can't throw the count off. The rest
+  // stay in the layout but hidden, and are counted in "+n". Re-counted
+  // whenever the chip area changes size (ResizeObserver, which reports
+  // before paint) or the day's chips change.
+  const laidOut = chips.slice(0, Math.max(0, designLanes(weekRows, !!dayInfo) - bandLanes));
+  const chipAreaRef = useRef<HTMLDivElement>(null);
+  const [fitCount, setFitCount] = useState<number | null>(null);
+  const laidOutKey = laidOut.map((c) => (c.kind === "task" ? `t${c.task.id}` : `e${c.event.id}`)).join(",");
+  useLayoutEffect(() => {
+    const area = chipAreaRef.current;
+    if (!area) return;
+    const count = () => {
+      const bottom = area.getBoundingClientRect().top + area.clientHeight + 0.5;
+      let n = 0;
+      for (const chip of Array.from(area.children)) {
+        if (chip.getBoundingClientRect().bottom > bottom) break;
+        n++;
+      }
+      setFitCount(n);
+    };
+    const ro = new ResizeObserver(count);
+    ro.observe(area);
+    return () => ro.disconnect();
+  }, [laidOutKey]);
+
+  // Before the first count (only until the observer's first report), the
+  // estimate from the row height stands in.
+  const { shown, hidden: overflow } = dayCellPreview(
+    chips.length,
+    bandLanes,
+    hiddenBands,
+    fitCount == null ? cellSlots(weekRows, dayInfo, rowHeightPx) : designLanes(weekRows, !!dayInfo),
+    fitCount ?? Infinity,
+  );
 
   const numberColor = !cell.inMonth
     ? "text-gray-300"
@@ -235,7 +307,10 @@ function DayCell({
     <button
       type="button"
       onClick={() => onSelect(cell.iso)}
-      className={`flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] p-0.5 text-left transition-colors hover:bg-black/[0.02] ${
+      // PC (lg): no bottom padding and a 20px date row (below) — 6px more
+      // room for chips, so an ~84px cell (e.g. 126 screen px at 150%
+      // scaling) holds 3 chips. Phones keep the 2px padding and 24px row.
+      className={`relative flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] p-0.5 text-left transition-colors hover:bg-black/[0.02] lg:pb-0 ${
         cell.inMonth ? "bg-white" : "bg-gray-50/60"
       }`}
       // Placed explicitly so the week's band overlay can share the row.
@@ -243,7 +318,7 @@ function DayCell({
     >
       <div className="flex shrink-0 items-center gap-1">
         <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold leading-none ${
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold leading-none lg:h-5 lg:w-5 ${
             isToday ? "bg-[#007AFF] text-white" : numberColor
           }`}
         >
@@ -255,8 +330,20 @@ function DayCell({
             {rokuyou}
           </span>
         )}
+        {/* PC: the count sits at the right end of this row. Phones: bottom
+            right of the cell instead (see below). */}
         {overflow > 0 && (
-          <span className="shrink-0 text-[11px] font-medium text-gray-400">+{overflow}</span>
+          <span
+            // Right end of the row (ml-auto), as a quiet pill in the event
+            // chips' green (OVERFLOW_BADGE) — never the red/blue of
+            // Sundays/holidays and Saturdays. A fixed 15px line height keeps
+            // it inside the 20px row whatever the font settings, so the row
+            // (and the chip area below) never grows.
+            className="ml-auto hidden shrink-0 rounded-full px-[5px] text-[11px] font-medium leading-[15px] lg:inline-block"
+            style={{ backgroundColor: OVERFLOW_BADGE.bg, color: OVERFLOW_BADGE.text }}
+          >
+            +{overflow}
+          </span>
         )}
       </div>
       {bandLanes > 0 && (
@@ -278,23 +365,40 @@ function DayCell({
       )}
       {/* A size container, so event titles can size themselves to the
           column width (see EventChip). */}
-      <div className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden [container-type:inline-size]">
-        {preview.map((chip) =>
-          chip.kind === "task" ? (
+      <div
+        ref={chipAreaRef}
+        className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden [container-type:inline-size]"
+      >
+        {laidOut.map((chip, index) => {
+          // Not shown (doesn't fit): kept in the layout so the count stays
+          // stable, but invisible — it's in "+n".
+          const hiddenStyle = index >= shown ? ({ visibility: "hidden" } as const) : undefined;
+          return chip.kind === "task" ? (
             <span
               key={`t-${chip.task.id}`}
-              className={`truncate rounded-full px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight ${
+              className={`shrink-0 truncate rounded-full px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight ${
                 cell.inMonth ? "bg-blue-50 text-blue-700" : "bg-blue-50/40 text-blue-300"
               }`}
+              style={hiddenStyle}
               title={chip.task.title}
             >
               {truncateEventTitle(chip.task.title)}
             </span>
           ) : (
-            <EventChip key={`e-${chip.event.id}`} event={chip.event} muted={!cell.inMonth} />
-          ),
-        )}
+            <EventChip key={`e-${chip.event.id}`} event={chip.event} muted={!cell.inMonth} style={hiddenStyle} />
+          );
+        })}
       </div>
+      {/* Phones: the count at the cell's bottom right, over the chips (it may
+          cover the end of the last chip's title) on a soft backing so it
+          stays readable. It takes no room of its own — the chip count is
+          unchanged — and, being inside the cell, opens the day like the
+          rest of it. */}
+      {overflow > 0 && (
+        <span className="absolute bottom-[2px] right-[2px] z-[2] rounded-[3px] bg-white/85 px-[3px] text-[10px] font-semibold leading-[12px] text-gray-500 shadow-[0_0_0_0.5px_rgba(0,0,0,0.06)] lg:hidden">
+          +{overflow}
+        </span>
+      )}
     </button>
   );
 }
@@ -356,12 +460,12 @@ function MonthPanel({
       const week = cells.slice(start, start + 7);
       const days = week.map((c) => c.iso);
       const capacity = week.map((c) =>
-        cellSlots(rows, c.inMonth ? getJapaneseCalendarDay(c.iso) : null),
+        cellSlots(rows, c.inMonth ? getJapaneseCalendarDay(c.iso) : null, rowHeightPx),
       );
       weeks.push(layoutWeekBands(days, inputs.filter((input) => days.some(input.isVisibleOn)), capacity));
     }
     return weeks;
-  }, [cells, rows, multiDayEvents]);
+  }, [cells, rows, multiDayEvents, rowHeightPx]);
 
   return (
     <div className="flex min-h-0 flex-1 min-w-0 flex-col">
@@ -425,6 +529,7 @@ function MonthPanel({
                 dayTasks={tasksByDate.get(cell.iso) ?? []}
                 dayEvents={eventsByDate.get(cell.iso) ?? []}
                 weekRows={rows}
+                rowHeightPx={rowHeightPx}
                 bandLanes={week?.lanesUsed[i % 7] ?? 0}
                 hiddenBands={week?.hiddenCount[i % 7] ?? 0}
                 onSelect={onSelect}
@@ -438,8 +543,15 @@ function MonthPanel({
               <div
                 key={`bands-${w}`}
                 aria-hidden
-                className="pointer-events-none relative z-[1] min-h-0 overflow-hidden"
-                style={{ gridRow: w + 1, gridColumn: "1 / -1" }}
+                className="pointer-events-none relative z-[1] min-h-0 overflow-hidden [--band-top:var(--band-top-sm)] lg:[--band-top:var(--band-top-lg)]"
+                style={
+                  {
+                    gridRow: w + 1,
+                    gridColumn: "1 / -1",
+                    "--band-top-sm": `${BAND_TOP}px`,
+                    "--band-top-lg": `${BAND_TOP_LG}px`,
+                  } as React.CSSProperties
+                }
               >
                 {week.bands.map((band) => {
                   const span = band.endCol - band.startCol + 1;
@@ -452,7 +564,7 @@ function MonthPanel({
                       key={band.item.id}
                       className="absolute overflow-hidden whitespace-nowrap px-0.5 py-0.5 text-[10px] font-bold leading-[13px] tracking-tight"
                       style={{
-                        top: BAND_TOP + band.lane * BAND_PITCH,
+                        top: `calc(var(--band-top) + ${band.lane * BAND_PITCH}px)`,
                         height: BAND_H,
                         left: `calc(${band.startCol} * 100% / 7 + ${insetLeft}px)`,
                         width: `calc(${span} * 100% / 7 - ${insetLeft + insetRight}px)`,
@@ -480,32 +592,45 @@ function MonthPanel({
 export function PrivateCalendar({
   events,
   tasks,
+  sharing,
   onAddEvent,
   onUpdateEvent,
   onDeleteEvent,
   onReplaceEvents,
   onToggleTask,
+  viewDateISO,
+  onViewDateChange,
 }: {
   events: AppEvent[];
   tasks: AppTask[];
-  onAddEvent: (data: {
-    title: string;
-    startTime: string;
-    endTime?: string | null;
-    memo?: string;
-    color?: string | null;
-  }) => void;
-  onUpdateEvent: (
-    id: string,
-    patch: { title: string; startTime: string; endTime?: string | null; memo?: string; color?: string | null },
-  ) => void;
+  sharing: EventSharing;
+  onAddEvent: (data: EventFormValues) => void;
+  onUpdateEvent: (id: string, patch: EventFormValues) => void;
   onDeleteEvent: (id: string) => void;
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
   onToggleTask: (id: string) => void;
+  /**
+   * The app's selected date (header label, right-hand mini calendar). The
+   * month shown here always follows it — the header's ＜/＞ move it by a month
+   * — and swiping or 「今日」 here move it in turn, so all three stay on one
+   * month.
+   */
+  viewDateISO: string;
+  onViewDateChange: (iso: string) => void;
 }) {
-  const [cursor, setCursor] = useState<MonthCursor>(() => {
-    const d = new Date();
-    return { year: d.getFullYear(), month: d.getMonth() };
+  // The month shown is always the selected date's month — no month state of
+  // its own, so the calendar can never show a different month from the
+  // header label and the mini calendar. Swiping and 「今日」 change the
+  // selected date; the calendar follows from it. (One object per month, so
+  // the effects keyed on `cursor` run only when the month really changes.)
+  const viewMonthKey = viewDateISO.slice(0, 7);
+  const cursor = useMemo<MonthCursor>(() => monthOfISO(`${viewMonthKey}-01`), [viewMonthKey]);
+  // Read by the swipe handler, which is attached once.
+  const viewDateRef = useRef(viewDateISO);
+  const onViewDateChangeRef = useRef(onViewDateChange);
+  useLayoutEffect(() => {
+    viewDateRef.current = viewDateISO;
+    onViewDateChangeRef.current = onViewDateChange;
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -744,7 +869,9 @@ export function PrivateCalendar({
         const dir: 1 | -1 = currentDx < 0 ? 1 : -1;
         animateTrackTo(fromPx, dir === 1 ? -2 * w : 0, () => {
           suppressGridAnimRef.current = true;
-          setCursor((prev) => shiftCursor(prev, dir));
+          // The selected date moves to the same day of the next/previous
+          // month (or its last day); the calendar shows that month.
+          onViewDateChangeRef.current(shiftISOMonth(viewDateRef.current, dir));
         });
       } else {
         animateTrackTo(fromPx, -w, null);
@@ -774,9 +901,8 @@ export function PrivateCalendar({
   }, []);
 
   const goToToday = useCallback(() => {
-    const d = new Date();
-    setCursor({ year: d.getFullYear(), month: d.getMonth() });
-  }, []);
+    onViewDateChange(todayISO());
+  }, [onViewDateChange]);
 
   const selectedDayEvents = selectedDate ? eventsByDate.get(selectedDate) ?? [] : [];
   const selectedDayTasks = selectedDate ? tasksByDate.get(selectedDate) ?? [] : [];
@@ -822,6 +948,7 @@ export function PrivateCalendar({
           dateLabel={selectedDateLabel}
           dayEvents={selectedDayEvents}
           dayTasks={selectedDayTasks}
+          sharing={sharing}
           onToggleTask={onToggleTask}
           onAddEvent={onAddEvent}
           onUpdateEvent={onUpdateEvent}
