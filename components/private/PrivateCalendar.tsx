@@ -13,7 +13,6 @@ import {
 import { layoutWeekBands, type BandInput, type WeekBandLayout } from "@/lib/gyokan/calendar-bands";
 import {
   cellLaneCapacity,
-  chipsThatFitIn,
   dayCellPreview,
   designLanes,
 } from "@/lib/gyokan/private-calendar-layout";
@@ -150,7 +149,15 @@ function eventTitleFontSize(reservedPx: number) {
  * sizes differ). On phones it is cut at 4 characters; on PC (lg) the whole
  * title runs to the chip's edge and ends in "…" only when it doesn't fit.
  */
-function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
+function EventChip({
+  event,
+  muted,
+  style,
+}: {
+  event: AppEvent;
+  muted: boolean;
+  style?: React.CSSProperties;
+}) {
   const colors = eventColorStyle(event.color);
   const timed = !isAllDayEvent(event);
   const [hh, mm] = localTimeHHMMFromTimestamp(event.startTime).split(":");
@@ -162,6 +169,7 @@ function EventChip({ event, muted }: { event: AppEvent; muted: boolean }) {
         backgroundColor: colors.bg,
         color: colors.text,
         opacity: muted ? 0.4 : 1,
+        ...style,
       }}
       title={event.title}
     >
@@ -235,31 +243,44 @@ function DayCell({
     ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
     ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
   ];
-  // The chip area's real height as rendered (ResizeObserver; its first
-  // callback arrives before paint). It decides how many chips fit, instead
-  // of an estimate from the row height — so the count always matches the
-  // space on screen, and whatever doesn't fit is in "+n".
+  // Up to the design number of chips (4/5 per day, less band lanes and a
+  // day label) are laid out; then the real layout decides how many of them
+  // show: those whose box ends inside this cell's chip area, measured from
+  // the rendered chips themselves — no assumed chip height or spacing, so
+  // text-size / display-scaling settings can't throw the count off. The rest
+  // stay in the layout but hidden, and are counted in "+n". Re-counted
+  // whenever the chip area changes size (ResizeObserver, which reports
+  // before paint) or the day's chips change.
+  const laidOut = chips.slice(0, Math.max(0, designLanes(weekRows, !!dayInfo) - bandLanes));
   const chipAreaRef = useRef<HTMLDivElement>(null);
-  const [chipAreaH, setChipAreaH] = useState<number | null>(null);
+  const [fitCount, setFitCount] = useState<number | null>(null);
+  const laidOutKey = laidOut.map((c) => (c.kind === "task" ? `t${c.task.id}` : `e${c.event.id}`)).join(",");
   useLayoutEffect(() => {
-    const el = chipAreaRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setChipAreaH(el.clientHeight));
-    ro.observe(el);
+    const area = chipAreaRef.current;
+    if (!area) return;
+    const count = () => {
+      const bottom = area.getBoundingClientRect().top + area.clientHeight + 0.5;
+      let n = 0;
+      for (const chip of Array.from(area.children)) {
+        if (chip.getBoundingClientRect().bottom > bottom) break;
+        n++;
+      }
+      setFitCount(n);
+    };
+    const ro = new ResizeObserver(count);
+    ro.observe(area);
     return () => ro.disconnect();
-  }, []);
+  }, [laidOutKey]);
 
-  // Band lanes, the day-label line (holiday/commemorative-day name) and the
-  // chips all share the cell's display slots: by design 4/5 per day; once the
-  // chip area is measured, as many chips as it really holds.
+  // Before the first count (only until the observer's first report), the
+  // estimate from the row height stands in.
   const { shown, hidden: overflow } = dayCellPreview(
     chips.length,
     bandLanes,
     hiddenBands,
-    chipAreaH == null ? cellSlots(weekRows, dayInfo, rowHeightPx) : designLanes(weekRows, !!dayInfo),
-    chipsThatFitIn(chipAreaH),
+    fitCount == null ? cellSlots(weekRows, dayInfo, rowHeightPx) : designLanes(weekRows, !!dayInfo),
+    fitCount ?? Infinity,
   );
-  const preview = chips.slice(0, shown);
 
   const numberColor = !cell.inMonth
     ? "text-gray-300"
@@ -295,8 +316,11 @@ function DayCell({
             {rokuyou}
           </span>
         )}
+        {/* leading-none: the count must never make this row taller than the
+            24px day number (a larger minimum font size would otherwise grow
+            it and squeeze the chips below). */}
         {overflow > 0 && (
-          <span className="shrink-0 text-[11px] font-medium text-gray-400">+{overflow}</span>
+          <span className="shrink-0 text-[11px] font-medium leading-none text-gray-400">+{overflow}</span>
         )}
       </div>
       {bandLanes > 0 && (
@@ -322,21 +346,25 @@ function DayCell({
         ref={chipAreaRef}
         className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden [container-type:inline-size]"
       >
-        {preview.map((chip) =>
-          chip.kind === "task" ? (
+        {laidOut.map((chip, index) => {
+          // Not shown (doesn't fit): kept in the layout so the count stays
+          // stable, but invisible — it's in "+n".
+          const hiddenStyle = index >= shown ? ({ visibility: "hidden" } as const) : undefined;
+          return chip.kind === "task" ? (
             <span
               key={`t-${chip.task.id}`}
-              className={`truncate rounded-full px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight ${
+              className={`shrink-0 truncate rounded-full px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight ${
                 cell.inMonth ? "bg-blue-50 text-blue-700" : "bg-blue-50/40 text-blue-300"
               }`}
+              style={hiddenStyle}
               title={chip.task.title}
             >
               {truncateEventTitle(chip.task.title)}
             </span>
           ) : (
-            <EventChip key={`e-${chip.event.id}`} event={chip.event} muted={!cell.inMonth} />
-          ),
-        )}
+            <EventChip key={`e-${chip.event.id}`} event={chip.event} muted={!cell.inMonth} style={hiddenStyle} />
+          );
+        })}
       </div>
     </button>
   );
