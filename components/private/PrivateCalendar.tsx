@@ -66,8 +66,13 @@ const BAND_TOP_LG = 24;
 const BAND_H = 17;
 const BAND_PITCH = 19;
 
-// "+n" on PC: the default event chip's background and text colours.
-const OVERFLOW_BADGE = eventColorStyle(DEFAULT_EVENT_COLOR);
+// "+n" on PC: quieter than a chip but in its green family — the default
+// event chip's background at 55% (about #F1F9F6 on a white cell) and a
+// softer green text (#3A7F5A, ~4.5:1 against that background).
+const OVERFLOW_BADGE = {
+  bg: `${eventColorStyle(DEFAULT_EVENT_COLOR).bg}8C`,
+  text: "#3A7F5A",
+};
 
 // Release-animation tuning for the month swipe — same ease-out deceleration
 // curve/duration used elsewhere in this codebase (the day-popup swipe-
@@ -325,17 +330,16 @@ function DayCell({
             {rokuyou}
           </span>
         )}
-        {/* PC: the count sits in this row, top right. leading-none: it must
-            never make the row taller than the 24px day number (a larger
-            minimum font size would otherwise grow it and squeeze the chips
-            below). Phones: bottom right of the cell instead (see below). */}
+        {/* PC: the count sits at the right end of this row. Phones: bottom
+            right of the cell instead (see below). */}
         {overflow > 0 && (
           <span
-            // Right end of the row (ml-auto), as a small pill in the default
-            // event chip's own colours — green, never the red/blue of
-            // Sundays/holidays and Saturdays. 15px tall in the 20px row, so
-            // the row's height is unchanged.
-            className="ml-auto hidden shrink-0 rounded-full px-[5px] text-[12px] font-semibold leading-[15px] lg:inline-block"
+            // Right end of the row (ml-auto), as a quiet pill in the event
+            // chips' green (OVERFLOW_BADGE) — never the red/blue of
+            // Sundays/holidays and Saturdays. A fixed 15px line height keeps
+            // it inside the 20px row whatever the font settings, so the row
+            // (and the chip area below) never grows.
+            className="ml-auto hidden shrink-0 rounded-full px-[5px] text-[11px] font-medium leading-[15px] lg:inline-block"
             style={{ backgroundColor: OVERFLOW_BADGE.bg, color: OVERFLOW_BADGE.text }}
           >
             +{overflow}
