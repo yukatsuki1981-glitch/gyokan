@@ -16,7 +16,7 @@ import {
   dayCellPreview,
   designLanes,
 } from "@/lib/gyokan/private-calendar-layout";
-import { eventColorStyle, eventTimeStripColor } from "@/lib/gyokan/event-colors";
+import { DEFAULT_EVENT_COLOR, eventColorStyle, eventTimeStripColor } from "@/lib/gyokan/event-colors";
 import { makeCubicBezierEasing } from "@/lib/gyokan/easing";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { getRokuyou } from "@/lib/gyokan/rokuyou";
@@ -65,6 +65,9 @@ const BAND_TOP = 28;
 const BAND_TOP_LG = 24;
 const BAND_H = 17;
 const BAND_PITCH = 19;
+
+// "+n" on PC: the default event chip's background and text colours.
+const OVERFLOW_BADGE = eventColorStyle(DEFAULT_EVENT_COLOR);
 
 // Release-animation tuning for the month swipe — same ease-out deceleration
 // curve/duration used elsewhere in this codebase (the day-popup swipe-
@@ -327,7 +330,14 @@ function DayCell({
             minimum font size would otherwise grow it and squeeze the chips
             below). Phones: bottom right of the cell instead (see below). */}
         {overflow > 0 && (
-          <span className="hidden shrink-0 text-[11px] font-medium leading-none text-gray-400 lg:inline">
+          <span
+            // Right end of the row (ml-auto), as a small pill in the default
+            // event chip's own colours — green, never the red/blue of
+            // Sundays/holidays and Saturdays. 15px tall in the 20px row, so
+            // the row's height is unchanged.
+            className="ml-auto hidden shrink-0 rounded-full px-[5px] text-[12px] font-semibold leading-[15px] lg:inline-block"
+            style={{ backgroundColor: OVERFLOW_BADGE.bg, color: OVERFLOW_BADGE.text }}
+          >
             +{overflow}
           </span>
         )}
