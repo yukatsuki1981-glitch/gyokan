@@ -42,6 +42,7 @@ import type { AppModeKey, ModePreferences } from "@/lib/gyokan/types";
 import { hasDiaryContent } from "@/lib/gyokan/journal-entry";
 import { shiftISOMonth } from "@/lib/gyokan/iso-date";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
+import { getRokuyou } from "@/lib/gyokan/rokuyou";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
 import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
@@ -3623,10 +3624,16 @@ function CalendarWidget({
   selectedDate,
   onSelectDate,
   onShiftMonth,
+  showRokuyou = false,
 }: {
   tasks: Task[];
   selectedDate: string;
   onSelectDate: (iso: string) => void;
+  /**
+   * Tasks mode: the 六曜 beside each in-month date, as in the private
+   * calendar (private mode already shows it on its own month calendar).
+   */
+  showRokuyou?: boolean;
   /**
    * When given (private mode), ＜/＞ move the selected date by a month
    * instead of only paging this widget, so the month calendar follows.
@@ -3710,6 +3717,7 @@ function CalendarWidget({
           const hasTask = (tasksByDate.get(cellIso) ?? []).length > 0;
           const dayOfWeek = i % 7;
           const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cellIso) : null;
+          const rokuyou = showRokuyou && cell.inMonth ? getRokuyou(cellIso) : null;
 
           return (
             <button
@@ -3717,12 +3725,26 @@ function CalendarWidget({
               type="button"
               onClick={() => onSelectDate(cellIso)}
               title={dayInfo?.label}
-              className={`relative flex min-h-7 flex-col items-center justify-start rounded-md px-0.5 py-0.5 text-center transition-all duration-200 ${calendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
+              // With the 六曜, no side padding: "28大安" needs the whole ~31px column.
+              className={`relative flex min-h-7 flex-col items-center justify-start rounded-md ${showRokuyou ? "px-0" : "px-0.5"} py-0.5 text-center transition-all duration-200 ${calendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
             >
-              <span
-                className={`text-[11px] font-medium leading-none ${calendarDayNumberClass(dayOfWeek, cell.inMonth, isSelected, isToday, dayInfo)}`}
-              >
-                {cell.day}
+              {/* The date and its 六曜 share one 11px row (the 7px 六曜 never
+                  makes it taller), so the holiday label below stays put. */}
+              <span className="flex max-w-full items-center gap-px">
+                <span
+                  className={`shrink-0 text-[11px] font-medium leading-none ${calendarDayNumberClass(dayOfWeek, cell.inMonth, isSelected, isToday, dayInfo)}`}
+                >
+                  {cell.day}
+                </span>
+                {rokuyou && (
+                  <span
+                    className={`min-w-0 truncate text-[7px] font-medium leading-none ${
+                      isSelected ? "text-white/75" : "text-gray-400"
+                    }`}
+                  >
+                    {rokuyou}
+                  </span>
+                )}
               </span>
               {dayInfo && cell.inMonth && (
                 <span
@@ -3808,6 +3830,7 @@ function MobileCalendarDayCell({
   const isToday = cellIso === todayISO();
   const dayOfWeek = cellIndex % 7;
   const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cellIso) : null;
+  const rokuyou = cell.inMonth ? getRokuyou(cellIso) : null;
   // Band lanes, the holiday line and single-day chips share the same slots.
   const slots = calendarDaySlots(dayInfo);
   const preview = dayTasks.slice(0, Math.max(0, slots - bandLanes));
@@ -3820,10 +3843,18 @@ function MobileCalendarDayCell({
       className={`relative flex flex-col border-b border-r border-black/[0.04] p-0.5 text-left transition-colors ${mobileCalendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
       style={{ height: CALENDAR_CELL_ROW_H, touchAction: "pan-x" }}
     >
-      <span
-        className={`shrink-0 px-0.5 text-[11px] font-semibold leading-none ${mobileCalendarDayNumberClass(dayOfWeek, cell.inMonth, isSelected, isToday, dayInfo)}`}
-      >
-        {cell.day}
+      {/* The date row: the 7px 六曜 (as in the private calendar) sits beside
+          the 11px date and never makes the row taller, so the bands and
+          chips below keep their room. It truncates before overflowing. */}
+      <span className="flex shrink-0 items-center gap-0.5">
+        <span
+          className={`shrink-0 px-0.5 text-[11px] font-semibold leading-none ${mobileCalendarDayNumberClass(dayOfWeek, cell.inMonth, isSelected, isToday, dayInfo)}`}
+        >
+          {cell.day}
+        </span>
+        {rokuyou && (
+          <span className="min-w-0 truncate text-[7px] font-medium leading-none text-gray-400">{rokuyou}</span>
+        )}
       </span>
       {bands.map((band) => {
         const span = band.endCol - band.startCol + 1;
@@ -7273,6 +7304,7 @@ export default function Home() {
               tasks={tasks}
               selectedDate={viewDateISO}
               onSelectDate={goToDate}
+              showRokuyou={appMode === "tasks"}
               // Private mode: the header label, this widget and the month
               // calendar always show one month, so paging here moves the
               // selected date (same day, or the month's last day).
