@@ -5461,6 +5461,13 @@ function SettingsCard({ children }: { children: ReactNode }) {
   return <Card className="overflow-hidden py-0">{children}</Card>;
 }
 
+// A quiet heading over a card whose settings belong to one mode only — the
+// same 12px grey as the notes under cards, set 8px above its card (mb-2
+// replaces the list's space-y gap below it).
+function SettingsSectionHeading({ children }: { children: ReactNode }) {
+  return <h3 className="mb-2 px-1 text-[12px] font-medium text-gray-400">{children}</h3>;
+}
+
 function SettingsDivider() {
   return <div className="h-px bg-black/[0.05]" style={{ marginLeft: 16 }} />;
 }
@@ -5966,58 +5973,71 @@ function AppSettingsPanel({
         </p>
       )}
 
-      <SettingsCard>
-        <SettingsToggleRow label={`${projectLabel}の表示`} checked={showProjects} onChange={setShowProjects} />
-        <SettingsDivider />
-        <SettingsRow
-          label={`${projectLabel}の名称`}
-          value={projectLabel}
-          onClick={() =>
-            setEditField({
-              key: "projectLabel",
-              title: `${projectLabel}の名称`,
-              value: projectLabel,
-              maxLength: 16,
-              placeholder: DEFAULT_PROJECT_LABEL,
-            })
-          }
-        />
-        <SettingsDivider />
-        <SettingsToggleRow label={`${caseLabel}の表示`} checked={showCases} onChange={setShowCases} />
-        <SettingsDivider />
-        <SettingsRow
-          label={`${caseLabel}の名称`}
-          value={caseLabel}
-          onClick={() =>
-            setEditField({
-              key: "caseLabel",
-              title: `${caseLabel}の名称`,
-              value: caseLabel,
-              maxLength: 16,
-              placeholder: DEFAULT_CASE_LABEL,
-            })
-          }
-        />
-        <SettingsDivider />
-        <SettingsRow
-          label={`進行中の${caseLabel}の列数`}
-          value={`${homeCaseColumns}列`}
-          onClick={() => setColumnsPickerOpen(true)}
-        />
-      </SettingsCard>
-
-      <SettingsCard>
-        <SettingsRow
-          label="予定の既定の色"
-          value={
-            <span
-              className="inline-block h-4 w-4 rounded-full"
-              style={{ backgroundColor: defaultEventColor }}
+      {/* Tasks-mode-only settings: gone with the mode itself (the left
+          menu's project list is hidden then too, see Home). */}
+      {modePreferences.showWorkMode && (
+        <>
+          <SettingsSectionHeading>タスク管理モード</SettingsSectionHeading>
+          <SettingsCard>
+            <SettingsToggleRow label={`${projectLabel}の表示`} checked={showProjects} onChange={setShowProjects} />
+            <SettingsDivider />
+            <SettingsRow
+              label={`${projectLabel}の名称`}
+              value={projectLabel}
+              onClick={() =>
+                setEditField({
+                  key: "projectLabel",
+                  title: `${projectLabel}の名称`,
+                  value: projectLabel,
+                  maxLength: 16,
+                  placeholder: DEFAULT_PROJECT_LABEL,
+                })
+              }
             />
-          }
-          onClick={() => setEventColorPickerOpen(true)}
-        />
-      </SettingsCard>
+            <SettingsDivider />
+            <SettingsToggleRow label={`${caseLabel}の表示`} checked={showCases} onChange={setShowCases} />
+            <SettingsDivider />
+            <SettingsRow
+              label={`${caseLabel}の名称`}
+              value={caseLabel}
+              onClick={() =>
+                setEditField({
+                  key: "caseLabel",
+                  title: `${caseLabel}の名称`,
+                  value: caseLabel,
+                  maxLength: 16,
+                  placeholder: DEFAULT_CASE_LABEL,
+                })
+              }
+            />
+            <SettingsDivider />
+            <SettingsRow
+              label={`進行中の${caseLabel}の列数`}
+              value={`${homeCaseColumns}列`}
+              onClick={() => setColumnsPickerOpen(true)}
+            />
+          </SettingsCard>
+        </>
+      )}
+
+      {/* Private-mode-only settings, likewise gone with the mode. */}
+      {modePreferences.showPrivateMode && (
+        <>
+          <SettingsSectionHeading>プライベートモード</SettingsSectionHeading>
+          <SettingsCard>
+            <SettingsRow
+              label="予定の既定の色"
+              value={
+                <span
+                  className="inline-block h-4 w-4 rounded-full"
+                  style={{ backgroundColor: defaultEventColor }}
+                />
+              }
+              onClick={() => setEventColorPickerOpen(true)}
+            />
+          </SettingsCard>
+        </>
+      )}
 
       {/* Sharing private-mode events with family (households). */}
       <SettingsCard>
@@ -6312,6 +6332,10 @@ export default function Home() {
   );
 
   const { showProjects, showCases, projectLabel, caseLabel, homeCaseColumns } = displaySettings;
+  // The left menu (PC) and the header show projects in both modes — but not
+  // when tasks mode is hidden: projects belong to tasks mode, and with the
+  // mode gone their settings are hidden too (AppSettingsPanel).
+  const menuShowsProjects = showProjects && modePrefs.showWorkMode;
 
   const handleAppTitleChange = useCallback(
     (title: string) => {
@@ -7048,7 +7072,7 @@ export default function Home() {
         }`}
       >
         {/* Left Sidebar */}
-        <aside className={`gyokan-panel hidden shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col lg:h-full ${showProjects ? "w-[168px]" : "w-[132px]"}`}>
+        <aside className={`gyokan-panel hidden shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col lg:h-full ${menuShowsProjects ? "w-[168px]" : "w-[132px]"}`}>
           <div className="mb-6 flex items-center justify-between gap-2 px-1">
             <button
               type="button"
@@ -7066,7 +7090,7 @@ export default function Home() {
             <RefreshButton iconClassName="h-4 w-4" className="shrink-0 p-1.5 hover:bg-black/[0.04]" onRefresh={handleRefresh} />
           </div>
 
-          {showProjects && (
+          {menuShowsProjects && (
           <DesktopProjectSidebar
             projects={projects}
             activeProject={activeProject}
@@ -7078,7 +7102,7 @@ export default function Home() {
           />
           )}
 
-          {showProjects && (
+          {menuShowsProjects && (
           <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-lg border border-black/[0.05] px-2 py-1.5 text-[11px] text-gray-500 transition-all duration-200 hover:bg-black/[0.02]">
             <Icon name="folder" className="h-3.5 w-3.5 text-gray-400" />
             完了済み
@@ -7157,7 +7181,7 @@ export default function Home() {
                 )}
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
-                  {!isAllProjects && showProjects && <ProjectColorHeaderLink project={activeProject} />}
+                  {!isAllProjects && menuShowsProjects && <ProjectColorHeaderLink project={activeProject} />}
                 </div>
                 <RefreshButton className="shrink-0" onRefresh={handleRefresh} />
               </div>
@@ -7188,7 +7212,7 @@ export default function Home() {
                   </button>
                 </div>
                 <span className="text-[15px] font-semibold text-gray-900">{viewDateLabel}</span>
-                {!isAllProjects && showProjects && <ProjectColorHeaderLink project={activeProject} />}
+                {!isAllProjects && menuShowsProjects && <ProjectColorHeaderLink project={activeProject} />}
                 <RefreshButton iconClassName="h-4 w-4" className="ml-auto rounded-lg p-1.5" onRefresh={handleRefresh} />
               </div>
             </header>
@@ -7296,9 +7320,29 @@ export default function Home() {
           </div>
 
           {appMode === "private" && (
+            // Same order as tasks mode's bar (メモ・日記・設定), and the same
+            // memo sheet. The calendar itself has no item, so nothing is lit
+            // while it's showing; メモ / 設定 light up while open.
             <MobileBarShell as="footer">
-              <MobileBarButton icon="diary" label="日記" active={false} onClick={() => router.push("/diary")} />
-              <MobileBarButton icon="settings" label="設定" active={false} onClick={openSettings} />
+              <MobileBarButton icon="memo" label="メモ" active={memoSheetOpen} onClick={() => setMemoSheetOpen(true)} />
+              <MobileBarButton
+                icon="diary"
+                label="日記"
+                active={false}
+                onClick={() => {
+                  setMemoSheetOpen(false);
+                  router.push("/diary");
+                }}
+              />
+              <MobileBarButton
+                icon="settings"
+                label="設定"
+                active={settingsOpen}
+                onClick={() => {
+                  setMemoSheetOpen(false);
+                  openSettings();
+                }}
+              />
             </MobileBarShell>
           )}
         </main>
