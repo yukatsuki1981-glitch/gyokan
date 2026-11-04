@@ -16,7 +16,9 @@ export function designLanes(weekRows: number, hasDayLabel: boolean, wide = true)
   return (wide && weekRows >= 6 ? 4 : 5) - (hasDayLabel ? 1 : 0);
 }
 
-// Cell geometry (PrivateCalendar's DayCell), in px:
+// Cell geometry (PrivateCalendar's DayCell), in px — as it was before the
+// date row became 20px and the bottom padding 0, so this estimate stays a
+// few px on the safe side (the shown chips are counted from the real layout):
 //   1 bottom border + 2 top padding + 24 day header + 2 gap + 2 bottom padding
 //   + 2 margin above the first band when there are bands — counted always, to
 //   stay on the safe side — then one 17px lane per band/chip, 2px apart.
