@@ -7286,9 +7286,29 @@ export default function Home() {
           </div>
 
           {appMode === "private" && (
+            // Same order as tasks mode's bar (メモ・日記・設定), and the same
+            // memo sheet. The calendar itself has no item, so nothing is lit
+            // while it's showing; メモ / 設定 light up while open.
             <MobileBarShell as="footer">
-              <MobileBarButton icon="diary" label="日記" active={false} onClick={() => router.push("/diary")} />
-              <MobileBarButton icon="settings" label="設定" active={false} onClick={openSettings} />
+              <MobileBarButton icon="memo" label="メモ" active={memoSheetOpen} onClick={() => setMemoSheetOpen(true)} />
+              <MobileBarButton
+                icon="diary"
+                label="日記"
+                active={false}
+                onClick={() => {
+                  setMemoSheetOpen(false);
+                  router.push("/diary");
+                }}
+              />
+              <MobileBarButton
+                icon="settings"
+                label="設定"
+                active={settingsOpen}
+                onClick={() => {
+                  setMemoSheetOpen(false);
+                  openSettings();
+                }}
+              />
             </MobileBarShell>
           )}
         </main>
