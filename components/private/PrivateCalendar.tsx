@@ -72,14 +72,11 @@ function useIsWide() {
   );
 }
 
-// Multi-day event bands sit in lanes right under the day header, lined up
-// with the chips: the cell's 2px top padding + the 24px header row + a 2px
-// gap, then one lane per chip pitch (17px chip + 2px gap). On PC (lg) the
-// header row is 20px (see DayCell), so the bands start 4px higher there —
-// the overlay sets --band-top per breakpoint.
-const CELL_HEADER_BOTTOM = 26;
-const BAND_TOP = 28;
-const BAND_TOP_LG = 24;
+// Multi-day event bands sit in lanes right under the day header: the cell's
+// 2px top padding + the 20px header row + a 2px gap, then one lane per 19px
+// (17px band + 2px gap).
+const CELL_HEADER_BOTTOM = 22;
+const BAND_TOP = 24;
 const BAND_H = 17;
 const BAND_PITCH = 19;
 
@@ -327,10 +324,10 @@ function DayCell({
     <button
       type="button"
       onClick={() => onSelect(cell.iso)}
-      // PC (lg): no bottom padding and a 20px date row (below) — 6px more
-      // room for chips, so an ~84px cell (e.g. 126 screen px at 150%
-      // scaling) holds 3 chips. Phones keep the 2px padding and 24px row.
-      className={`relative flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] p-0.5 text-left transition-colors hover:bg-black/[0.02] lg:pb-0 ${
+      // No bottom padding and a 20px date row (below), for room for chips:
+      // on PC an ~84px cell (e.g. 126 screen px at 150% scaling) holds 3
+      // chips; on a 375×667 phone a 5-week month's ~98px cell holds 4.
+      className={`relative flex min-h-0 flex-col items-stretch overflow-hidden border-b border-r border-black/[0.05] px-0.5 pt-0.5 text-left transition-colors hover:bg-black/[0.02] ${
         cell.inMonth ? "bg-white" : "bg-gray-50/60"
       }`}
       // Placed explicitly so the week's band overlay can share the row.
@@ -338,7 +335,7 @@ function DayCell({
     >
       <div className="flex shrink-0 items-center gap-1">
         <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold leading-none lg:h-5 lg:w-5 ${
+          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold leading-none ${
             isToday ? "bg-[#007AFF] text-white" : numberColor
           }`}
         >
@@ -387,7 +384,9 @@ function DayCell({
           column width (see EventChip). */}
       <div
         ref={chipAreaRef}
-        className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden [container-type:inline-size]"
+        // Chips 1px apart on phones (2px on PC): with the tighter cell
+        // above, 4 fit where 3 did.
+        className="mt-0.5 flex min-h-0 flex-1 flex-col gap-px overflow-hidden [container-type:inline-size] lg:gap-0.5"
       >
         {laidOut.map((chip, index) => (
           // One box per chip (what the count measures), so the phones' "+n"
@@ -572,15 +571,8 @@ function MonthPanel({
               <div
                 key={`bands-${w}`}
                 aria-hidden
-                className="pointer-events-none relative z-[1] min-h-0 overflow-hidden [--band-top:var(--band-top-sm)] lg:[--band-top:var(--band-top-lg)]"
-                style={
-                  {
-                    gridRow: w + 1,
-                    gridColumn: "1 / -1",
-                    "--band-top-sm": `${BAND_TOP}px`,
-                    "--band-top-lg": `${BAND_TOP_LG}px`,
-                  } as React.CSSProperties
-                }
+                className="pointer-events-none relative z-[1] min-h-0 overflow-hidden"
+                style={{ gridRow: w + 1, gridColumn: "1 / -1" }}
               >
                 {week.bands.map((band) => {
                   const span = band.endCol - band.startCol + 1;
@@ -593,7 +585,7 @@ function MonthPanel({
                       key={band.item.id}
                       className="absolute overflow-hidden whitespace-nowrap px-0.5 py-0.5 text-[10px] font-bold leading-[13px] tracking-tight"
                       style={{
-                        top: `calc(var(--band-top) + ${band.lane * BAND_PITCH}px)`,
+                        top: BAND_TOP + band.lane * BAND_PITCH,
                         height: BAND_H,
                         left: `calc(${band.startCol} * 100% / 7 + ${insetLeft}px)`,
                         width: `calc(${span} * 100% / 7 - ${insetLeft + insetRight}px)`,
