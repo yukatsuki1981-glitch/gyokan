@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type Ref } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
 import type { AppEvent, AppTask } from "@/lib/gyokan/types";
 import {
   eventCoversDate,
@@ -22,6 +22,7 @@ import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { getRokuyou } from "@/lib/gyokan/rokuyou";
 import { shiftISOMonth } from "@/lib/gyokan/iso-date";
 import type { EventSharing } from "@/lib/gyokan/event-sharing";
+import { CalendarOverflowBadge } from "@/components/calendar-overflow-badge";
 import { DayEventPopup, type EventFormValues } from "./DayEventPopup";
 
 function sortTasksByOrder(tasks: AppTask[]): AppTask[] {
@@ -43,16 +44,32 @@ type MonthCursor = { year: number; month: number };
 type CalendarCell = { day: number; iso: string; inMonth: boolean };
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
-// Display slots per day cell: by design 5 in a 5-week month, 4 in a 6-week
-// month, a holiday/commemorative-day label taking one — capped by what the
-// row's measured height really holds, so a chip is never clipped without
-// being counted in "+n" (lib/gyokan/private-calendar-layout.ts).
+// Display slots per day cell: by design 5 (on PC 4 in a 6-week month), a
+// holiday/commemorative-day label taking one — capped by what the row's
+// measured height really holds, so a chip is never clipped without being
+// counted in "+n" (lib/gyokan/private-calendar-layout.ts).
 function cellSlots(
   weekRows: number,
   dayInfo: ReturnType<typeof getJapaneseCalendarDay>,
   rowHeightPx: number | null,
+  wide: boolean,
 ) {
-  return cellLaneCapacity(weekRows, !!dayInfo, rowHeightPx);
+  return cellLaneCapacity(weekRows, !!dayInfo, rowHeightPx, wide);
+}
+
+// PC layout (Tailwind's lg) or phone — the two have different day limits.
+const WIDE_QUERY = "(min-width: 1024px)";
+function subscribeWide(onChange: () => void) {
+  const mq = window.matchMedia(WIDE_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+function useIsWide() {
+  return useSyncExternalStore(
+    subscribeWide,
+    () => window.matchMedia(WIDE_QUERY).matches,
+    () => false,
+  );
 }
 
 // Multi-day event bands sit in lanes right under the day header, lined up
@@ -227,6 +244,7 @@ function DayCell({
   rowHeightPx,
   bandLanes,
   hiddenBands,
+  wide,
   onSelect,
 }: {
   cell: CalendarCell;
@@ -243,6 +261,8 @@ function DayCell({
   bandLanes: number;
   /** Multi-day bands covering this day that didn't fit; counted in "+n". */
   hiddenBands: number;
+  /** PC layout (lg) — see designLanes. */
+  wide: boolean;
   onSelect: (iso: string) => void;
 }) {
   const dayOfWeek = cellIndex % 7;
@@ -254,15 +274,15 @@ function DayCell({
     ...dayTasks.map((task): DayChip => ({ kind: "task", task })),
     ...dayEvents.map((event): DayChip => ({ kind: "event", event })),
   ];
-  // Up to the design number of chips (4/5 per day, less band lanes and a
-  // day label) are laid out; then the real layout decides how many of them
+  // Up to the design number of chips (5 per day — 4 in a 6-week month on PC
+  // — less band lanes and a day label) are laid out; then the real layout decides how many of them
   // show: those whose box ends inside this cell's chip area, measured from
   // the rendered chips themselves — no assumed chip height or spacing, so
   // text-size / display-scaling settings can't throw the count off. The rest
   // stay in the layout but hidden, and are counted in "+n". Re-counted
   // whenever the chip area changes size (ResizeObserver, which reports
   // before paint) or the day's chips change.
-  const laidOut = chips.slice(0, Math.max(0, designLanes(weekRows, !!dayInfo) - bandLanes));
+  const laidOut = chips.slice(0, Math.max(0, designLanes(weekRows, !!dayInfo, wide) - bandLanes));
   const chipAreaRef = useRef<HTMLDivElement>(null);
   const [fitCount, setFitCount] = useState<number | null>(null);
   const laidOutKey = laidOut.map((c) => (c.kind === "task" ? `t${c.task.id}` : `e${c.event.id}`)).join(",");
@@ -289,7 +309,7 @@ function DayCell({
     chips.length,
     bandLanes,
     hiddenBands,
-    fitCount == null ? cellSlots(weekRows, dayInfo, rowHeightPx) : designLanes(weekRows, !!dayInfo),
+    fitCount == null ? cellSlots(weekRows, dayInfo, rowHeightPx, wide) : designLanes(weekRows, !!dayInfo, wide),
     fitCount ?? Infinity,
   );
 
@@ -330,8 +350,8 @@ function DayCell({
             {rokuyou}
           </span>
         )}
-        {/* PC: the count sits at the right end of this row. Phones: bottom
-            right of the cell instead (see below). */}
+        {/* PC: the count sits at the right end of this row. Phones: over
+            the last visible chip instead (see below). */}
         {overflow > 0 && (
           <span
             // Right end of the row (ml-auto), as a quiet pill in the event
@@ -369,35 +389,42 @@ function DayCell({
         ref={chipAreaRef}
         className="mt-0.5 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden [container-type:inline-size]"
       >
-        {laidOut.map((chip, index) => {
-          // Not shown (doesn't fit): kept in the layout so the count stays
-          // stable, but invisible — it's in "+n".
-          const hiddenStyle = index >= shown ? ({ visibility: "hidden" } as const) : undefined;
-          return chip.kind === "task" ? (
-            <span
-              key={`t-${chip.task.id}`}
-              className={`shrink-0 truncate rounded-full px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight ${
-                cell.inMonth ? "bg-blue-50 text-blue-700" : "bg-blue-50/40 text-blue-300"
-              }`}
-              style={hiddenStyle}
-              title={chip.task.title}
-            >
-              {truncateEventTitle(chip.task.title)}
-            </span>
-          ) : (
-            <EventChip key={`e-${chip.event.id}`} event={chip.event} muted={!cell.inMonth} style={hiddenStyle} />
-          );
-        })}
+        {laidOut.map((chip, index) => (
+          // One box per chip (what the count measures), so the phones' "+n"
+          // can lie over the last visible chip without the chip's own
+          // clipping and rounded corners cutting it. Not shown (doesn't
+          // fit): kept in the layout so the count stays stable, but
+          // invisible — it's in "+n".
+          <div
+            key={chip.kind === "task" ? `t-${chip.task.id}` : `e-${chip.event.id}`}
+            className="relative flex shrink-0 flex-col"
+            style={index >= shown ? { visibility: "hidden" } : undefined}
+          >
+            {chip.kind === "task" ? (
+              <span
+                className={`shrink-0 truncate rounded-full px-0.5 py-0.5 text-[10px] font-medium leading-[13px] tracking-tight ${
+                  cell.inMonth ? "bg-blue-50 text-blue-700" : "bg-blue-50/40 text-blue-300"
+                }`}
+                title={chip.task.title}
+              >
+                {truncateEventTitle(chip.task.title)}
+              </span>
+            ) : (
+              <EventChip event={chip.event} muted={!cell.inMonth} />
+            )}
+            {/* Phones: the count over the last visible chip's right end, as
+                in tasks mode (it may cover the title's last character). It
+                takes no room — the chip count is unchanged — and, being
+                inside the cell, opens the day like the rest of it. */}
+            {overflow > 0 && index === shown - 1 && (
+              <CalendarOverflowBadge count={overflow} className="absolute -bottom-px -right-px lg:hidden" />
+            )}
+          </div>
+        ))}
       </div>
-      {/* Phones: the count at the cell's bottom right, over the chips (it may
-          cover the end of the last chip's title) on a soft backing so it
-          stays readable. It takes no room of its own — the chip count is
-          unchanged — and, being inside the cell, opens the day like the
-          rest of it. */}
-      {overflow > 0 && (
-        <span className="absolute bottom-[2px] right-[2px] z-[2] rounded-[3px] bg-white/85 px-[3px] text-[10px] font-semibold leading-[12px] text-gray-500 shadow-[0_0_0_0.5px_rgba(0,0,0,0.06)] lg:hidden">
-          +{overflow}
-        </span>
+      {/* Phones, no chip showing (bands filled the cell): bottom right. */}
+      {overflow > 0 && shown === 0 && (
+        <CalendarOverflowBadge count={overflow} className="absolute bottom-0.5 right-0.5 z-[2] lg:hidden" />
       )}
     </button>
   );
@@ -446,6 +473,7 @@ function MonthPanel({
   const rows = cells.length / 7;
   const today = todayISO();
   const rowHeightPx = availableHeightPx != null ? availableHeightPx / rows : null;
+  const wide = useIsWide();
 
   // Multi-day events, laid out as bands per week row. Holidays only show on
   // in-month days, so lane room is per day of this panel.
@@ -460,12 +488,12 @@ function MonthPanel({
       const week = cells.slice(start, start + 7);
       const days = week.map((c) => c.iso);
       const capacity = week.map((c) =>
-        cellSlots(rows, c.inMonth ? getJapaneseCalendarDay(c.iso) : null, rowHeightPx),
+        cellSlots(rows, c.inMonth ? getJapaneseCalendarDay(c.iso) : null, rowHeightPx, wide),
       );
       weeks.push(layoutWeekBands(days, inputs.filter((input) => days.some(input.isVisibleOn)), capacity));
     }
     return weeks;
-  }, [cells, rows, multiDayEvents, rowHeightPx]);
+  }, [cells, rows, multiDayEvents, rowHeightPx, wide]);
 
   return (
     <div className="flex min-h-0 flex-1 min-w-0 flex-col">
@@ -532,6 +560,7 @@ function MonthPanel({
                 rowHeightPx={rowHeightPx}
                 bandLanes={week?.lanesUsed[i % 7] ?? 0}
                 hiddenBands={week?.hiddenCount[i % 7] ?? 0}
+                wide={wide}
                 onSelect={onSelect}
               />
             );

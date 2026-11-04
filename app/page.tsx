@@ -43,6 +43,7 @@ import { hasDiaryContent } from "@/lib/gyokan/journal-entry";
 import { shiftISOMonth } from "@/lib/gyokan/iso-date";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
 import { getRokuyou } from "@/lib/gyokan/rokuyou";
+import { CalendarOverflowBadge } from "@/components/calendar-overflow-badge";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
 import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
@@ -3891,9 +3892,7 @@ function MobileCalendarDayCell({
         />
       )}
       {preview.length === 0 && overflow > 0 && (
-        <span className="absolute bottom-0.5 right-0.5 rounded-sm bg-gray-800 px-0.5 text-[7px] font-semibold leading-none text-white">
-          +{overflow}
-        </span>
+        <CalendarOverflowBadge count={overflow} className="absolute bottom-0.5 right-0.5" />
       )}
       {dayInfo && (
         <span
@@ -3925,9 +3924,7 @@ function MobileCalendarDayCell({
             >
               {truncateCalendarTaskTitle(task.title)}
               {overflow > 0 && i === preview.length - 1 && (
-                <span className="absolute -bottom-px -right-px rounded-sm bg-gray-800 px-0.5 text-[7px] font-semibold leading-none text-white">
-                  +{overflow}
-                </span>
+                <CalendarOverflowBadge count={overflow} className="absolute -bottom-px -right-px" />
               )}
             </span>
             );

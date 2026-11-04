@@ -2,16 +2,18 @@
  * How many one-chip-high lanes (multi-day bands + event/task chips) a day
  * cell of the private-mode month calendar can show.
  *
- * By design a day shows up to 5 lanes in a 5-week month and 4 in a 6-week
- * month, a holiday/commemorative-day label taking one of them. But the rows
+ * By design a day shows up to 5 lanes — on PC 4 in a 6-week month — a
+ * holiday/commemorative-day label taking one of them. But the rows
  * are as tall as the screen allows, so on a short window fewer lanes really
  * fit — and a chip that doesn't fit used to be clipped silently, without
  * being counted in "+n". The capacity is therefore the design number, capped
  * by what the row's height actually holds.
  */
 
-export function designLanes(weekRows: number, hasDayLabel: boolean) {
-  return (weekRows >= 6 ? 4 : 5) - (hasDayLabel ? 1 : 0);
+export function designLanes(weekRows: number, hasDayLabel: boolean, wide = true) {
+  // Phones: 5 whatever the month — the row height alone decides (the "+n"
+  // tag lies over the last chip, so it needs no lane of its own).
+  return (wide && weekRows >= 6 ? 4 : 5) - (hasDayLabel ? 1 : 0);
 }
 
 // Cell geometry (PrivateCalendar's DayCell), in px:
@@ -32,8 +34,8 @@ export function lanesThatFit(rowHeightPx: number | null, hasDayLabel: boolean) {
   return Math.max(0, Math.floor((room + LANE_GAP) / (LANE_H + LANE_GAP)));
 }
 
-export function cellLaneCapacity(weekRows: number, hasDayLabel: boolean, rowHeightPx: number | null) {
-  return Math.min(designLanes(weekRows, hasDayLabel), lanesThatFit(rowHeightPx, hasDayLabel));
+export function cellLaneCapacity(weekRows: number, hasDayLabel: boolean, rowHeightPx: number | null, wide = true) {
+  return Math.min(designLanes(weekRows, hasDayLabel, wide), lanesThatFit(rowHeightPx, hasDayLabel));
 }
 
 /**
