@@ -5444,6 +5444,21 @@ function useIsClient() {
   );
 }
 
+// PC layout (Tailwind's lg) — where the mobile bars aren't shown.
+const WIDE_SCREEN_QUERY = "(min-width: 1024px)";
+function subscribeWideScreen(onChange: () => void) {
+  const mq = window.matchMedia(WIDE_SCREEN_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+function useIsWideScreen() {
+  return useSyncExternalStore(
+    subscribeWideScreen,
+    () => window.matchMedia(WIDE_SCREEN_QUERY).matches,
+    () => false,
+  );
+}
+
 // iOS Settings-style compact list: related rows grouped into one white
 // card, each row a single flush line. Designed to keep scaling as more
 // settings are added, without ever growing beyond one line per row.
@@ -6192,6 +6207,7 @@ function MobileBarButton({
 
 export default function Home() {
   const isClient = useIsClient();
+  const isWideScreen = useIsWideScreen();
   const router = useRouter();
   const {
     user,
@@ -6892,6 +6908,62 @@ export default function Home() {
   // cases. Private mode used to render this exact same content (to confirm
   // the shared header/footer shell held up with real data); it now has its
   // own content below instead, so this is tasks-mode-only again.
+  // The phones' settings page (the bottom bar's 設定), in place of the
+  // screen's content — the same page in both modes. On PC settings open as
+  // an overlay instead (settingsOpen).
+  const settingsPage = (
+    <AppSettingsPanel
+      userId={user.id}
+      userEmail={user.email}
+      loadError={loadError}
+      caseSaveError={caseSaveError}
+      modePreferences={modePrefs}
+      onModePreferencesChange={handleModePreferencesChange}
+      modePrefsSaveError={modePrefsSaveError}
+      appTitle={appTitle}
+      onAppTitleChange={handleAppTitleChange}
+      onOpenTheme={() => setThemePickerOpen(true)}
+      onShowCompletedTasks={() => setCompletedTasksOpen(true)}
+      onSignOut={() => void signOut()}
+    />
+  );
+
+  // One bottom-bar button, shared by tasks mode's bar and private mode's.
+  const renderMobileTab = (tab: (typeof mobileTabs)[number]) => (
+    <MobileBarButton
+      key={tab.id}
+      icon={tab.icon}
+      label={tab.label}
+      active={
+        tab.id === "memo"
+          ? memoSheetOpen
+          : // Private mode has no projects page: anything but settings is home.
+            appMode === "private" && tab.id === "home"
+            ? mobileTab !== "more"
+            : mobileTab === tab.id
+      }
+      onClick={() => {
+        if (tab.id === "projects") {
+          if (!showProjects) return;
+          setMemoSheetOpen(false);
+          setActiveProject(ALL_PROJECTS_LABEL);
+          setMobileTab("projects");
+        } else if (tab.id === "memo") {
+          setMemoSheetOpen(true);
+        } else if (tab.id === "diary") {
+          setMemoSheetOpen(false);
+          router.push("/diary");
+        } else {
+          setMemoSheetOpen(false);
+          setMobileTab(tab.id);
+          if (tab.id === "home") {
+            setCalendarPeekReset((n) => n + 1);
+          }
+        }
+      }}
+    />
+  );
+
   const homeTabContent = (
     <div className="flex flex-col">
             {showTasks && (
@@ -7227,12 +7299,18 @@ export default function Home() {
           >
 
             {appMode === "private" ? (
-              <PrivateModeSection
-                tasks={tasks}
-                onToggleTask={toggleTask}
-                viewDateISO={viewDateISO}
-                onViewDateChange={setViewDateISO}
-              />
+              // Phones: the bar's 設定 shows the settings page here, as in
+              // tasks mode. PC always shows the calendar.
+              mobileTab === "more" && !isWideScreen ? (
+                settingsPage
+              ) : (
+                <PrivateModeSection
+                  tasks={tasks}
+                  onToggleTask={toggleTask}
+                  viewDateISO={viewDateISO}
+                  onViewDateChange={setViewDateISO}
+                />
+              )
             ) : showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
@@ -7290,49 +7368,17 @@ export default function Home() {
                 </>
               )
             ) : mobileTab === "more" ? (
-              <AppSettingsPanel
-                userId={user.id}
-                userEmail={user.email}
-                loadError={loadError}
-                caseSaveError={caseSaveError}
-                modePreferences={modePrefs}
-                onModePreferencesChange={handleModePreferencesChange}
-                modePrefsSaveError={modePrefsSaveError}
-                appTitle={appTitle}
-                onAppTitleChange={handleAppTitleChange}
-                onOpenTheme={() => setThemePickerOpen(true)}
-                onShowCompletedTasks={() => setCompletedTasksOpen(true)}
-                onSignOut={() => void signOut()}
-              />
+              settingsPage
             ) : (
               homeTabContent
             )}
           </div>
 
           {appMode === "private" && (
-            // Same order as tasks mode's bar (メモ・日記・設定), and the same
-            // memo sheet. The calendar itself has no item, so nothing is lit
-            // while it's showing; メモ / 設定 light up while open.
+            // Tasks mode's bar without its projects item (ホーム・メモ・日記・
+            // 設定): same buttons, same behaviour; ホーム is the calendar.
             <MobileBarShell as="footer">
-              <MobileBarButton icon="memo" label="メモ" active={memoSheetOpen} onClick={() => setMemoSheetOpen(true)} />
-              <MobileBarButton
-                icon="diary"
-                label="日記"
-                active={false}
-                onClick={() => {
-                  setMemoSheetOpen(false);
-                  router.push("/diary");
-                }}
-              />
-              <MobileBarButton
-                icon="settings"
-                label="設定"
-                active={settingsOpen}
-                onClick={() => {
-                  setMemoSheetOpen(false);
-                  openSettings();
-                }}
-              />
+              {mobileTabs.filter((tab) => tab.id !== "projects").map(renderMobileTab)}
             </MobileBarShell>
           )}
         </main>
@@ -7383,33 +7429,7 @@ export default function Home() {
 
       {/* Mobile Tab Bar */}
       <MobileBarShell as="nav" hidden={appMode === "private"}>
-        {mobileTabs.map((tab) => (
-          <MobileBarButton
-            key={tab.id}
-            icon={tab.icon}
-            label={tab.label}
-            active={tab.id === "memo" ? memoSheetOpen : mobileTab === tab.id}
-            onClick={() => {
-              if (tab.id === "projects") {
-                if (!showProjects) return;
-                setMemoSheetOpen(false);
-                setActiveProject(ALL_PROJECTS_LABEL);
-                setMobileTab("projects");
-              } else if (tab.id === "memo") {
-                setMemoSheetOpen(true);
-              } else if (tab.id === "diary") {
-                setMemoSheetOpen(false);
-                router.push("/diary");
-              } else {
-                setMemoSheetOpen(false);
-                setMobileTab(tab.id);
-                if (tab.id === "home") {
-                  setCalendarPeekReset((n) => n + 1);
-                }
-              }
-            }}
-          />
-        ))}
+        {mobileTabs.map(renderMobileTab)}
       </MobileBarShell>
 
       <AddTaskModal
