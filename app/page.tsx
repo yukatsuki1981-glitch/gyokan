@@ -6010,18 +6010,24 @@ function AppSettingsPanel({
         </>
       )}
 
-      <SettingsCard>
-        <SettingsRow
-          label="予定の既定の色"
-          value={
-            <span
-              className="inline-block h-4 w-4 rounded-full"
-              style={{ backgroundColor: defaultEventColor }}
+      {/* Private-mode-only settings, likewise gone with the mode. */}
+      {modePreferences.showPrivateMode && (
+        <>
+          <SettingsSectionHeading>プライベートモード</SettingsSectionHeading>
+          <SettingsCard>
+            <SettingsRow
+              label="予定の既定の色"
+              value={
+                <span
+                  className="inline-block h-4 w-4 rounded-full"
+                  style={{ backgroundColor: defaultEventColor }}
+                />
+              }
+              onClick={() => setEventColorPickerOpen(true)}
             />
-          }
-          onClick={() => setEventColorPickerOpen(true)}
-        />
-      </SettingsCard>
+          </SettingsCard>
+        </>
+      )}
 
       {/* Sharing private-mode events with family (households). */}
       <SettingsCard>
