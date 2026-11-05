@@ -609,7 +609,7 @@ function calendarDaySlots(dayInfo: ReturnType<typeof getJapaneseCalendarDay>) {
   return dayInfo ? CALENDAR_TASK_PREVIEW_MAX - 1 : CALENDAR_TASK_PREVIEW_MAX;
 }
 
-const CALENDAR_TASK_CHARS = 5;
+const CALENDAR_TASK_CHARS = 6;
 
 function truncateCalendarTaskTitle(title: string, max = CALENDAR_TASK_CHARS) {
   const trimmed = title.trim();
@@ -3914,7 +3914,7 @@ function MobileCalendarDayCell({
             return (
             <span
               key={task.id}
-              className="relative truncate rounded-[2px] px-px py-[0.8px] text-[8px] leading-[10px]"
+              className="relative overflow-hidden whitespace-nowrap rounded-[2px] px-px py-[0.8px] text-[8px] leading-[10px]"
               style={
                 displayDone
                   ? { backgroundColor: "rgba(229, 231, 235, 0.9)", color: "rgb(156, 163, 175)" }
