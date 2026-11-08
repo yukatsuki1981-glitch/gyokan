@@ -58,6 +58,11 @@ export const metadata: Metadata = {
   title: "行間",
   description: "行間 — タスク・案件管理",
   manifest: "/manifest.webmanifest",
+  // App icons: PNGs in public/icons/, made from public/icons/gyokan-icon.svg.
+  icons: {
+    icon: [{ url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     title: "行間",
