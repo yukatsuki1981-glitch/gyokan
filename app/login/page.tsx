@@ -26,6 +26,7 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
@@ -285,9 +286,30 @@ function LoginForm() {
             </button>
           </div>
         )}
+        {mode === "signup" && (
+          <label className="flex min-h-11 cursor-pointer items-start gap-2 py-1 text-[12px] leading-relaxed text-gray-600">
+            <input
+              type="checkbox"
+              name="agree"
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              className={`${checkboxClass} mt-px`}
+            />
+            <span>
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-[#007AFF] underline underline-offset-2">
+                利用規約
+              </a>
+              と
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-[#007AFF] underline underline-offset-2">
+                プライバシーポリシー
+              </a>
+              に同意します
+            </span>
+          </label>
+        )}
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || (mode === "signup" && !agreedToTerms)}
           className={authPrimaryButtonClass}
         >
           {submitting
