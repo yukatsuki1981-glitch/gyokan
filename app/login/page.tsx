@@ -2,6 +2,7 @@
 
 import { AuthCard, AuthNotice, authPrimaryButtonClass, authTextLinkClass } from "@/components/auth/auth-card";
 import { EmailInput, PasswordInput } from "@/components/auth/auth-fields";
+import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 import { describeAuthError, looksLikeEmail, MIN_PASSWORD_LENGTH } from "@/lib/auth-errors";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { createClient, isSessionOnlyLogin, resetBrowserClient, setSessionOnlyLogin } from "@/lib/supabase/client";
@@ -19,7 +20,7 @@ function LoginForm() {
   const authDetail = searchParams.get("detail");
   const [checking, setChecking] = useState(true);
   const [existingSession, setExistingSession] = useState<Session | null>(null);
-  const [mode, setMode] = useState<"login" | "signup" | "confirmation-sent">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot" | "confirmation-sent">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
@@ -197,6 +198,24 @@ function LoginForm() {
     );
   }
 
+  if (mode === "forgot") {
+    return (
+      <AuthCard subtitle="パスワードの再設定">
+        <p className="mb-4 text-center text-[13px] leading-relaxed text-gray-600">
+          登録したメールアドレスを入力してください。新しいパスワードを設定するためのメールを送ります。
+        </p>
+        <ForgotPasswordForm email={email} onEmailChange={setEmail} />
+        <button
+          type="button"
+          onClick={() => switchMode("login")}
+          className={`${authTextLinkClass} mt-4 block min-h-8`}
+        >
+          ログイン画面に戻る
+        </button>
+      </AuthCard>
+    );
+  }
+
   return (
     <AuthCard subtitle="タスク・案件管理">
       {existingSession?.user && (
@@ -239,6 +258,13 @@ function LoginForm() {
               />
               ログイン状態を保持する
             </label>
+            <button
+              type="button"
+              onClick={() => switchMode("forgot")}
+              className="ml-auto min-h-11 text-[12px] text-gray-500 transition-colors hover:text-[#007AFF]"
+            >
+              パスワードを忘れた方
+            </button>
           </div>
         )}
         <button

@@ -21,3 +21,7 @@ export function getAuthRedirectOrigin() {
 export function getAuthCallbackUrl() {
   return `${getAuthRedirectOrigin()}/auth/callback`;
 }
+
+export function getPasswordResetUrl() {
+  return `${getAuthRedirectOrigin()}/auth/reset-password`;
+}
