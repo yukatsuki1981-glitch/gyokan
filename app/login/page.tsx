@@ -4,10 +4,12 @@ import { AuthCard, AuthNotice, authPrimaryButtonClass, authTextLinkClass } from 
 import { EmailInput, PasswordInput } from "@/components/auth/auth-fields";
 import { describeAuthError, looksLikeEmail, MIN_PASSWORD_LENGTH } from "@/lib/auth-errors";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
-import { createClient, resetBrowserClient } from "@/lib/supabase/client";
+import { createClient, isSessionOnlyLogin, resetBrowserClient, setSessionOnlyLogin } from "@/lib/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
+
+const checkboxClass = "h-[18px] w-[18px] shrink-0 accent-[#007AFF]";
 
 function LoginForm() {
   const router = useRouter();
@@ -20,6 +22,7 @@ function LoginForm() {
   const [mode, setMode] = useState<"login" | "signup" | "confirmation-sent">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const signingInRef = useRef(false);
@@ -118,9 +121,14 @@ function LoginForm() {
 
     setSubmitting(true);
     const supabase = createClient();
+    // The auth cookies written while signing in follow this setting, so it has
+    // to be in place first and put back if no new session comes of it.
+    const previousSessionOnly = isSessionOnlyLogin();
+    let signedIn = false;
 
     try {
       if (mode === "login") {
+        setSessionOnlyLogin(!rememberMe);
         const { data, error } = await supabase.auth.signInWithPassword({
           email: trimmedEmail,
           password,
@@ -130,10 +138,12 @@ function LoginForm() {
           setFormError("うまくいきませんでした。もう一度お試しください。");
           return;
         }
+        signedIn = true;
         redirectAfterAuth();
         return;
       }
 
+      setSessionOnlyLogin(false);
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
@@ -141,6 +151,7 @@ function LoginForm() {
       });
       if (error) throw error;
       if (data.session) {
+        signedIn = true;
         redirectAfterAuth();
         return;
       }
@@ -155,6 +166,7 @@ function LoginForm() {
     } catch (error) {
       setFormError(describeAuthError(error).message);
     } finally {
+      if (!signedIn) setSessionOnlyLogin(previousSessionOnly);
       setSubmitting(false);
     }
   };
@@ -215,6 +227,20 @@ function LoginForm() {
           autoComplete={mode === "login" ? "current-password" : "new-password"}
           placeholder={mode === "signup" ? `${MIN_PASSWORD_LENGTH}文字以上` : undefined}
         />
+        {mode === "login" && (
+          <div className="flex flex-wrap items-center justify-between gap-x-3">
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[12px] text-gray-600">
+              <input
+                type="checkbox"
+                name="remember"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className={checkboxClass}
+              />
+              ログイン状態を保持する
+            </label>
+          </div>
+        )}
         <button
           type="submit"
           disabled={submitting}

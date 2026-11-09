@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_ONLY_COOKIE } from "@/lib/supabase/session-only";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Logins through this route (Google, email confirmation) are always kept.
+    response.cookies.delete(SESSION_ONLY_COOKIE);
     response.headers.set("Cache-Control", "private, no-store");
     return response;
   } catch (err) {
