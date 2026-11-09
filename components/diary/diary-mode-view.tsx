@@ -8,6 +8,8 @@ import {
   type JournalEntry,
 } from "@/lib/gyokan/journal-entry";
 import type { AppDailyDiary } from "@/lib/gyokan/types";
+import { diarySearchEntries } from "@/lib/gyokan/search";
+import { JournalSearchButton, JournalSearchPanel } from "@/components/search/journal-search";
 import { JournalEditorSheet } from "./journal-editor-sheet";
 import {
   JournalDotIndicator,
@@ -32,6 +34,8 @@ export function DiaryModeView({
   const [editorDate, setEditorDate] = useState<string | null>(null);
   const [pendingFocusDate, setPendingFocusDate] = useState<string | null>(null);
   const [isWide, setIsWide] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchEntries = useMemo(() => diarySearchEntries(diaries), [diaries]);
 
   const pageStep = isWide ? 2 : 1;
 
@@ -121,7 +125,24 @@ export function DiaryModeView({
         >
           日記
         </span>
+        <span className="ml-auto flex items-center">
+          <JournalSearchButton
+            open={searchOpen}
+            onToggle={() => setSearchOpen((v) => !v)}
+            label="日記を検索"
+          />
+        </span>
       </nav>
+
+      <JournalSearchPanel
+        open={searchOpen}
+        entries={searchEntries}
+        placeholder="日記をキーワードで検索"
+        onSelect={(date) => {
+          setPendingFocusDate(date);
+          setSearchOpen(false);
+        }}
+      />
 
       <div className="flex flex-1 flex-col">
         {filledDates.length === 0 ? (

@@ -18,8 +18,9 @@ export function getAuthRedirectOrigin() {
   return window.location.origin;
 }
 
-export function getAuthCallbackUrl() {
-  return `${getAuthRedirectOrigin()}/auth/callback`;
+export function getAuthCallbackUrl(next = "/") {
+  const callback = `${getAuthRedirectOrigin()}/auth/callback`;
+  return next === "/" ? callback : `${callback}?next=${encodeURIComponent(next)}`;
 }
 
 export function getPasswordResetUrl() {

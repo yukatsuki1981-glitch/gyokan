@@ -25,7 +25,7 @@ export function JournalSpread({ children }: { children: React.ReactNode }) {
   );
 }
 
-function JournalPageDateHeader({
+export function JournalPageDateHeader({
   date,
   weather,
 }: {
@@ -225,12 +225,15 @@ export function JournalMobilePager({
   onIndexChange,
   diaries,
   onEdit,
+  renderPage,
 }: {
   dates: string[];
   activeIndex: number;
   onIndexChange: (index: number) => void;
-  diaries: AppDailyDiary[];
-  onEdit: (date: string) => void;
+  diaries?: AppDailyDiary[];
+  onEdit?: (date: string) => void;
+  /** Draws a page other than a diary page (the memo view); `onCornerNext` turns to the next one. */
+  renderPage?: (date: string, onCornerNext: (() => void) | undefined) => React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -351,13 +354,17 @@ export function JournalMobilePager({
             className="journal-mobile-pager-slide"
             style={{ width: `${pct}%` }}
           >
-            <JournalPage
-              date={date}
-              diaries={diaries}
-              side="single"
-              onCornerNext={index < dates.length - 1 ? () => onIndexChange(index + 1) : undefined}
-              onEdit={() => onEdit(date)}
-            />
+            {renderPage ? (
+              renderPage(date, index < dates.length - 1 ? () => onIndexChange(index + 1) : undefined)
+            ) : (
+              <JournalPage
+                date={date}
+                diaries={diaries ?? []}
+                side="single"
+                onCornerNext={index < dates.length - 1 ? () => onIndexChange(index + 1) : undefined}
+                onEdit={onEdit ? () => onEdit(date) : undefined}
+              />
+            )}
           </div>
         ))}
       </div>

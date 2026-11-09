@@ -14,9 +14,20 @@ import { Suspense, useEffect, useRef, useState } from "react";
 
 const checkboxClass = "h-[18px] w-[18px] shrink-0 accent-[#007AFF]";
 
+/**
+ * Where to go after signing in: "?next=" when it is a path inside this app
+ * (e.g. /invite/<token>), otherwise the home screen. Anything that could leave
+ * the site ("//host", "/\host", full URLs) falls back to "/".
+ */
+function safeNextPath(next: string | null): string {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/";
+  return next;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get("next"));
   const authError = searchParams.get("error") === "auth";
   const authReason = searchParams.get("reason");
   const authDetail = searchParams.get("detail");
@@ -68,7 +79,7 @@ function LoginForm() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (signingInRef.current && session?.user) {
-        window.location.href = "/";
+        window.location.href = nextPath;
         return;
       }
       setExistingSession(session);
@@ -80,7 +91,7 @@ function LoginForm() {
       window.clearTimeout(fallback);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [nextPath]);
 
   const handleSignOut = async () => {
     setSubmitting(true);
@@ -98,7 +109,7 @@ function LoginForm() {
 
   const redirectAfterAuth = () => {
     signingInRef.current = true;
-    window.location.href = "/";
+    window.location.href = nextPath;
   };
 
   const switchMode = (nextMode: typeof mode) => {
@@ -158,7 +169,7 @@ function LoginForm() {
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
-        options: { emailRedirectTo: getAuthCallbackUrl() },
+        options: { emailRedirectTo: getAuthCallbackUrl(nextPath) },
       });
       if (error) throw error;
       if (data.session) {
@@ -200,7 +211,7 @@ function LoginForm() {
           <span className="break-all font-medium text-gray-900">{email}</span>
           {" "}宛にメールを送りました。メール内のリンクから登録を完了してください。
         </p>
-        <ResendConfirmationButton email={email} />
+        <ResendConfirmationButton email={email} next={nextPath} />
         <button
           type="button"
           onClick={() => switchMode("login")}
@@ -252,7 +263,7 @@ function LoginForm() {
       {formError && <AuthNotice tone="error">{formError}</AuthNotice>}
       {unconfirmedEmail && (
         <div className="mb-4">
-          <ResendConfirmationButton email={unconfirmedEmail} />
+          <ResendConfirmationButton email={unconfirmedEmail} next={nextPath} />
         </div>
       )}
       <form onSubmit={handleEmailAuth} noValidate className="mb-4 space-y-3">

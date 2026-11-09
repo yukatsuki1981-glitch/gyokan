@@ -10,7 +10,7 @@ export function confirmationCooldownKey(email: string) {
   return `confirm:${email.toLowerCase()}`;
 }
 
-export function ResendConfirmationButton({ email }: { email: string }) {
+export function ResendConfirmationButton({ email, next }: { email: string; next: string }) {
   const { remaining, start, cancel } = useCooldown(confirmationCooldownKey(email));
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -23,7 +23,7 @@ export function ResendConfirmationButton({ email }: { email: string }) {
       const { error } = await createClient().auth.resend({
         type: "signup",
         email,
-        options: { emailRedirectTo: getAuthCallbackUrl() },
+        options: { emailRedirectTo: getAuthCallbackUrl(next) },
       });
       if (error) throw error;
       setResult({ ok: true, message: "確認メールをもう一度送りました。" });

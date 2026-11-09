@@ -18,7 +18,15 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { AppEvent, AppTask } from "@/lib/gyokan/types";
+import type { AppEvent, AppTask, EventVisibility } from "@/lib/gyokan/types";
+import type { EventHistoryEntry } from "@/lib/gyokan/repository";
+import {
+  addedByLabel,
+  editorLabel,
+  formatHistoryTime,
+  historyEntryLabel,
+  type EventSharing,
+} from "@/lib/gyokan/event-sharing";
 import {
   combineLocalDateAndTime,
   eventCoversDate,
@@ -226,11 +234,57 @@ function ColorSwatchPicker({
 
 type View = "list" | "add" | "edit";
 
+export type EventFormValues = {
+  title: string;
+  startTime: string;
+  endTime?: string | null;
+  memo?: string;
+  color?: string | null;
+  /** Left out when the 自分だけ/共有 switch isn't offered on an edit (keeps the saved value). */
+  visibility?: EventVisibility;
+};
+
+/** 共有 / 自分だけ, styled like the 時間指定 / 終日 tabs. */
+function VisibilitySwitch({
+  value,
+  onChange,
+}: {
+  value: EventVisibility;
+  onChange: (value: EventVisibility) => void;
+}) {
+  const options: { value: EventVisibility; label: string }[] = [
+    { value: "shared", label: "共有" },
+    { value: "only_me", label: "自分だけ" },
+  ];
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[11px] font-medium text-gray-400">家族との共有</span>
+      <div role="radiogroup" aria-label="家族との共有" className="flex rounded-xl bg-black/[0.05] p-0.5">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            onClick={() => onChange(option.value)}
+            className={`flex-1 rounded-[10px] py-1.5 text-[13px] font-medium transition-colors ${
+              value === option.value ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function DayEventPopup({
   dateISO,
   dateLabel,
   dayEvents,
   dayTasks,
+  sharing,
   onToggleTask,
   onAddEvent,
   onUpdateEvent,
@@ -242,18 +296,10 @@ export function DayEventPopup({
   dateLabel: string;
   dayEvents: AppEvent[];
   dayTasks: AppTask[];
+  sharing: EventSharing;
   onToggleTask: (id: string) => void;
-  onAddEvent: (data: {
-    title: string;
-    startTime: string;
-    endTime?: string | null;
-    memo?: string;
-    color?: string | null;
-  }) => void;
-  onUpdateEvent: (
-    id: string,
-    patch: { title: string; startTime: string; endTime?: string | null; memo?: string; color?: string | null },
-  ) => void;
+  onAddEvent: (data: EventFormValues) => void;
+  onUpdateEvent: (id: string, patch: EventFormValues) => void;
   onDeleteEvent: (id: string) => void;
   onReplaceEvents: (updater: (prev: AppEvent[]) => AppEvent[]) => void;
   onClose: () => void;
@@ -271,6 +317,11 @@ export function DayEventPopup({
   const [useRange, setUseRange] = useState(false);
   const [memo, setMemo] = useState("");
   const [color, setColor] = useState(defaultEventColor);
+  // New events start as 共有 (also the value when the switch isn't shown).
+  const [visibility, setVisibility] = useState<EventVisibility>("shared");
+  // Edit history of the event being edited (loaded when it is opened).
+  const [history, setHistory] = useState<{ eventId: string; entries: EventHistoryEntry[] } | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // The sheet is sized from the *visual* viewport, not 95vh of the layout
   // viewport. With the keyboard open the layout viewport doesn't shrink, so
@@ -512,7 +563,9 @@ export function DayEventPopup({
     setUseRange(false);
     setMemo("");
     setColor(defaultEventColor);
+    setVisibility("shared");
     setEditingId(null);
+    setHistoryOpen(false);
   };
 
   const openAdd = () => {
@@ -532,8 +585,14 @@ export function DayEventPopup({
     setUseRange(span.end > span.start);
     setMemo(fields.memo);
     setColor(fields.color || DEFAULT_EVENT_COLOR);
+    setVisibility(event.visibility ?? "shared");
     setEditingId(event.id);
+    setHistoryOpen(false);
     setView("edit");
+    sharing.loadHistory(event.id).then(
+      (entries) => setHistory({ eventId: event.id, entries }),
+      (err) => console.error("Failed to load event history", err),
+    );
   };
 
   const handleSave = () => {
@@ -541,7 +600,9 @@ export function DayEventPopup({
     if (!trimmed) return;
     // A period whose end isn't after its start is just a single day.
     const lastDay = useRange && endDate > startDate ? endDate : null;
-    const payload = allDay
+    // Without the switch on screen: new events are 共有, edits keep theirs.
+    const visibilityValue = showVisibilitySwitch ? visibility : view === "add" ? "shared" : undefined;
+    const payload: EventFormValues = allDay
       ? {
           title: trimmed,
           startTime: combineLocalDateAndTime(startDate, "00:00"),
@@ -549,6 +610,7 @@ export function DayEventPopup({
           endTime: lastDay ? combineLocalDateAndTime(lastDay, "00:00") : null,
           memo: memo.trim() || undefined,
           color,
+          visibility: visibilityValue,
         }
       : {
           title: trimmed,
@@ -560,6 +622,7 @@ export function DayEventPopup({
               : null,
           memo: memo.trim() || undefined,
           color,
+          visibility: visibilityValue,
         };
     if (view === "edit" && editingId) {
       onUpdateEvent(editingId, payload);
@@ -574,6 +637,20 @@ export function DayEventPopup({
     onDeleteEvent(editingId);
     onClose();
   };
+
+  const editingEvent = editingId ? dayEvents.find((e) => e.id === editingId) ?? null : null;
+  const editingFamilyEvent =
+    !!editingEvent?.userId && !!sharing.myUserId && editingEvent.userId !== sharing.myUserId;
+  // Offered only when someone shares my calendar, and only on my own events
+  // (only the creator may change it; the DB keeps it on anyone else's save).
+  const showVisibilitySwitch =
+    sharing.hasFamily && (view === "add" || (view === "edit" && !!editingEvent && !editingFamilyEvent));
+  const addedBy = editingEvent ? addedByLabel(sharing, editingEvent.userId) : null;
+  const historyEntries =
+    view === "edit" && editingId && history?.eventId === editingId && (sharing.hasFamily || editingFamilyEvent)
+      ? history.entries
+      : [];
+  const lastEdit = historyEntries[0] ?? null;
 
   const sortedEvents = sortEventsByOrder(dayEvents);
   const sortedTasks = sortTasksByOrder(dayTasks);
@@ -683,9 +760,46 @@ export function DayEventPopup({
             </>
           ) : (
             <div className="flex flex-col gap-3">
-              <p className="text-[11px] font-medium text-gray-400">
-                {view === "edit" ? "予定を編集" : "予定を追加"}
-              </p>
+              <div className="flex flex-col gap-1">
+                <p className="text-[11px] font-medium text-gray-400">
+                  {view === "edit" ? "予定を編集" : "予定を追加"}
+                </p>
+                {view === "edit" && editingEvent && (editingEvent.visibility === "only_me" || addedBy || lastEdit) && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-400">
+                    {editingEvent.visibility === "only_me" && (
+                      <span className="rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                        自分だけ
+                      </span>
+                    )}
+                    {addedBy && <span>{addedBy}</span>}
+                    {lastEdit && (
+                      <span className="flex items-center gap-1">
+                        <span>
+                          最終編集:{editorLabel(sharing, lastEdit.changedBy)} {formatHistoryTime(lastEdit.changedAt)}
+                        </span>
+                        <button
+                          type="button"
+                          aria-expanded={historyOpen}
+                          onClick={() => setHistoryOpen((open) => !open)}
+                          className="rounded-md px-1 text-[var(--gyokan-accent2)] hover:bg-black/[0.04]"
+                        >
+                          {historyOpen ? "履歴を閉じる" : "履歴"}
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                )}
+                {historyOpen && historyEntries.length > 0 && (
+                  <ul className="flex flex-col divide-y divide-black/[0.04] rounded-xl border border-black/[0.06] bg-white px-3 text-[12px]">
+                    {historyEntries.map((entry) => (
+                      <li key={entry.id} className="flex gap-2 py-1.5">
+                        <span className="shrink-0 tabular-nums text-gray-400">{formatHistoryTime(entry.changedAt)}</span>
+                        <span className="min-w-0 text-gray-700">{historyEntryLabel(sharing, entry)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-medium text-gray-400">タイトル</span>
                 <input
@@ -806,6 +920,7 @@ export function DayEventPopup({
                 <span className="text-[11px] font-medium text-gray-400">ラベルの色</span>
                 <ColorSwatchPicker value={color} onChange={setColor} />
               </div>
+              {showVisibilitySwitch && <VisibilitySwitch value={visibility} onChange={setVisibility} />}
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-medium text-gray-400">メモ（任意）</span>
                 <textarea

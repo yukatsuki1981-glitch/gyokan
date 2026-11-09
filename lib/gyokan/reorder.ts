@@ -82,3 +82,15 @@ export function insertIntoVisible<T extends Identified>(
   nextVisible.splice(Math.max(0, Math.min(index, visible.length)), 0, transform(moving));
   return applyVisibleOrder(all, visible, nextVisible);
 }
+
+/**
+ * The items of `next` whose sortOrder differs from the same item in `prev` (or
+ * that are new) — what a reorder actually has to save.
+ */
+export function itemsWithChangedSortOrder<T extends Identified & { sortOrder: number }>(
+  prev: T[],
+  next: T[],
+): T[] {
+  const before = new Map(prev.map((item) => [item.id, item.sortOrder]));
+  return next.filter((item) => before.get(item.id) !== item.sortOrder);
+}

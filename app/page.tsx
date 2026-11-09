@@ -31,6 +31,8 @@ import {
   resolveTaskCompletedAt,
 } from "@/lib/gyokan/task-completed-at";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
+import { useHousehold } from "@/lib/gyokan/use-household";
+import { DISPLAY_NAME_MAX, memberLabel, readPendingInvite } from "@/lib/gyokan/household";
 import {
   DEFAULT_MODE_PREFERENCES,
   isModeShown,
@@ -38,7 +40,10 @@ import {
 } from "@/lib/gyokan/mode-preferences";
 import type { AppModeKey, ModePreferences } from "@/lib/gyokan/types";
 import { hasDiaryContent } from "@/lib/gyokan/journal-entry";
+import { shiftISOMonth } from "@/lib/gyokan/iso-date";
 import { getJapaneseCalendarDay } from "@/lib/gyokan/japanese-calendar-days";
+import { getRokuyou } from "@/lib/gyokan/rokuyou";
+import { CalendarOverflowBadge } from "@/components/calendar-overflow-badge";
 import { useGyokanTheme, GyokanThemeProvider } from "@/components/gyokan-theme-provider";
 import { ThemePickerModal } from "@/components/theme-picker";
 import { ThemeDecorationLayer } from "@/components/theme-decoration-layer";
@@ -99,6 +104,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   createContext,
+  Fragment,
   useCallback,
   useContext,
   useEffect,
@@ -603,7 +609,7 @@ function calendarDaySlots(dayInfo: ReturnType<typeof getJapaneseCalendarDay>) {
   return dayInfo ? CALENDAR_TASK_PREVIEW_MAX - 1 : CALENDAR_TASK_PREVIEW_MAX;
 }
 
-const CALENDAR_TASK_CHARS = 5;
+const CALENDAR_TASK_CHARS = 6;
 
 function truncateCalendarTaskTitle(title: string, max = CALENDAR_TASK_CHARS) {
   const trimmed = title.trim();
@@ -3618,10 +3624,16 @@ function CalendarWidget({
   tasks,
   selectedDate,
   onSelectDate,
+  onShiftMonth,
 }: {
   tasks: Task[];
   selectedDate: string;
   onSelectDate: (iso: string) => void;
+  /**
+   * When given (private mode), ＜/＞ move the selected date by a month
+   * instead of only paging this widget, so the month calendar follows.
+   */
+  onShiftMonth?: (delta: number) => void;
 }) {
   const selected = new Date(selectedDate + "T12:00:00");
   const [viewDate, setViewDate] = useState(() => selected);
@@ -3636,8 +3648,8 @@ function CalendarWidget({
 
   const tasksByDate = useMemo(() => buildSingleDayTasksByDate(tasks), [tasks]);
 
-  const goPrev = () => setViewDate(new Date(year, month - 1, 1));
-  const goNext = () => setViewDate(new Date(year, month + 1, 1));
+  const goPrev = () => (onShiftMonth ? onShiftMonth(-1) : setViewDate(new Date(year, month - 1, 1)));
+  const goNext = () => (onShiftMonth ? onShiftMonth(1) : setViewDate(new Date(year, month + 1, 1)));
   const goToday = () => {
     const today = todayISO();
     onSelectDate(today);
@@ -3798,6 +3810,7 @@ function MobileCalendarDayCell({
   const isToday = cellIso === todayISO();
   const dayOfWeek = cellIndex % 7;
   const dayInfo = cell.inMonth ? getJapaneseCalendarDay(cellIso) : null;
+  const rokuyou = cell.inMonth ? getRokuyou(cellIso) : null;
   // Band lanes, the holiday line and single-day chips share the same slots.
   const slots = calendarDaySlots(dayInfo);
   const preview = dayTasks.slice(0, Math.max(0, slots - bandLanes));
@@ -3810,10 +3823,18 @@ function MobileCalendarDayCell({
       className={`relative flex flex-col border-b border-r border-black/[0.04] p-0.5 text-left transition-colors ${mobileCalendarDayCellClass(dayOfWeek, cell.inMonth, isSelected, isToday)}`}
       style={{ height: CALENDAR_CELL_ROW_H, touchAction: "pan-x" }}
     >
-      <span
-        className={`shrink-0 px-0.5 text-[11px] font-semibold leading-none ${mobileCalendarDayNumberClass(dayOfWeek, cell.inMonth, isSelected, isToday, dayInfo)}`}
-      >
-        {cell.day}
+      {/* The date row: the 7px 六曜 (as in the private calendar) sits beside
+          the 11px date and never makes the row taller, so the bands and
+          chips below keep their room. It truncates before overflowing. */}
+      <span className="flex shrink-0 items-center gap-0.5">
+        <span
+          className={`shrink-0 px-0.5 text-[11px] font-semibold leading-none ${mobileCalendarDayNumberClass(dayOfWeek, cell.inMonth, isSelected, isToday, dayInfo)}`}
+        >
+          {cell.day}
+        </span>
+        {rokuyou && (
+          <span className="min-w-0 truncate text-[7px] font-medium leading-none text-gray-400">{rokuyou}</span>
+        )}
       </span>
       {bands.map((band) => {
         const span = band.endCol - band.startCol + 1;
@@ -3850,9 +3871,7 @@ function MobileCalendarDayCell({
         />
       )}
       {preview.length === 0 && overflow > 0 && (
-        <span className="absolute bottom-0.5 right-0.5 rounded-sm bg-gray-800 px-0.5 text-[7px] font-semibold leading-none text-white">
-          +{overflow}
-        </span>
+        <CalendarOverflowBadge count={overflow} className="absolute bottom-0.5 right-0.5" />
       )}
       {dayInfo && (
         <span
@@ -3874,7 +3893,7 @@ function MobileCalendarDayCell({
             return (
             <span
               key={task.id}
-              className="relative truncate rounded-[2px] px-px py-[0.8px] text-[8px] leading-[10px]"
+              className="relative overflow-hidden whitespace-nowrap rounded-[2px] px-px py-[0.8px] text-[8px] leading-[10px]"
               style={
                 displayDone
                   ? { backgroundColor: "rgba(229, 231, 235, 0.9)", color: "rgb(156, 163, 175)" }
@@ -3884,9 +3903,7 @@ function MobileCalendarDayCell({
             >
               {truncateCalendarTaskTitle(task.title)}
               {overflow > 0 && i === preview.length - 1 && (
-                <span className="absolute -bottom-px -right-px rounded-sm bg-gray-800 px-0.5 text-[7px] font-semibold leading-none text-white">
-                  +{overflow}
-                </span>
+                <CalendarOverflowBadge count={overflow} className="absolute -bottom-px -right-px" />
               )}
             </span>
             );
@@ -4630,6 +4647,16 @@ function DailyMemoBoard({
         body={dayMemo?.body ?? ""}
         onSave={onSave}
       />
+      <Link
+        href={
+          dayMemo?.body.trim()
+            ? `/memo?date=${encodeURIComponent(writeDate)}`
+            : "/memo"
+        }
+        className="mt-3 block text-[12px] font-medium text-[var(--gyokan-accent2)] hover:text-[var(--gyokan-accent)]"
+      >
+        全てのメモを見る
+      </Link>
     </div>
   );
 }
@@ -5406,11 +5433,33 @@ function useIsClient() {
   );
 }
 
+// PC layout (Tailwind's lg) — where the mobile bars aren't shown.
+const WIDE_SCREEN_QUERY = "(min-width: 1024px)";
+function subscribeWideScreen(onChange: () => void) {
+  const mq = window.matchMedia(WIDE_SCREEN_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+function useIsWideScreen() {
+  return useSyncExternalStore(
+    subscribeWideScreen,
+    () => window.matchMedia(WIDE_SCREEN_QUERY).matches,
+    () => false,
+  );
+}
+
 // iOS Settings-style compact list: related rows grouped into one white
 // card, each row a single flush line. Designed to keep scaling as more
 // settings are added, without ever growing beyond one line per row.
 function SettingsCard({ children }: { children: ReactNode }) {
   return <Card className="overflow-hidden py-0">{children}</Card>;
+}
+
+// A quiet heading over a card whose settings belong to one mode only — the
+// same 12px grey as the notes under cards, set 8px above its card (mb-2
+// replaces the list's space-y gap below it).
+function SettingsSectionHeading({ children }: { children: ReactNode }) {
+  return <h3 className="mb-2 px-1 text-[12px] font-medium text-gray-400">{children}</h3>;
 }
 
 function SettingsDivider() {
@@ -5676,7 +5725,7 @@ function LogoutConfirmSheet({
 }
 
 type SettingsEditField = {
-  key: "appTitle" | "projectLabel" | "caseLabel";
+  key: "appTitle" | "projectLabel" | "caseLabel" | "displayName";
   title: string;
   value: string;
   maxLength: number;
@@ -5718,7 +5767,59 @@ function StartupModePickerSheet({
   );
 }
 
+function HouseholdInviteSheet({
+  open,
+  onClose,
+  link,
+}: {
+  open: boolean;
+  onClose: () => void;
+  link: string | null;
+}) {
+  // Reset per link: the caller keys this sheet by the link it shows.
+  const [copied, setCopied] = useState(false);
+  return (
+    <DetailOverlay open={open} onClose={onClose} title="家族を招待">
+      <p className="mb-3 text-[13px] text-gray-500">
+        このリンクを家族に送ってください。家族がリンクを開いてログイン(または新規登録)し、参加を確認すると、プライベートモードの予定の共有が始まります。リンクは1回だけ使えます。
+      </p>
+      <input
+        type="text"
+        readOnly
+        value={link ?? "リンクを作成しています…"}
+        onFocus={(e) => e.currentTarget.select()}
+        aria-label="招待リンク"
+        className="w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[12px] text-[var(--gyokan-text)] outline-none"
+      />
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50"
+        >
+          閉じる
+        </button>
+        <button
+          type="button"
+          disabled={!link}
+          onClick={() => {
+            if (!link) return;
+            void navigator.clipboard?.writeText(link).then(
+              () => setCopied(true),
+              () => setCopied(false),
+            );
+          }}
+          className="flex-1 rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[13px] font-medium text-white hover:bg-blue-600 disabled:opacity-50"
+        >
+          {copied ? "コピーしました" : "リンクをコピー"}
+        </button>
+      </div>
+    </DetailOverlay>
+  );
+}
+
 function AppSettingsPanel({
+  userId,
   userEmail,
   loadError,
   caseSaveError,
@@ -5742,7 +5843,18 @@ function AppSettingsPanel({
   onOpenTheme: () => void;
   onShowCompletedTasks: () => void;
   onSignOut: () => void;
+  userId: string;
 }) {
+  const household = useHousehold(userId);
+  const [inviteSheetOpen, setInviteSheetOpen] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const openInvite = async () => {
+    setInviteLink(null);
+    const link = await household.createInviteLink();
+    if (!link) return;
+    setInviteLink(link);
+    setInviteSheetOpen(true);
+  };
   const {
     showProjects,
     showCases,
@@ -5786,6 +5898,7 @@ function AppSettingsPanel({
     if (!editField) return;
     if (editField.key === "appTitle") onAppTitleChange(value);
     else if (editField.key === "projectLabel") setProjectLabel(value);
+    else if (editField.key === "displayName") void household.saveDisplayName(value);
     else setCaseLabel(value);
   };
 
@@ -5854,58 +5967,110 @@ function AppSettingsPanel({
         </p>
       )}
 
-      <SettingsCard>
-        <SettingsToggleRow label={`${projectLabel}の表示`} checked={showProjects} onChange={setShowProjects} />
-        <SettingsDivider />
-        <SettingsRow
-          label={`${projectLabel}の名称`}
-          value={projectLabel}
-          onClick={() =>
-            setEditField({
-              key: "projectLabel",
-              title: `${projectLabel}の名称`,
-              value: projectLabel,
-              maxLength: 16,
-              placeholder: DEFAULT_PROJECT_LABEL,
-            })
-          }
-        />
-        <SettingsDivider />
-        <SettingsToggleRow label={`${caseLabel}の表示`} checked={showCases} onChange={setShowCases} />
-        <SettingsDivider />
-        <SettingsRow
-          label={`${caseLabel}の名称`}
-          value={caseLabel}
-          onClick={() =>
-            setEditField({
-              key: "caseLabel",
-              title: `${caseLabel}の名称`,
-              value: caseLabel,
-              maxLength: 16,
-              placeholder: DEFAULT_CASE_LABEL,
-            })
-          }
-        />
-        <SettingsDivider />
-        <SettingsRow
-          label={`進行中の${caseLabel}の列数`}
-          value={`${homeCaseColumns}列`}
-          onClick={() => setColumnsPickerOpen(true)}
-        />
-      </SettingsCard>
-
-      <SettingsCard>
-        <SettingsRow
-          label="予定の既定の色"
-          value={
-            <span
-              className="inline-block h-4 w-4 rounded-full"
-              style={{ backgroundColor: defaultEventColor }}
+      {/* Tasks-mode-only settings: gone with the mode itself (the left
+          menu's project list is hidden then too, see Home). */}
+      {modePreferences.showWorkMode && (
+        <>
+          <SettingsSectionHeading>タスク管理モード</SettingsSectionHeading>
+          <SettingsCard>
+            <SettingsToggleRow label={`${projectLabel}の表示`} checked={showProjects} onChange={setShowProjects} />
+            <SettingsDivider />
+            <SettingsRow
+              label={`${projectLabel}の名称`}
+              value={projectLabel}
+              onClick={() =>
+                setEditField({
+                  key: "projectLabel",
+                  title: `${projectLabel}の名称`,
+                  value: projectLabel,
+                  maxLength: 16,
+                  placeholder: DEFAULT_PROJECT_LABEL,
+                })
+              }
             />
+            <SettingsDivider />
+            <SettingsToggleRow label={`${caseLabel}の表示`} checked={showCases} onChange={setShowCases} />
+            <SettingsDivider />
+            <SettingsRow
+              label={`${caseLabel}の名称`}
+              value={caseLabel}
+              onClick={() =>
+                setEditField({
+                  key: "caseLabel",
+                  title: `${caseLabel}の名称`,
+                  value: caseLabel,
+                  maxLength: 16,
+                  placeholder: DEFAULT_CASE_LABEL,
+                })
+              }
+            />
+            <SettingsDivider />
+            <SettingsRow
+              label={`進行中の${caseLabel}の列数`}
+              value={`${homeCaseColumns}列`}
+              onClick={() => setColumnsPickerOpen(true)}
+            />
+          </SettingsCard>
+        </>
+      )}
+
+      {/* Private-mode-only settings, likewise gone with the mode. */}
+      {modePreferences.showPrivateMode && (
+        <>
+          <SettingsSectionHeading>プライベートモード</SettingsSectionHeading>
+          <SettingsCard>
+            <SettingsRow
+              label="予定の既定の色"
+              value={
+                <span
+                  className="inline-block h-4 w-4 rounded-full"
+                  style={{ backgroundColor: defaultEventColor }}
+                />
+              }
+              onClick={() => setEventColorPickerOpen(true)}
+            />
+          </SettingsCard>
+        </>
+      )}
+
+      {/* Sharing private-mode events with family (households). */}
+      <SettingsCard>
+        <SettingsRow
+          label="表示名"
+          value={household.myDisplayName ?? "未設定"}
+          onClick={() =>
+            setEditField({
+              key: "displayName",
+              title: "表示名",
+              value: household.myDisplayName ?? "",
+              maxLength: DISPLAY_NAME_MAX,
+              placeholder: "家族に表示される名前",
+            })
           }
-          onClick={() => setEventColorPickerOpen(true)}
+        />
+        {household.members
+          .filter((member) => !member.isMe)
+          .map((member) => (
+            <Fragment key={member.userId}>
+              <SettingsDivider />
+              <SettingsRow label="共有している家族" value={memberLabel(member)} />
+            </Fragment>
+          ))}
+        <SettingsDivider />
+        <SettingsRow
+          label="家族を招待"
+          value={household.isFull ? `上限(${household.memberLimit}人)に達しています` : undefined}
+          onClick={household.isFull || household.loading ? undefined : () => void openInvite()}
         />
       </SettingsCard>
+      <p className="-mt-2 px-1 text-[12px] text-gray-400">
+        プライベートモードの予定を、家族と一緒に見て、追加・編集できます。タスクは共有されません。
+      </p>
+      {household.error && (
+        <p role="alert" className="-mt-2 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
+          {household.error}
+        </p>
+      )}
 
       <SettingsCard>
         <SettingsRow label="通知" value="オン" />
@@ -5931,6 +6096,12 @@ function AppSettingsPanel({
         onClose={() => setEditField(null)}
       />
 
+      <HouseholdInviteSheet
+        key={inviteLink ?? "none"}
+        open={inviteSheetOpen}
+        onClose={() => setInviteSheetOpen(false)}
+        link={inviteLink}
+      />
       <ColumnsPickerSheet
         open={columnsPickerOpen}
         onClose={() => setColumnsPickerOpen(false)}
@@ -6025,6 +6196,7 @@ function MobileBarButton({
 
 export default function Home() {
   const isClient = useIsClient();
+  const isWideScreen = useIsWideScreen();
   const router = useRouter();
   const {
     user,
@@ -6102,8 +6274,28 @@ export default function Home() {
   useEffect(() => {
     if (!modePreferences || startupModeAppliedRef.current) return;
     startupModeAppliedRef.current = true;
-    setAppMode(startupMode(modePreferences) === "private" ? "private" : "tasks");
+    // "?mode=private" (e.g. right after joining a family's shared calendar)
+    // opens private mode once, when it's shown; the parameter is then dropped.
+    const url = new URL(window.location.href);
+    const requested = url.searchParams.get("mode");
+    if (requested) {
+      url.searchParams.delete("mode");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+    const opening =
+      requested === "private" && isModeShown(modePreferences, "private")
+        ? "private"
+        : startupMode(modePreferences);
+    setAppMode(opening === "private" ? "private" : "tasks");
   }, [modePreferences]);
+
+  // An invite opened while signed out is picked up again here once signed
+  // in (Google sign-in and sign-up confirmation e-mails both land on "/").
+  useEffect(() => {
+    if (!user || !dataReady) return;
+    const pendingInvite = readPendingInvite();
+    if (pendingInvite) router.replace(`/invite/${pendingInvite}`);
+  }, [user, dataReady, router]);
 
   const handleModePreferencesChange = useCallback(
     (next: ModePreferences) => {
@@ -6135,6 +6327,10 @@ export default function Home() {
   );
 
   const { showProjects, showCases, projectLabel, caseLabel, homeCaseColumns } = displaySettings;
+  // The left menu (PC) and the header show projects in both modes — but not
+  // when tasks mode is hidden: projects belong to tasks mode, and with the
+  // mode gone their settings are hidden too (AppSettingsPanel).
+  const menuShowsProjects = showProjects && modePrefs.showWorkMode;
 
   const handleAppTitleChange = useCallback(
     (title: string) => {
@@ -6701,6 +6897,62 @@ export default function Home() {
   // cases. Private mode used to render this exact same content (to confirm
   // the shared header/footer shell held up with real data); it now has its
   // own content below instead, so this is tasks-mode-only again.
+  // The phones' settings page (the bottom bar's 設定), in place of the
+  // screen's content — the same page in both modes. On PC settings open as
+  // an overlay instead (settingsOpen).
+  const settingsPage = (
+    <AppSettingsPanel
+      userId={user.id}
+      userEmail={user.email}
+      loadError={loadError}
+      caseSaveError={caseSaveError}
+      modePreferences={modePrefs}
+      onModePreferencesChange={handleModePreferencesChange}
+      modePrefsSaveError={modePrefsSaveError}
+      appTitle={appTitle}
+      onAppTitleChange={handleAppTitleChange}
+      onOpenTheme={() => setThemePickerOpen(true)}
+      onShowCompletedTasks={() => setCompletedTasksOpen(true)}
+      onSignOut={() => void signOut()}
+    />
+  );
+
+  // One bottom-bar button, shared by tasks mode's bar and private mode's.
+  const renderMobileTab = (tab: (typeof mobileTabs)[number]) => (
+    <MobileBarButton
+      key={tab.id}
+      icon={tab.icon}
+      label={tab.label}
+      active={
+        tab.id === "memo"
+          ? memoSheetOpen
+          : // Private mode has no projects page: anything but settings is home.
+            appMode === "private" && tab.id === "home"
+            ? mobileTab !== "more"
+            : mobileTab === tab.id
+      }
+      onClick={() => {
+        if (tab.id === "projects") {
+          if (!showProjects) return;
+          setMemoSheetOpen(false);
+          setActiveProject(ALL_PROJECTS_LABEL);
+          setMobileTab("projects");
+        } else if (tab.id === "memo") {
+          setMemoSheetOpen(true);
+        } else if (tab.id === "diary") {
+          setMemoSheetOpen(false);
+          router.push("/diary");
+        } else {
+          setMemoSheetOpen(false);
+          setMobileTab(tab.id);
+          if (tab.id === "home") {
+            setCalendarPeekReset((n) => n + 1);
+          }
+        }
+      }}
+    />
+  );
+
   const homeTabContent = (
     <div className="flex flex-col">
             {showTasks && (
@@ -6871,7 +7123,7 @@ export default function Home() {
         }`}
       >
         {/* Left Sidebar */}
-        <aside className={`gyokan-panel hidden shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col lg:h-full ${showProjects ? "w-[168px]" : "w-[132px]"}`}>
+        <aside className={`gyokan-panel hidden shrink-0 flex-col border-r px-3 py-5 backdrop-blur-xl lg:flex lg:flex-col lg:h-full ${menuShowsProjects ? "w-[168px]" : "w-[132px]"}`}>
           <div className="mb-6 flex items-center justify-between gap-2 px-1">
             <button
               type="button"
@@ -6889,7 +7141,7 @@ export default function Home() {
             <RefreshButton iconClassName="h-4 w-4" className="shrink-0 p-1.5 hover:bg-black/[0.04]" onRefresh={handleRefresh} />
           </div>
 
-          {showProjects && (
+          {menuShowsProjects && (
           <DesktopProjectSidebar
             projects={projects}
             activeProject={activeProject}
@@ -6901,7 +7153,7 @@ export default function Home() {
           />
           )}
 
-          {showProjects && (
+          {menuShowsProjects && (
           <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-lg border border-black/[0.05] px-2 py-1.5 text-[11px] text-gray-500 transition-all duration-200 hover:bg-black/[0.02]">
             <Icon name="folder" className="h-3.5 w-3.5 text-gray-400" />
             完了済み
@@ -6937,11 +7189,18 @@ export default function Home() {
         <main
           className={`min-w-0 flex-1 lg:h-full lg:overflow-y-auto lg:pb-0 ${
             appMode === "private"
-              ? "max-lg:flex max-lg:h-full max-lg:min-h-0 max-lg:flex-col max-lg:overflow-hidden max-lg:pb-0"
+              ? // Private mode is a column flex at every width, so the calendar
+                // below gets a definite height to fill. On PC <main> used to be
+                // a plain scroll box: the calendar's container was only as tall
+                // as its content, and the calendar — which measures that once
+                // and fixes its row heights — froze at the height of whatever
+                // events were there on first render (an account with few events
+                // got rows too short to show more than part of one chip).
+                "flex h-full min-h-0 flex-col overflow-hidden pb-0"
               : "pb-[var(--gyokan-mobile-bar-h)]"
           }`}
         >
-          <div className="mx-auto w-full max-lg:shrink-0 max-w-3xl px-2.5 pt-2 sm:px-4 lg:max-w-none lg:px-5 lg:pt-2">
+          <div className="mx-auto w-full shrink-0 max-w-3xl px-2.5 pt-2 sm:px-4 lg:max-w-none lg:px-5 lg:pt-2">
             {loadError && (
               <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
                 データの読み込みに問題があります: {loadError}
@@ -6973,32 +7232,38 @@ export default function Home() {
                 )}
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
                   <span className="shrink-0 text-[14px] font-medium text-gray-900">{viewDateLabel}</span>
-                  {!isAllProjects && showProjects && <ProjectColorHeaderLink project={activeProject} />}
+                  {!isAllProjects && menuShowsProjects && <ProjectColorHeaderLink project={activeProject} />}
                 </div>
                 <RefreshButton className="shrink-0" onRefresh={handleRefresh} />
               </div>
 
               <div className="hidden flex-wrap items-center gap-3 lg:flex">
                 <div className="flex items-center gap-1">
+                  {/* Tasks mode steps a day; private mode steps a month (the
+                      month calendar, mini calendar and this label follow). */}
                   <button
                     type="button"
-                    onClick={() => setViewDateISO((d) => shiftISODate(d, -1))}
+                    onClick={() =>
+                      setViewDateISO((d) => (appMode === "private" ? shiftISOMonth(d, -1) : shiftISODate(d, -1)))
+                    }
                     className="rounded-lg p-1.5 text-gray-500 hover:bg-white"
-                    aria-label="前の日"
+                    aria-label={appMode === "private" ? "前の月" : "前の日"}
                   >
                     <Icon name="chevronLeft" className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => setViewDateISO((d) => shiftISODate(d, 1))}
+                    onClick={() =>
+                      setViewDateISO((d) => (appMode === "private" ? shiftISOMonth(d, 1) : shiftISODate(d, 1)))
+                    }
                     className="rounded-lg p-1.5 text-gray-500 hover:bg-white"
-                    aria-label="次の日"
+                    aria-label={appMode === "private" ? "次の月" : "次の日"}
                   >
                     <Icon name="chevronRight" className="h-4 w-4" />
                   </button>
                 </div>
                 <span className="text-[15px] font-semibold text-gray-900">{viewDateLabel}</span>
-                {!isAllProjects && showProjects && <ProjectColorHeaderLink project={activeProject} />}
+                {!isAllProjects && menuShowsProjects && <ProjectColorHeaderLink project={activeProject} />}
                 <RefreshButton iconClassName="h-4 w-4" className="ml-auto rounded-lg p-1.5" onRefresh={handleRefresh} />
               </div>
             </header>
@@ -7015,13 +7280,26 @@ export default function Home() {
                   // without an explicit width the calendar strip inside
                   // rendered far wider than the screen and got clipped after
                   // ~3.5 columns.
-                  "max-lg:w-full max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-y-auto max-lg:pb-2"
+                  // On PC this is the column's flex-1 too, giving the calendar
+                  // the rest of the screen's height.
+                  "max-lg:w-full max-lg:min-h-0 max-lg:flex-1 max-lg:overflow-y-auto max-lg:pb-2 lg:flex lg:min-h-0 lg:w-full lg:flex-1 lg:flex-col"
                 : ""
             }`}
           >
 
             {appMode === "private" ? (
-              <PrivateModeSection tasks={tasks} onToggleTask={toggleTask} />
+              // Phones: the bar's 設定 shows the settings page here, as in
+              // tasks mode. PC always shows the calendar.
+              mobileTab === "more" && !isWideScreen ? (
+                settingsPage
+              ) : (
+                <PrivateModeSection
+                  tasks={tasks}
+                  onToggleTask={toggleTask}
+                  viewDateISO={viewDateISO}
+                  onViewDateChange={setViewDateISO}
+                />
+              )
             ) : showProjects && mobileTab === "projects" ? (
               isAllProjects ? (
                 <MobileProjectList
@@ -7079,28 +7357,17 @@ export default function Home() {
                 </>
               )
             ) : mobileTab === "more" ? (
-              <AppSettingsPanel
-                userEmail={user.email}
-                loadError={loadError}
-                caseSaveError={caseSaveError}
-                modePreferences={modePrefs}
-                onModePreferencesChange={handleModePreferencesChange}
-                modePrefsSaveError={modePrefsSaveError}
-                appTitle={appTitle}
-                onAppTitleChange={handleAppTitleChange}
-                onOpenTheme={() => setThemePickerOpen(true)}
-                onShowCompletedTasks={() => setCompletedTasksOpen(true)}
-                onSignOut={() => void signOut()}
-              />
+              settingsPage
             ) : (
               homeTabContent
             )}
           </div>
 
           {appMode === "private" && (
+            // Tasks mode's bar without its projects item (ホーム・メモ・日記・
+            // 設定): same buttons, same behaviour; ホーム is the calendar.
             <MobileBarShell as="footer">
-              <MobileBarButton icon="diary" label="日記" active={false} onClick={() => router.push("/diary")} />
-              <MobileBarButton icon="settings" label="設定" active={false} onClick={openSettings} />
+              {mobileTabs.filter((tab) => tab.id !== "projects").map(renderMobileTab)}
             </MobileBarShell>
           )}
         </main>
@@ -7113,6 +7380,12 @@ export default function Home() {
               tasks={tasks}
               selectedDate={viewDateISO}
               onSelectDate={goToDate}
+              // Private mode: the header label, this widget and the month
+              // calendar always show one month, so paging here moves the
+              // selected date (same day, or the month's last day).
+              onShiftMonth={
+                appMode === "private" ? (delta) => setViewDateISO((d) => shiftISOMonth(d, delta)) : undefined
+              }
             />
           </Card>
           <Card className="mb-4 p-4">
@@ -7144,33 +7417,7 @@ export default function Home() {
 
       {/* Mobile Tab Bar */}
       <MobileBarShell as="nav" hidden={appMode === "private"}>
-        {mobileTabs.map((tab) => (
-          <MobileBarButton
-            key={tab.id}
-            icon={tab.icon}
-            label={tab.label}
-            active={tab.id === "memo" ? memoSheetOpen : mobileTab === tab.id}
-            onClick={() => {
-              if (tab.id === "projects") {
-                if (!showProjects) return;
-                setMemoSheetOpen(false);
-                setActiveProject(ALL_PROJECTS_LABEL);
-                setMobileTab("projects");
-              } else if (tab.id === "memo") {
-                setMemoSheetOpen(true);
-              } else if (tab.id === "diary") {
-                setMemoSheetOpen(false);
-                router.push("/diary");
-              } else {
-                setMemoSheetOpen(false);
-                setMobileTab(tab.id);
-                if (tab.id === "home") {
-                  setCalendarPeekReset((n) => n + 1);
-                }
-              }
-            }}
-          />
-        ))}
+        {mobileTabs.map(renderMobileTab)}
       </MobileBarShell>
 
       <AddTaskModal
@@ -7230,6 +7477,7 @@ export default function Home() {
 
       <DetailOverlay open={settingsOpen} onClose={() => setSettingsOpen(false)} title="設定">
         <AppSettingsPanel
+          userId={user.id}
           userEmail={user.email}
           loadError={loadError}
           caseSaveError={caseSaveError}

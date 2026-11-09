@@ -33,13 +33,23 @@ export default function TermsPage() {
         />
       </LegalSection>
 
-      <LegalSection heading="第3条（AI による文章生成）">
+      <LegalSection heading="第3条（家族共有）">
+        <LegalList
+          items={[
+            "利用者は、招待リンクを使って、家族と予定を共有できます。共有された予定は、共有相手も見る、編集する、削除することができます。",
+            "招待リンクは、共有したい相手にだけ渡してください。",
+            "共有相手が行った操作について、運営者は責任を負いません。共有したくない予定は「自分だけ」に設定してください。",
+          ]}
+        />
+      </LegalSection>
+
+      <LegalSection heading="第4条（AI による文章生成）">
         <p>
           本サービスには、タスク名をもとに AI が短い文章を生成する機能があります。生成された文章は内容の正確さを保証するものではありません。
         </p>
       </LegalSection>
 
-      <LegalSection heading="第4条（禁止事項）">
+      <LegalSection heading="第5条（禁止事項）">
         <p>利用者は、次の行為をしてはなりません。</p>
         <LegalList
           items={[
@@ -53,43 +63,43 @@ export default function TermsPage() {
         />
       </LegalSection>
 
-      <LegalSection heading="第5条（サービスの変更・停止）">
+      <LegalSection heading="第6条（サービスの変更・停止）">
         <p>
           運営者は、保守や障害対応などのため、本サービスの全部または一部を変更・中断・終了することがあります。本サービスを終了する場合は、可能な範囲で事前にお知らせします。
         </p>
       </LegalSection>
 
-      <LegalSection heading="第6条（有料サービス）">
+      <LegalSection heading="第7条（有料サービス）">
         <p>
           【有料プランを提供する場合に、料金、支払方法、解約、返金の条件を記載します。提供しない場合は、この条を削除します。】
         </p>
       </LegalSection>
 
-      <LegalSection heading="第7条（利用の停止）">
+      <LegalSection heading="第8条（利用の停止）">
         <p>
           利用者が本規約に違反した場合、運営者は、そのアカウントの利用を停止または削除することがあります。
         </p>
       </LegalSection>
 
-      <LegalSection heading="第8条（退会）">
+      <LegalSection heading="第9条（退会）">
         <p>
           利用者は、下記のお問い合わせ先に連絡することで、いつでも退会し、アカウントとデータの削除を求めることができます。
         </p>
       </LegalSection>
 
-      <LegalSection heading="第9条（免責）">
+      <LegalSection heading="第10条（免責）">
         <p>
           運営者は、本サービスに不具合がないことや、特定の目的に適合することを保証するものではありません。本サービスの利用により利用者に損害が生じた場合、運営者は、運営者に故意または重大な過失がある場合を除き、責任を負わないものとします。ただし、消費者契約法などの法令により責任が認められる場合は、この限りではありません。
         </p>
       </LegalSection>
 
-      <LegalSection heading="第10条（本規約の変更）">
+      <LegalSection heading="第11条（本規約の変更）">
         <p>
           運営者は、必要に応じて本規約を変更できます。重要な変更を行う場合は、本サービス上でお知らせします。
         </p>
       </LegalSection>
 
-      <LegalSection heading="第11条（準拠法・管轄）">
+      <LegalSection heading="第12条（準拠法・管轄）">
         <p>
           本規約は日本法に基づいて解釈されます。本サービスに関する紛争については、【管轄裁判所】を第一審の管轄裁判所とします。
         </p>

@@ -8,11 +8,13 @@ import { DiaryModeView } from "@/components/diary/diary-mode-view";
 import { DiaryMobileNav } from "@/components/diary/diary-mobile-nav";
 import { isGyokanPaidMember } from "@/lib/gyokan/membership";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
+import { toISODate } from "@/lib/gyokan/iso-date";
 
 function DiaryPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const dateParam = searchParams.get("date") ?? undefined;
+  // A malformed ?date= (e.g. "abc") is ignored: the page opens on the latest day.
+  const dateParam = toISODate(searchParams.get("date")) ?? undefined;
 
   const {
     user,
