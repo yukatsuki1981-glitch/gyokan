@@ -1,8 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getPasswordResetUrl } from "@/lib/auth-redirect";
 
+let resetClient: SupabaseClient | null = null;
+
 /**
- * Sends the reset email through a throwaway client using the implicit flow.
+ * Sends the reset email through a separate, session-less client using the implicit flow.
  *
  * The app's normal client is PKCE, which only works when the link is opened in
  * the browser that requested it (the verifier lives in a cookie there). Reset
@@ -11,7 +13,7 @@ import { getPasswordResetUrl } from "@/lib/auth-redirect";
  * /auth/reset-password reads into the normal cookie session.
  */
 export function sendPasswordResetEmail(email: string) {
-  const client = createClient(
+  resetClient ??= createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -24,7 +26,7 @@ export function sendPasswordResetEmail(email: string) {
       },
     },
   );
-  return client.auth.resetPasswordForEmail(email, {
+  return resetClient.auth.resetPasswordForEmail(email, {
     redirectTo: getPasswordResetUrl(),
   });
 }
