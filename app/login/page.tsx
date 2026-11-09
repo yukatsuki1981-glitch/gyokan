@@ -3,6 +3,8 @@
 import { AuthCard, AuthNotice, authPrimaryButtonClass, authTextLinkClass } from "@/components/auth/auth-card";
 import { EmailInput, PasswordInput } from "@/components/auth/auth-fields";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
+import { confirmationCooldownKey, ResendConfirmationButton } from "@/components/auth/resend-confirmation-button";
+import { startCooldown } from "@/components/auth/use-cooldown";
 import { describeAuthError, looksLikeEmail, MIN_PASSWORD_LENGTH } from "@/lib/auth-errors";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
 import { createClient, isSessionOnlyLogin, resetBrowserClient, setSessionOnlyLogin } from "@/lib/supabase/client";
@@ -26,6 +28,7 @@ function LoginForm() {
   const [rememberMe, setRememberMe] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const signingInRef = useRef(false);
 
   const errorMessage = (() => {
@@ -100,6 +103,12 @@ function LoginForm() {
   const switchMode = (nextMode: typeof mode) => {
     setMode(nextMode);
     setFormError(null);
+    setUnconfirmedEmail(null);
+  };
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    setUnconfirmedEmail(null);
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -162,10 +171,13 @@ function LoginForm() {
         setFormError("このメールアドレスはすでに登録されています。ログインをお試しください。");
         return;
       }
+      startCooldown(confirmationCooldownKey(trimmedEmail));
       setEmail(trimmedEmail);
       switchMode("confirmation-sent");
     } catch (error) {
-      setFormError(describeAuthError(error).message);
+      const { kind, message } = describeAuthError(error);
+      setFormError(message);
+      if (kind === "email_not_confirmed") setUnconfirmedEmail(trimmedEmail);
     } finally {
       if (!signedIn) setSessionOnlyLogin(previousSessionOnly);
       setSubmitting(false);
@@ -187,6 +199,7 @@ function LoginForm() {
           <span className="break-all font-medium text-gray-900">{email}</span>
           {" "}宛にメールを送りました。メール内のリンクから登録を完了してください。
         </p>
+        <ResendConfirmationButton email={email} />
         <button
           type="button"
           onClick={() => switchMode("login")}
@@ -204,7 +217,7 @@ function LoginForm() {
         <p className="mb-4 text-center text-[13px] leading-relaxed text-gray-600">
           登録したメールアドレスを入力してください。新しいパスワードを設定するためのメールを送ります。
         </p>
-        <ForgotPasswordForm email={email} onEmailChange={setEmail} />
+        <ForgotPasswordForm email={email} onEmailChange={handleEmailChange} />
         <button
           type="button"
           onClick={() => switchMode("login")}
@@ -236,8 +249,13 @@ function LoginForm() {
       )}
       {errorMessage && <AuthNotice tone="error">{errorMessage}</AuthNotice>}
       {formError && <AuthNotice tone="error">{formError}</AuthNotice>}
+      {unconfirmedEmail && (
+        <div className="mb-4">
+          <ResendConfirmationButton email={unconfirmedEmail} />
+        </div>
+      )}
       <form onSubmit={handleEmailAuth} noValidate className="mb-4 space-y-3">
-        <EmailInput value={email} onChange={setEmail} />
+        <EmailInput value={email} onChange={handleEmailChange} />
         <PasswordInput
           label="パスワード"
           name="password"
