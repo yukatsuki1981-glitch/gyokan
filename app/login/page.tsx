@@ -2,7 +2,7 @@
 
 import { createClient, resetBrowserClient } from "@/lib/supabase/client";
 import type { Session } from "@supabase/supabase-js";
-import { getAuthCallbackUrl } from "@/lib/auth-redirect";
+import { describeAuthError } from "@/lib/auth-errors";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
@@ -24,17 +24,23 @@ function LoginForm() {
 
   const errorMessage = (() => {
     if (!authError) return null;
-    if (authReason === "google_exchange") {
-      return "Google の Client ID / Secret が Supabase と一致していません。Supabase の Google 設定を確認し、Google Cloud で新しいシークレットを発行して貼り直してください。";
+    if (authReason === "link_expired") {
+      return "メールのリンクの有効期限が切れているか、すでに使われています。ログインすると、確認メールを送り直せます。";
+    }
+    if (authReason === "link_other_browser") {
+      return "登録したときと別のブラウザでリンクを開いたため、自動でログインできませんでした。メールとパスワードでログインしてください。";
     }
     if (authReason === "session") {
-      return "セッションの作成に失敗しました。ページを再読み込みして再度お試しください。";
+      return "ログインを完了できませんでした。もう一度お試しください。";
     }
-    if (authReason === "no_code") {
-      return "認証コードがありません。もう一度 Google ログインを試してください。";
-    }
-    return "ログインに失敗しました。Supabase の Redirect URLs と Google 設定を確認してください。";
+    return "Google でログインできませんでした。もう一度お試しください。";
   })();
+
+  useEffect(() => {
+    if (authError) {
+      console.error("[login] auth error:", authReason, authDetail ?? "");
+    }
+  }, [authError, authReason, authDetail]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -105,16 +111,9 @@ function LoginForm() {
           email: trimmedEmail,
           password,
         });
-        if (error) {
-          setFormError(
-            error.message.includes("Invalid login credentials")
-              ? "メールアドレスまたはパスワードが正しくありません。"
-              : error.message,
-          );
-          return;
-        }
+        if (error) throw error;
         if (!data.session) {
-          setFormError("ログインに成功しましたが、セッションを取得できませんでした。もう一度お試しください。");
+          setFormError("うまくいきませんでした。もう一度お試しください。");
           return;
         }
         redirectAfterAuth();
@@ -125,10 +124,7 @@ function LoginForm() {
         email: trimmedEmail,
         password,
       });
-      if (error) {
-        setFormError(error.message);
-        return;
-      }
+      if (error) throw error;
       if (data.session) {
         redirectAfterAuth();
         return;
@@ -136,6 +132,8 @@ function LoginForm() {
       setFormMessage(
         "確認メールを送信しました。メール内のリンクから登録を完了してください。",
       );
+    } catch (error) {
+      setFormError(describeAuthError(error).message);
     } finally {
       setSubmitting(false);
     }
@@ -178,21 +176,8 @@ function LoginForm() {
           </div>
         )}
         {errorMessage && (
-          <div className="mb-4 space-y-2 rounded-xl bg-red-50 px-3 py-2 text-[13px] text-red-600">
-            <p className="text-center font-medium">ログインに失敗しました</p>
-            <p className="text-center text-[12px] leading-relaxed text-red-500/90">
-              {errorMessage}
-            </p>
-            <p className="text-center text-[12px] leading-relaxed text-red-500/90">
-              Redirect URL:
-              <br />
-              <code className="text-[11px]">{getAuthCallbackUrl()}</code>
-            </p>
-            {authDetail && (
-              <p className="text-center text-[11px] leading-relaxed text-red-400/90">
-                詳細: {decodeURIComponent(authDetail)}
-              </p>
-            )}
+          <div className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-center text-[13px] leading-relaxed text-red-600">
+            {errorMessage}
           </div>
         )}
         {formError && (

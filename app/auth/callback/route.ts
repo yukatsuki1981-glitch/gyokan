@@ -33,9 +33,12 @@ export async function GET(request: NextRequest) {
   const oauthDescription = searchParams.get("error_description");
   if (oauthError) {
     console.error("[auth/callback] OAuth error:", oauthError, oauthDescription);
-    const reason = oauthDescription?.includes("exchange")
-      ? "google_exchange"
-      : "oauth";
+    const reason =
+      searchParams.get("error_code") === "otp_expired"
+        ? "link_expired"
+        : oauthDescription?.includes("exchange")
+          ? "google_exchange"
+          : "oauth";
     return NextResponse.redirect(`${origin}/login?error=auth&reason=${reason}`);
   }
 
@@ -72,6 +75,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error("[auth/callback] session exchange failed:", error.message);
+      // The confirmation link was opened in a different browser from the one
+      // that signed up, so the address is verified but we can't log in here.
+      if (error.code === "pkce_code_verifier_not_found") {
+        return NextResponse.redirect(
+          `${origin}/login?error=auth&reason=link_other_browser`,
+        );
+      }
       const detail = encodeURIComponent(error.message);
       return NextResponse.redirect(
         `${origin}/login?error=auth&reason=session&detail=${detail}`,
