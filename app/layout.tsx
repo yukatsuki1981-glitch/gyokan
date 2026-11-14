@@ -60,8 +60,8 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   // App icons: PNGs in public/icons/, made from public/icons/gyokan-icon.svg.
   icons: {
-    icon: [{ url: "/icons/icon-512.png?v=2", sizes: "512x512", type: "image/png" }],
-    apple: [{ url: "/icons/apple-touch-icon.png?v=2", sizes: "180x180", type: "image/png" }],
+    icon: [{ url: "/icons/icon-512.png?v=3", sizes: "512x512", type: "image/png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png?v=3", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,
