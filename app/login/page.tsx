@@ -1,10 +1,18 @@
 "use client";
 
-import { createClient, resetBrowserClient } from "@/lib/supabase/client";
-import type { Session } from "@supabase/supabase-js";
+import { AuthCard, AuthNotice, authPrimaryButtonClass, authTextLinkClass } from "@/components/auth/auth-card";
+import { EmailInput, PasswordInput } from "@/components/auth/auth-fields";
+import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
+import { confirmationCooldownKey, ResendConfirmationButton } from "@/components/auth/resend-confirmation-button";
+import { startCooldown } from "@/components/auth/use-cooldown";
+import { describeAuthError, looksLikeEmail, MIN_PASSWORD_LENGTH } from "@/lib/auth-errors";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
+import { createClient, isSessionOnlyLogin, resetBrowserClient, setSessionOnlyLogin } from "@/lib/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
+
+const checkboxClass = "h-[18px] w-[18px] shrink-0 accent-[#007AFF]";
 
 /**
  * Where to go after signing in: "?next=" when it is a path inside this app
@@ -25,27 +33,35 @@ function LoginForm() {
   const authDetail = searchParams.get("detail");
   const [checking, setChecking] = useState(true);
   const [existingSession, setExistingSession] = useState<Session | null>(null);
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup" | "forgot" | "confirmation-sent">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   const signingInRef = useRef(false);
 
   const errorMessage = (() => {
     if (!authError) return null;
-    if (authReason === "google_exchange") {
-      return "Google の Client ID / Secret が Supabase と一致していません。Supabase の Google 設定を確認し、Google Cloud で新しいシークレットを発行して貼り直してください。";
+    if (authReason === "link_expired") {
+      return "メールのリンクの有効期限が切れているか、すでに使われています。ログインすると、確認メールを送り直せます。";
+    }
+    if (authReason === "link_other_browser") {
+      return "登録したときと別のブラウザでリンクを開いたため、自動でログインできませんでした。メールとパスワードでログインしてください。";
     }
     if (authReason === "session") {
-      return "セッションの作成に失敗しました。ページを再読み込みして再度お試しください。";
+      return "ログインを完了できませんでした。もう一度お試しください。";
     }
-    if (authReason === "no_code") {
-      return "認証コードがありません。もう一度 Google ログインを試してください。";
-    }
-    return "ログインに失敗しました。Supabase の Redirect URLs と Google 設定を確認してください。";
+    return "Google でログインできませんでした。もう一度お試しください。";
   })();
+
+  useEffect(() => {
+    if (authError) {
+      console.error("[login] auth error:", authReason, authDetail ?? "");
+    }
+  }, [authError, authReason, authDetail]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -96,58 +112,86 @@ function LoginForm() {
     window.location.href = nextPath;
   };
 
+  const switchMode = (nextMode: typeof mode) => {
+    setMode(nextMode);
+    setFormError(null);
+    setUnconfirmedEmail(null);
+  };
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    setUnconfirmedEmail(null);
+  };
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    setFormMessage(null);
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
       setFormError("メールアドレスとパスワードを入力してください。");
       return;
     }
+    if (!looksLikeEmail(trimmedEmail)) {
+      setFormError("メールアドレスの形式をご確認ください。");
+      return;
+    }
+    if (mode === "signup" && password.length < MIN_PASSWORD_LENGTH) {
+      setFormError(`パスワードが短すぎます。${MIN_PASSWORD_LENGTH}文字以上で入力してください。`);
+      return;
+    }
 
     setSubmitting(true);
     const supabase = createClient();
+    // The auth cookies written while signing in follow this setting, so it has
+    // to be in place first and put back if no new session comes of it.
+    const previousSessionOnly = isSessionOnlyLogin();
+    let signedIn = false;
 
     try {
       if (mode === "login") {
+        setSessionOnlyLogin(!rememberMe);
         const { data, error } = await supabase.auth.signInWithPassword({
           email: trimmedEmail,
           password,
         });
-        if (error) {
-          setFormError(
-            error.message.includes("Invalid login credentials")
-              ? "メールアドレスまたはパスワードが正しくありません。"
-              : error.message,
-          );
-          return;
-        }
+        if (error) throw error;
         if (!data.session) {
-          setFormError("ログインに成功しましたが、セッションを取得できませんでした。もう一度お試しください。");
+          setFormError("うまくいきませんでした。もう一度お試しください。");
           return;
         }
+        signedIn = true;
         redirectAfterAuth();
         return;
       }
 
+      setSessionOnlyLogin(false);
       const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
+        options: { emailRedirectTo: getAuthCallbackUrl(nextPath) },
       });
-      if (error) {
-        setFormError(error.message);
-        return;
-      }
+      if (error) throw error;
       if (data.session) {
+        signedIn = true;
         redirectAfterAuth();
         return;
       }
-      setFormMessage(
-        "確認メールを送信しました。メール内のリンクから登録を完了してください。",
-      );
+      // With email confirmation on, Supabase reports a registered address as
+      // success with an empty identities list instead of returning an error.
+      if (data.user?.identities?.length === 0) {
+        setFormError("このメールアドレスはすでに登録されています。ログインをお試しください。");
+        return;
+      }
+      startCooldown(confirmationCooldownKey(trimmedEmail));
+      setEmail(trimmedEmail);
+      switchMode("confirmation-sent");
+    } catch (error) {
+      const { kind, message } = describeAuthError(error);
+      setFormError(message);
+      if (kind === "email_not_confirmed") setUnconfirmedEmail(trimmedEmail);
     } finally {
+      if (!signedIn) setSessionOnlyLogin(previousSessionOnly);
       setSubmitting(false);
     }
   };
@@ -160,134 +204,159 @@ function LoginForm() {
     );
   }
 
+  if (mode === "confirmation-sent") {
+    return (
+      <AuthCard subtitle="確認メールを送りました">
+        <p className="mb-4 text-center text-[13px] leading-relaxed text-gray-600">
+          <span className="break-all font-medium text-gray-900">{email}</span>
+          {" "}宛にメールを送りました。メール内のリンクから登録を完了してください。
+        </p>
+        <ResendConfirmationButton email={email} next={nextPath} />
+        <button
+          type="button"
+          onClick={() => switchMode("login")}
+          className={`${authTextLinkClass} mt-4 block min-h-8`}
+        >
+          ログイン画面に戻る
+        </button>
+      </AuthCard>
+    );
+  }
+
+  if (mode === "forgot") {
+    return (
+      <AuthCard subtitle="パスワードの再設定">
+        <p className="mb-4 text-center text-[13px] leading-relaxed text-gray-600">
+          登録したメールアドレスを入力してください。新しいパスワードを設定するためのメールを送ります。
+        </p>
+        <ForgotPasswordForm email={email} onEmailChange={handleEmailChange} />
+        <button
+          type="button"
+          onClick={() => switchMode("login")}
+          className={`${authTextLinkClass} mt-4 block min-h-8`}
+        >
+          ログイン画面に戻る
+        </button>
+      </AuthCard>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#fafafa] px-6">
-      <div className="w-full max-w-sm rounded-2xl border border-black/[0.06] bg-white p-8 shadow-sm">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-[#007AFF] text-lg font-bold text-white shadow-sm">
-            行
-          </div>
-          <h1 className="text-xl font-semibold text-gray-900">行間</h1>
-          <p className="mt-2 text-[13px] leading-relaxed text-gray-500">
-            タスク・案件管理
+    <AuthCard subtitle="タスク・案件管理">
+      {existingSession?.user && (
+        <div className="mb-4 space-y-3 rounded-xl bg-amber-50 px-3 py-3 text-[13px] text-amber-900">
+          <p className="leading-relaxed">
+            <span className="font-medium">{existingSession.user.email}</span>
+            {" "}でログイン中です。別のアカウント（メールログインなど）を使う場合は、一度ログアウトしてください。
           </p>
+          <button
+            type="button"
+            onClick={() => void handleSignOut()}
+            disabled={submitting}
+            className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-[13px] font-medium text-amber-900 transition-colors hover:bg-amber-100/60 disabled:opacity-60"
+          >
+            ログアウトして別アカウントでログイン
+          </button>
         </div>
-        {existingSession?.user && (
-          <div className="mb-4 space-y-3 rounded-xl bg-amber-50 px-3 py-3 text-[13px] text-amber-900">
-            <p className="leading-relaxed">
-              <span className="font-medium">{existingSession.user.email}</span>
-              {" "}でログイン中です。別のアカウント（メールログインなど）を使う場合は、一度ログアウトしてください。
-            </p>
+      )}
+      {errorMessage && <AuthNotice tone="error">{errorMessage}</AuthNotice>}
+      {formError && <AuthNotice tone="error">{formError}</AuthNotice>}
+      {unconfirmedEmail && (
+        <div className="mb-4">
+          <ResendConfirmationButton email={unconfirmedEmail} next={nextPath} />
+        </div>
+      )}
+      <form onSubmit={handleEmailAuth} noValidate className="mb-4 space-y-3">
+        <EmailInput value={email} onChange={handleEmailChange} />
+        <PasswordInput
+          label="パスワード"
+          name="password"
+          value={password}
+          onChange={setPassword}
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
+          placeholder={mode === "signup" ? `${MIN_PASSWORD_LENGTH}文字以上` : undefined}
+        />
+        {mode === "login" && (
+          <div className="flex flex-wrap items-center justify-between gap-x-3">
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[12px] text-gray-600">
+              <input
+                type="checkbox"
+                name="remember"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className={checkboxClass}
+              />
+              ログイン状態を保持する
+            </label>
             <button
               type="button"
-              onClick={() => void handleSignOut()}
-              disabled={submitting}
-              className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-[13px] font-medium text-amber-900 transition-colors hover:bg-amber-100/60 disabled:opacity-60"
+              onClick={() => switchMode("forgot")}
+              className="ml-auto min-h-11 text-[12px] text-gray-500 transition-colors hover:text-[#007AFF]"
             >
-              ログアウトして別アカウントでログイン
+              パスワードを忘れた方
             </button>
           </div>
         )}
-        {errorMessage && (
-          <div className="mb-4 space-y-2 rounded-xl bg-red-50 px-3 py-2 text-[13px] text-red-600">
-            <p className="text-center font-medium">ログインに失敗しました</p>
-            <p className="text-center text-[12px] leading-relaxed text-red-500/90">
-              {errorMessage}
-            </p>
-            <p className="text-center text-[12px] leading-relaxed text-red-500/90">
-              Redirect URL:
-              <br />
-              <code className="text-[11px]">{getAuthCallbackUrl()}</code>
-            </p>
-            {authDetail && (
-              <p className="text-center text-[11px] leading-relaxed text-red-400/90">
-                詳細: {decodeURIComponent(authDetail)}
-              </p>
-            )}
-          </div>
-        )}
-        {formError && (
-          <div className="mb-4 rounded-xl bg-red-50 px-3 py-2 text-center text-[13px] text-red-600">
-            {formError}
-          </div>
-        )}
-        {formMessage && (
-          <div className="mb-4 rounded-xl bg-emerald-50 px-3 py-2 text-center text-[13px] leading-relaxed text-emerald-700">
-            {formMessage}
-          </div>
-        )}
-        <form onSubmit={handleEmailAuth} className="mb-4 space-y-3">
-          <label className="block">
-            <span className="mb-1.5 block text-[12px] font-medium text-gray-500">
-              メールアドレス
-            </span>
+        {mode === "signup" && (
+          <label className="flex min-h-11 cursor-pointer items-start gap-2 py-1 text-[12px] leading-relaxed text-gray-600">
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              className="w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[14px] outline-none transition-colors focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
-              placeholder="name@example.com"
+              type="checkbox"
+              name="agree"
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              className={`${checkboxClass} mt-px`}
             />
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[12px] font-medium text-gray-500">
-              パスワード
+            <span>
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-[#007AFF] underline underline-offset-2">
+                利用規約
+              </a>
+              と
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-[#007AFF] underline underline-offset-2">
+                プライバシーポリシー
+              </a>
+              に同意します
             </span>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              className="w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[14px] outline-none transition-colors focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
-              placeholder="8文字以上"
-              minLength={8}
-            />
           </label>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-xl bg-[#007AFF] px-4 py-3 text-[14px] font-medium text-white transition-colors hover:bg-[#0066d6] disabled:opacity-60"
-          >
-            {submitting
-              ? "処理中…"
-              : mode === "login"
-                ? "メールでログイン"
-                : "アカウントを作成"}
-          </button>
-        </form>
+        )}
         <button
-          type="button"
-          onClick={() => {
-            setMode((m) => (m === "login" ? "signup" : "login"));
-            setFormError(null);
-            setFormMessage(null);
-          }}
-          className="mb-4 w-full text-center text-[12px] text-gray-500 transition-colors hover:text-[#007AFF]"
+          type="submit"
+          disabled={submitting || (mode === "signup" && !agreedToTerms)}
+          className={authPrimaryButtonClass}
         >
-          {mode === "login"
-            ? "アカウントをお持ちでない方はこちら"
-            : "すでにアカウントをお持ちの方はこちら"}
+          {submitting
+            ? "処理中…"
+            : mode === "login"
+              ? "メールでログイン"
+              : "アカウントを作成"}
         </button>
-        <div className="mb-4 flex items-center gap-3">
-          <div className="h-px flex-1 bg-black/[0.06]" />
-          <span className="text-[11px] text-gray-400">または</span>
-          <div className="h-px flex-1 bg-black/[0.06]" />
-        </div>
-        <a
-          href="/auth/login/google"
-          className="flex w-full items-center justify-center gap-3 rounded-xl border border-black/[0.08] bg-white px-4 py-3 text-[14px] font-medium text-gray-800 transition-colors hover:bg-gray-50"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-          </svg>
-          Google でログイン
-        </a>
+      </form>
+      <button
+        type="button"
+        onClick={() => switchMode(mode === "login" ? "signup" : "login")}
+        className={`${authTextLinkClass} mb-4 block`}
+      >
+        {mode === "login"
+          ? "アカウントをお持ちでない方はこちら"
+          : "すでにアカウントをお持ちの方はこちら"}
+      </button>
+      <div className="mb-4 flex items-center gap-3">
+        <div className="h-px flex-1 bg-black/[0.06]" />
+        <span className="text-[11px] text-gray-400">または</span>
+        <div className="h-px flex-1 bg-black/[0.06]" />
       </div>
-    </div>
+      <a
+        href="/auth/login/google"
+        className="flex w-full items-center justify-center gap-3 rounded-xl border border-black/[0.08] bg-white px-4 py-3 text-[14px] font-medium text-gray-800 transition-colors hover:bg-gray-50"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+        </svg>
+        Google でログイン
+      </a>
+    </AuthCard>
   );
 }
 
