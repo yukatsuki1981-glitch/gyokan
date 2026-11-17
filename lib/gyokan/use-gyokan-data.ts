@@ -851,26 +851,26 @@ export function useGyokanData() {
     });
   }, [persistCases]);
 
+  // `id` may name a memo that does not exist yet: the new-memo editor picks
+  // its id up front so that repeated autosaves update one memo instead of
+  // creating a new memo on every save.
   const saveProjectMemo = useCallback((data: { id?: string; project: string; date: string; body: string }) => {
-    if (data.id) {
-      setMemos((prev) => {
-        const next = prev.map((m) =>
-          m.id === data.id ? { ...m, date: data.date, body: data.body } : m,
-        );
-        const updated = next.find((m) => m.id === data.id);
-        if (updated) void persistMemo(updated);
-        return next;
-      });
-      return;
-    }
-    const memo: AppMemo = {
-      id: newUuid(),
-      project: data.project,
-      date: data.date,
-      body: data.body,
-    };
-    setMemos((prev) => [memo, ...prev]);
-    void persistMemo(memo);
+    setMemos((prev) => {
+      const existing = data.id ? prev.find((m) => m.id === data.id) : undefined;
+      if (existing) {
+        const updated: AppMemo = { ...existing, date: data.date, body: data.body };
+        void persistMemo(updated);
+        return prev.map((m) => (m.id === updated.id ? updated : m));
+      }
+      const memo: AppMemo = {
+        id: data.id ?? newUuid(),
+        project: data.project,
+        date: data.date,
+        body: data.body,
+      };
+      void persistMemo(memo);
+      return [memo, ...prev];
+    });
   }, [persistMemo]);
 
   const deleteProjectMemo = useCallback((id: string) => {

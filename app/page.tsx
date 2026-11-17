@@ -15,6 +15,8 @@ import {
   type TaskDraftFields,
 } from "@/lib/gyokan/drafts";
 import { useAutosaveForm } from "@/lib/gyokan/use-autosave-form";
+import { useImeEnterGuard } from "@/lib/gyokan/ime-enter";
+import { newUuid } from "@/lib/gyokan/mappers";
 import {
   parseCaseCreatedAt,
   sortCasesByProjectOrder,
@@ -2950,6 +2952,9 @@ function ProjectDetailSection({
 }) {
   const [memoModalOpen, setMemoModalOpen] = useState(false);
   const [editingMemo, setEditingMemo] = useState<ProjectMemo | null>(null);
+  // Id for the memo being created, fixed when the editor opens so that every
+  // autosave (and the 保存 button) writes to the same memo.
+  const [newMemoId, setNewMemoId] = useState(() => newUuid());
   const { showCases, projectLabel, caseLabel } = useDisplaySettings();
 
   const projectCases = sortProjectCases(cases.filter((c) => c.project === project));
@@ -2961,6 +2966,7 @@ function ProjectDetailSection({
 
   const openNewMemo = () => {
     setEditingMemo(null);
+    setNewMemoId(newUuid());
     setMemoModalOpen(true);
   };
 
@@ -3069,7 +3075,7 @@ function ProjectDetailSection({
           project={project}
           onSave={(data) => {
             onSaveMemo({
-              id: editingMemo?.id,
+              id: editingMemo?.id ?? newMemoId,
               project,
               date: data.date,
               body: data.body,
@@ -4676,6 +4682,7 @@ function AddProjectModalForm({
   const [error, setError] = useState<string | null>(null);
   const { projectLabel } = useDisplaySettings();
 
+  const ime = useImeEnterGuard();
   const submit = () => {
     const trimmed = name.trim();
     if (!trimmed) {
@@ -4720,7 +4727,8 @@ function AddProjectModalForm({
               setName(e.target.value);
               setError(null);
             }}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            {...ime.compositionProps}
+            onKeyDown={(e) => ime.isSubmitEnter(e) && submit()}
             placeholder="例：DP新宿"
             className="w-full rounded-lg border border-gray-100 bg-gray-50/60 px-4 py-3 text-[15px] outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
             autoFocus
@@ -4896,6 +4904,7 @@ function AddCaseModalForm({
     }
   }, [defaultProject]);
 
+  const ime = useImeEnterGuard();
   const submit = () => {
     if (!title.trim()) return;
     onSubmit({ title: title.trim(), project });
@@ -4925,7 +4934,8 @@ function AddCaseModalForm({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            {...ime.compositionProps}
+            onKeyDown={(e) => ime.isSubmitEnter(e) && submit()}
             placeholder="例：未入力"
             className="w-full rounded-lg border border-gray-100 bg-gray-50/60 px-4 py-3 text-[15px] outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
             autoFocus
@@ -5048,6 +5058,7 @@ function AddTaskModalForm({
     }
   }, [defaultDate]);
 
+  const ime = useImeEnterGuard();
   const submit = () => {
     if (!title.trim()) return;
     const end =
@@ -5112,7 +5123,8 @@ function AddTaskModalForm({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            {...ime.compositionProps}
+            onKeyDown={(e) => ime.isSubmitEnter(e) && submit()}
             placeholder="例：内見日程の調整"
             className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-4 py-3 text-[15px] outline-none transition-all duration-200 focus:border-blue-200 focus:bg-white focus:ring-2 focus:ring-blue-50"
             autoFocus
