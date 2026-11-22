@@ -57,9 +57,10 @@ export function PrivateModeSection({
       myUserId: user?.id ?? null,
       hasFamily: household.members.some((m) => !m.isMe),
       members: household.members,
+      membersLoaded: household.membersLoaded,
       loadHistory,
     }),
-    [user?.id, household.members, loadHistory],
+    [user?.id, household.members, household.membersLoaded, loadHistory],
   );
 
   const ready = authReady && dataReady;

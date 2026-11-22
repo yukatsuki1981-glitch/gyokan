@@ -50,6 +50,9 @@ export const INVITE_STATUS_LABELS: Record<HouseholdInviteStatus, string> = {
   revoked: "取り消し済み",
 };
 
+/** Someone who was in my household but has left it (共有をやめた人). */
+export const FORMER_MEMBER_LABEL = "以前のメンバー";
+
 /** What to call a member on screen; never their e-mail address. */
 export function memberLabel(member: Pick<HouseholdMember, "displayName" | "isMe">) {
   if (member.isMe) return "自分";
@@ -66,6 +69,7 @@ export function householdErrorMessage(err: unknown): string {
   if (raw.includes("household_full")) return "この家族の共有は、すでに上限の人数に達しています。";
   if (raw.includes("in_other_shared_household")) return "すでに別の家族と予定を共有しているため、参加できません。";
   if (raw.includes("confirmation_required")) return "予定が共有されることへの確認が必要です。";
+  if (raw.includes("not_in_shared_household")) return "今は、ほかの人と予定を共有していません。";
   if (raw.includes("not_authenticated")) return "ログインしてから、もう一度お試しください。";
   if (raw.includes("Could not find the function") || raw.includes("PGRST202")) {
     return "共有の機能を使う準備ができていません(データベースの更新が必要です)。";
@@ -101,10 +105,19 @@ export async function fetchHouseholdMembers(
       names.set(p.user_id, p.display_name);
     }
   }
-  return ids
-    .map((id) => ({ userId: id, displayName: names.get(id) ?? null, isMe: id === myUserId }))
-    // Me first, then the others in join order.
-    .sort((a, b) => Number(b.isMe) - Number(a.isMe));
+  // In join order (me included at my own place).
+  return ids.map((id) => ({ userId: id, displayName: names.get(id) ?? null, isMe: id === myUserId }));
+}
+
+/**
+ * 「共有をやめる」: I leave my shared household (migration
+ * 20261123_household_leave.sql). The events I created leave with me; the
+ * others' events stay. Throws not_in_shared_household when I share with nobody.
+ */
+export async function leaveHousehold(supabase: SupabaseClient): Promise<string> {
+  const { data, error } = await supabase.rpc("leave_household");
+  if (error) throw error;
+  return data as string;
 }
 
 export async function fetchMyDisplayName(supabase: SupabaseClient, myUserId: string): Promise<string | null> {

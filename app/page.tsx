@@ -5931,6 +5931,58 @@ function RevokeInviteConfirmSheet({
   );
 }
 
+function LeaveHouseholdConfirmSheet({
+  open,
+  onClose,
+  otherNames,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** How the other members are called on screen (「〇〇」 / 「家族」). */
+  otherNames: string[];
+  onConfirm: () => Promise<void>;
+}) {
+  const [leaving, setLeaving] = useState(false);
+  const others = otherNames.length > 0 ? `ほかの人(${otherNames.join("、")})` : "ほかの人";
+  return (
+    <DetailOverlay open={open} onClose={leaving ? () => {} : onClose} title="共有をやめる">
+      <p className="mb-2 text-[13px] font-medium text-[var(--gyokan-text)]">家族との予定の共有をやめますか？</p>
+      <ul className="mb-4 list-disc space-y-1 pl-5 text-[13px] leading-relaxed text-gray-500">
+        <li>あなたが作った予定は、あなただけの予定に戻ります。{others}からは見えなくなります。</li>
+        <li>ほかの人が作った予定は、そのまま残ります。あなたからは見えなくなります。</li>
+        <li>あなたが、ほかの人の予定にした編集は、そのまま残ります。履歴では「以前のメンバー」と表示されます。</li>
+        <li>あなたが作った、使われていない招待リンクは、使えなくなります。</li>
+        <li>もう一度共有するには、新しい招待が必要です。</li>
+      </ul>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={leaving}
+          onClick={onClose}
+          className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+        >
+          キャンセル
+        </button>
+        <button
+          type="button"
+          disabled={leaving}
+          onClick={async () => {
+            setLeaving(true);
+            await onConfirm();
+            // Still here: it failed (the error is shown on the settings screen).
+            setLeaving(false);
+            onClose();
+          }}
+          className="flex-1 rounded-xl bg-red-500 py-2.5 text-[13px] font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+        >
+          {leaving ? "処理しています…" : "共有をやめる"}
+        </button>
+      </div>
+    </DetailOverlay>
+  );
+}
+
 function AppSettingsPanel({
   userId,
   userEmail,
@@ -5962,6 +6014,12 @@ function AppSettingsPanel({
   const [inviteSheetOpen, setInviteSheetOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<HouseholdInvite | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const leaveHousehold = async () => {
+    // The events on screen still include the others' — reload everything so
+    // the app shows only what is mine now.
+    if (await household.leave()) window.location.reload();
+  };
   const openInvite = async () => {
     setInviteLink(null);
     const link = await household.createInviteLink();
@@ -6162,27 +6220,44 @@ function AppSettingsPanel({
             })
           }
         />
-        {household.members
-          .filter((member) => !member.isMe)
-          .map((member) => (
+      </SettingsCard>
+      <div>
+        <SettingsSectionHeading>
+          共有している家族
+          {household.membersLoaded && household.memberLimit != null
+            ? `(${household.members.length}/${household.memberLimit}人)`
+            : ""}
+        </SettingsSectionHeading>
+        <SettingsCard>
+          {/* In join order; my own row is marked (自分). */}
+          {household.members.map((member) => (
             <Fragment key={member.userId}>
+              <SettingsRow
+                label={member.isMe ? `${member.displayName?.trim() || "未設定"}(自分)` : memberLabel(member)}
+              />
               <SettingsDivider />
-              <SettingsRow label="共有している家族" value={memberLabel(member)} />
             </Fragment>
           ))}
-        <SettingsDivider />
-        <SettingsRow
-          label="家族を招待"
-          value={
-            household.isFull
-              ? `上限(${household.memberLimit}人)に達しています`
-              : household.remainingSeats != null
-                ? `あと${household.remainingSeats}人招待できます`
-                : undefined
-          }
-          onClick={household.isFull || household.loading ? undefined : () => void openInvite()}
-        />
-      </SettingsCard>
+          <SettingsRow
+            label="家族を招待"
+            value={
+              household.isFull
+                ? `上限(${household.memberLimit}人)に達しています`
+                : household.remainingSeats != null
+                  ? `あと${household.remainingSeats}人招待できます`
+                  : undefined
+            }
+            onClick={household.isFull || household.loading ? undefined : () => void openInvite()}
+          />
+          {/* Only while I share with someone. */}
+          {household.members.some((member) => !member.isMe) && (
+            <>
+              <SettingsDivider />
+              <SettingsRow label="共有をやめる" destructive onClick={() => setLeaveConfirmOpen(true)} />
+            </>
+          )}
+        </SettingsCard>
+      </div>
       <p className="-mt-2 px-1 text-[12px] text-gray-400">
         プライベートモードの予定を、家族と一緒に見て、追加・編集できます。タスクは共有されません。
       </p>
@@ -6260,6 +6335,12 @@ function AppSettingsPanel({
         invite={revokeTarget}
         onClose={() => setRevokeTarget(null)}
         onConfirm={(invite) => void household.revokeInvite(invite.id)}
+      />
+      <LeaveHouseholdConfirmSheet
+        open={leaveConfirmOpen}
+        onClose={() => setLeaveConfirmOpen(false)}
+        otherNames={household.members.filter((member) => !member.isMe).map((member) => memberLabel(member))}
+        onConfirm={leaveHousehold}
       />
       <ColumnsPickerSheet
         open={columnsPickerOpen}

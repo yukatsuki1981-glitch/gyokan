@@ -1,5 +1,5 @@
 import type { EventHistoryEntry } from "./repository";
-import type { HouseholdMember } from "./household";
+import { FORMER_MEMBER_LABEL, type HouseholdMember } from "./household";
 
 /**
  * What the private-mode event screens need to know about family sharing
@@ -11,26 +11,36 @@ export type EventSharing = {
   /** Someone besides me is in my household — only then is 自分だけ/共有 offered. */
   hasFamily: boolean;
   members: HouseholdMember[];
+  /**
+   * The member list has been loaded. Until then nobody can be told apart
+   * from a former member, so unknown people are shown as 「家族」.
+   */
+  membersLoaded: boolean;
   loadHistory: (eventId: string) => Promise<EventHistoryEntry[]>;
 };
 
-function memberName(sharing: EventSharing, userId: string): string | null {
-  return sharing.members.find((m) => m.userId === userId)?.displayName?.trim() || null;
+/**
+ * How to call another person: 「〇〇さん」, 「家族」 (a member without a
+ * display name), or 「以前のメンバー」 (not in my household any more).
+ */
+function personLabel(sharing: EventSharing, userId: string): string {
+  const member = sharing.members.find((m) => m.userId === userId);
+  if (!member) return sharing.membersLoaded ? FORMER_MEMBER_LABEL : "家族";
+  const name = member.displayName?.trim();
+  return name ? `${name}さん` : "家族";
 }
 
-/** "〇〇さんが追加" for a family member's event (「家族」 while they have no display name); null for mine. */
+/** "〇〇さんが追加" for someone else's event (「家族」/「以前のメンバー」 as above); null for mine. */
 export function addedByLabel(sharing: EventSharing, creatorId: string | undefined): string | null {
   if (!creatorId || creatorId === sharing.myUserId) return null;
-  const name = memberName(sharing, creatorId);
-  return name ? `${name}さんが追加` : "家族が追加";
+  return `${personLabel(sharing, creatorId)}が追加`;
 }
 
-/** Who made a change: 「自分」, 「〇〇さん」, or 「家族」. Never an e-mail address. */
+/** Who made a change: 「自分」, 「〇〇さん」, 「家族」 or 「以前のメンバー」. Never an e-mail address. */
 export function editorLabel(sharing: EventSharing, userId: string | null): string {
   if (!userId) return "不明";
   if (userId === sharing.myUserId) return "自分";
-  const name = memberName(sharing, userId);
-  return name ? `${name}さん` : "家族";
+  return personLabel(sharing, userId);
 }
 
 /** "10/18 22:00" in local time. */
