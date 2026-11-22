@@ -118,11 +118,17 @@ export function useHousehold(userId: string | null | undefined) {
   );
 
   const isFull = memberLimit != null && members.length >= memberLimit;
+  /** How many more people can join (null until the limit is known). */
+  const remainingSeats = memberLimit == null ? null : Math.max(0, memberLimit - members.length);
+  /** Unused, still-valid invites of the household (0 when the list isn't available). */
+  const activeInviteCount = invites?.filter((invite) => invite.status === "active").length ?? 0;
 
   return {
     members,
     memberLimit,
     isFull,
+    remainingSeats,
+    activeInviteCount,
     myDisplayName,
     invites,
     loading,
