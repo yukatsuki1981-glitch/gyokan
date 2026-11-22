@@ -68,7 +68,9 @@ export function householdErrorMessage(err: unknown): string {
   if (raw.includes("already_member")) return "すでにこの家族の共有に参加しています。";
   if (raw.includes("household_full")) return "この家族の共有は、すでに上限の人数に達しています。";
   if (raw.includes("in_other_shared_household")) return "すでに別の家族と予定を共有しているため、参加できません。";
-  if (raw.includes("confirmation_required")) return "予定が共有されることへの確認が必要です。";
+  // The app joins without sharing (p_share_existing_events = false); only a
+  // database without migration 20261123_join_no_share.sql refuses that.
+  if (raw.includes("confirmation_required")) return "この参加には、データベースの更新が必要です。";
   if (raw.includes("not_in_shared_household")) return "今は、ほかの人と予定を共有していません。";
   if (raw.includes("not_authenticated")) return "ログインしてから、もう一度お試しください。";
   if (raw.includes("Could not find the function") || raw.includes("PGRST202")) {
@@ -201,11 +203,16 @@ export async function checkHouseholdInvite(
   return { status: row?.status ?? "invalid", myEventCount: row?.my_event_count ?? 0 };
 }
 
-/** Joins the inviting household. Only call after the user confirmed their events will be shared. */
+/**
+ * Joins the inviting household WITHOUT sharing my existing events: in the same
+ * call, all my private-mode events become 自分だけ (migration
+ * 20261123_join_no_share.sql). A database without that migration refuses
+ * false with 'confirmation_required' (see householdErrorMessage).
+ */
 export async function acceptHouseholdInvite(supabase: SupabaseClient, token: string): Promise<string> {
   const { data, error } = await supabase.rpc("accept_household_invite", {
     p_token: token,
-    p_share_existing_events: true,
+    p_share_existing_events: false,
   });
   if (error) throw error;
   return data as string;
