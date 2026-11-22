@@ -5934,24 +5934,21 @@ function RevokeInviteConfirmSheet({
 function LeaveHouseholdConfirmSheet({
   open,
   onClose,
-  otherNames,
   onConfirm,
 }: {
   open: boolean;
   onClose: () => void;
-  /** How the other members are called on screen (「〇〇」 / 「家族」). */
-  otherNames: string[];
   onConfirm: () => Promise<void>;
 }) {
   const [leaving, setLeaving] = useState(false);
-  const others = otherNames.length > 0 ? `ほかの人(${otherNames.join("、")})` : "ほかの人";
   return (
     <DetailOverlay open={open} onClose={leaving ? () => {} : onClose} title="共有をやめる">
       <p className="mb-2 text-[13px] font-medium text-[var(--gyokan-text)]">家族との予定の共有をやめますか？</p>
       <ul className="mb-4 list-disc space-y-1 pl-5 text-[13px] leading-relaxed text-gray-500">
-        <li>あなたが作った予定は、あなただけの予定に戻ります。{others}からは見えなくなります。</li>
-        <li>ほかの人が作った予定は、そのまま残ります。あなたからは見えなくなります。</li>
+        <li>あなたが作った共有の予定は、コピーがあなたの手元に残ります。元の予定は、家族のところに残ります。</li>
+        <li>ほかの人が作った予定は、あなたからは見えなくなります。</li>
         <li>あなたが、ほかの人の予定にした編集は、そのまま残ります。履歴では「以前のメンバー」と表示されます。</li>
+        <li>予定が消えることはありません。</li>
         <li>あなたが作った、使われていない招待リンクは、使えなくなります。</li>
         <li>もう一度共有するには、新しい招待が必要です。</li>
       </ul>
@@ -6339,7 +6336,6 @@ function AppSettingsPanel({
       <LeaveHouseholdConfirmSheet
         open={leaveConfirmOpen}
         onClose={() => setLeaveConfirmOpen(false)}
-        otherNames={household.members.filter((member) => !member.isMe).map((member) => memberLabel(member))}
         onConfirm={leaveHousehold}
       />
       <ColumnsPickerSheet

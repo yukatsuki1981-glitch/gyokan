@@ -30,8 +30,12 @@ function personLabel(sharing: EventSharing, userId: string): string {
   return name ? `${name}さん` : "家族";
 }
 
-/** "〇〇さんが追加" for someone else's event (「家族」/「以前のメンバー」 as above); null for mine. */
-export function addedByLabel(sharing: EventSharing, creatorId: string | undefined): string | null {
+/**
+ * "〇〇さんが追加" for someone else's event (「家族」/「以前のメンバー」 as above);
+ * 「以前のメンバーが追加」 when the creator has left (creatorId null); null for mine.
+ */
+export function addedByLabel(sharing: EventSharing, creatorId: string | null | undefined): string | null {
+  if (creatorId === null) return `${FORMER_MEMBER_LABEL}が追加`;
   if (!creatorId || creatorId === sharing.myUserId) return null;
   return `${personLabel(sharing, creatorId)}が追加`;
 }

@@ -1,3 +1,7 @@
+-- ⚠ OUTDATED: these checks are for leave_household v1. After running
+--   20261123_household_leave_v2.sql, use test_household_leave_v2.sql instead
+--   (several checks below would fail by design).
+--
 -- Checks for 「共有をやめる」 (migration 20261123_household_leave.sql).
 -- Run AFTER the migration.
 --
