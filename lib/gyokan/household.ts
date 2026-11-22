@@ -16,12 +16,39 @@ export type HouseholdMember = {
 export type InviteCheckStatus =
   | "ok"
   | "invalid"
+  // Added with migration 20261122_invite_expiry.sql. A database without that
+  // migration never returns it; the invite page shows anything it has no
+  // message for as a generic "can't join".
+  | "expired"
   | "already_member"
   | "full"
   | "in_other_shared_household"
   | "not_authenticated";
 
 export const DISPLAY_NAME_MAX = 20;
+
+export const INVITE_INVALID_MESSAGE =
+  "この招待リンクは使えません。取り消されたか、すでに使われています。招待した人に、新しいリンクを作ってもらってください。";
+export const INVITE_EXPIRED_MESSAGE =
+  "この招待リンクは、有効期限(7日間)が過ぎています。招待した人に、新しいリンクを作ってもらってください。";
+
+/** active = まだ使える / used = 使用済み / expired = 期限切れ / revoked = 取り消し済み */
+export type HouseholdInviteStatus = "active" | "used" | "expired" | "revoked";
+
+export type HouseholdInvite = {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  status: HouseholdInviteStatus;
+  createdByMe: boolean;
+};
+
+export const INVITE_STATUS_LABELS: Record<HouseholdInviteStatus, string> = {
+  active: "使用中",
+  used: "使用済み",
+  expired: "期限切れ",
+  revoked: "取り消し済み",
+};
 
 /** What to call a member on screen; never their e-mail address. */
 export function memberLabel(member: Pick<HouseholdMember, "displayName" | "isMe">) {
@@ -33,7 +60,8 @@ export function memberLabel(member: Pick<HouseholdMember, "displayName" | "isMe"
 export function householdErrorMessage(err: unknown): string {
   const raw =
     err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err);
-  if (raw.includes("invalid_invite")) return "この招待リンクは無効か、すでに使われています。招待した人に、新しいリンクを作ってもらってください。";
+  if (raw.includes("invalid_invite")) return INVITE_INVALID_MESSAGE;
+  if (raw.includes("invite_expired")) return INVITE_EXPIRED_MESSAGE;
   if (raw.includes("already_member")) return "すでにこの家族の共有に参加しています。";
   if (raw.includes("household_full")) return "この家族の共有は、すでに上限の人数に達しています。";
   if (raw.includes("in_other_shared_household")) return "すでに別の家族と予定を共有しているため、参加できません。";
@@ -103,6 +131,46 @@ export async function createHouseholdInvite(supabase: SupabaseClient): Promise<s
   const { data, error } = await supabase.rpc("create_household_invite");
   if (error) throw error;
   return data as string;
+}
+
+/** True for "this database function doesn't exist (yet)" — the migration hasn't been run. */
+function isMissingFunctionError(err: unknown) {
+  const e = err as { code?: unknown; message?: unknown } | null;
+  const code = typeof e?.code === "string" ? e.code : "";
+  const message = typeof e?.message === "string" ? e.message : "";
+  return code === "PGRST202" || code === "42883" || message.includes("Could not find the function");
+}
+
+const INVITE_STATUSES: readonly string[] = ["active", "used", "expired", "revoked"];
+
+/**
+ * The invites of my household, newest first, without the links themselves.
+ * Returns null when the database doesn't have the invite list yet (migration
+ * 20261122_invite_expiry.sql not run) — the screen then leaves the list out,
+ * as before.
+ */
+export async function fetchHouseholdInvites(supabase: SupabaseClient): Promise<HouseholdInvite[] | null> {
+  const { data, error } = await supabase.rpc("list_household_invites");
+  if (error) {
+    if (isMissingFunctionError(error)) return null;
+    throw error;
+  }
+  type Row = { id: string; created_at: string; expires_at: string; status: string; created_by_me: boolean };
+  return ((data ?? []) as Row[]).map((row) => ({
+    id: row.id,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    // An unknown status (a newer database) is shown as not usable.
+    status: INVITE_STATUSES.includes(row.status) ? (row.status as HouseholdInviteStatus) : "revoked",
+    createdByMe: !!row.created_by_me,
+  }));
+}
+
+/** Revokes an unused invite of my household. False when it was already used or revoked. */
+export async function revokeHouseholdInvite(supabase: SupabaseClient, inviteId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("revoke_household_invite", { p_invite_id: inviteId });
+  if (error) throw error;
+  return data === true;
 }
 
 export function inviteUrl(token: string) {

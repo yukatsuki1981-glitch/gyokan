@@ -7,6 +7,8 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
   DISPLAY_NAME_MAX,
+  INVITE_EXPIRED_MESSAGE,
+  INVITE_INVALID_MESSAGE,
   acceptHouseholdInvite,
   checkHouseholdInvite,
   clearPendingInvite,
@@ -25,10 +27,16 @@ type AuthState = "checking" | "signedOut" | "signedIn";
 const INITIAL_NULL_GRACE_MS = 2500;
 
 const STATUS_MESSAGES: Partial<Record<InviteCheckStatus, string>> = {
-  invalid: "この招待リンクは無効か、すでに使われています。招待した人に、新しいリンクを作ってもらってください。",
+  invalid: INVITE_INVALID_MESSAGE,
+  expired: INVITE_EXPIRED_MESSAGE,
   already_member: "すでにこの家族の予定の共有に参加しています。",
   full: "この家族の予定の共有は、すでに上限の人数に達しています。",
   in_other_shared_household: "すでに別の家族と予定を共有しているため、この招待には参加できません。",
+};
+
+const STATUS_TITLES: Partial<Record<InviteCheckStatus, string>> = {
+  invalid: "この招待リンクは使えません",
+  expired: "招待リンクの有効期限が切れています",
 };
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -157,7 +165,7 @@ export default function InvitePage() {
   if (status && status !== "ok") {
     return (
       <Card>
-        <h1 className="mb-2 text-[17px] font-semibold text-gray-900">招待に参加できません</h1>
+        <h1 className="mb-2 text-[17px] font-semibold text-gray-900">{STATUS_TITLES[status] ?? "招待に参加できません"}</h1>
         <p className="mb-5 text-[13px] leading-relaxed text-gray-500">
           {STATUS_MESSAGES[status] ?? "この招待には参加できません。"}
         </p>
