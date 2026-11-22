@@ -190,7 +190,7 @@ export default function InvitePage() {
     <Card>
       <h1 className="mb-2 text-[17px] font-semibold text-gray-900">家族の予定の共有に参加</h1>
       <p className="mb-4 text-[13px] leading-relaxed text-gray-500">
-        参加すると、プライベートモードの予定を、家族と一緒に見て、追加・編集できるようになります。タスクは共有されません。
+        参加したあとに作る予定は、家族と一緒に見て、追加・編集できます。タスクは共有されません。参加する前の予定は、あなたも、招待した人も、お互いに見えません。
       </p>
       {/* Joining doesn't share my existing events: they all become 自分だけ. */}
       {myEventCount > 0 && (

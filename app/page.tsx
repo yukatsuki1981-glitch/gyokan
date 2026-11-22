@@ -6258,6 +6258,13 @@ function AppSettingsPanel({
       <p className="-mt-2 px-1 text-[12px] text-gray-400">
         プライベートモードの予定を、家族と一緒に見て、追加・編集できます。タスクは共有されません。
       </p>
+      {/* Alone in the household: the first person to join makes my events so
+          far 自分だけ (migration 20261124_join_inviter_private.sql). */}
+      {household.membersLoaded && household.members.length === 1 && !household.isFull && (
+        <p role="note" className="-mt-2 rounded-xl bg-amber-50 px-4 py-3 text-[12px] leading-relaxed text-amber-800">
+          このリンクで誰かが参加すると、あなたのこれまでの予定は、すべて「自分だけ」になります。家族には見えません。あとから、予定を1件ずつ「共有」に変えられます。
+        </p>
+      )}
       {/* Invite links (left out while the database has no invite list —
           migration 20261122_invite_expiry.sql not run yet). */}
       {household.invites && (
