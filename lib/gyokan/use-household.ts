@@ -5,26 +5,41 @@ import { createClient } from "@/lib/supabase/client";
 import {
   createHouseholdInvite,
   ensureMyHousehold,
+  fetchHouseholdInvites,
   fetchHouseholdMemberLimit,
   fetchHouseholdMembers,
   householdErrorMessage,
   inviteUrl,
+  revokeHouseholdInvite,
   saveMyDisplayName,
+  type HouseholdInvite,
   type HouseholdMember,
 } from "./household";
 
 /**
  * The signed-in user's household for the settings screen: its members (with
- * display names), the member limit, my display name, and invite creation.
+ * display names), the member limit, my display name, invite creation, and the
+ * list of invites (with revoking).
  * Loads when `userId` is set; the caller passes the id it already has from
  * its own onAuthStateChange-based session (no getSession here).
  */
 export function useHousehold(userId: string | null | undefined) {
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [memberLimit, setMemberLimit] = useState<number | null>(null);
+  // null = this database has no invite list yet (migration not run): the
+  // screen leaves the list out instead of showing an error.
+  const [invites, setInvites] = useState<HouseholdInvite[] | null>(null);
   // True until the first load finishes (a reload keeps showing the current data).
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const loadInvites = useCallback(async () => {
+    try {
+      setInvites(await fetchHouseholdInvites(createClient()));
+    } catch (err) {
+      setError(`招待の一覧を読み込めませんでした: ${householdErrorMessage(err)}`);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -43,7 +58,9 @@ export function useHousehold(userId: string | null | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+    // After the household exists; failures here don't hide the members.
+    await loadInvites();
+  }, [userId, loadInvites]);
 
   useEffect(() => {
     void load();
@@ -67,19 +84,52 @@ export function useHousehold(userId: string | null | undefined) {
     [userId, load],
   );
 
-  /** Returns the invite link, or null (with `error` set) when it couldn't be created. */
+  /**
+   * Returns the invite link, or null (with `error` set) when it couldn't be
+   * created. Creating one also revokes the earlier unused links (done by the
+   * database), so the list is reloaded.
+   */
   const createInviteLink = useCallback(async (): Promise<string | null> => {
     try {
       const token = await createHouseholdInvite(createClient());
       setError(null);
+      void loadInvites();
       return inviteUrl(token);
     } catch (err) {
       setError(householdErrorMessage(err));
       return null;
     }
-  }, []);
+  }, [loadInvites]);
+
+  /** Revokes an unused invite; the list is reloaded either way. */
+  const revokeInvite = useCallback(
+    async (inviteId: string): Promise<boolean> => {
+      try {
+        const revoked = await revokeHouseholdInvite(createClient(), inviteId);
+        setError(revoked ? null : "この招待は、すでに使われたか、取り消されています。");
+        await loadInvites();
+        return revoked;
+      } catch (err) {
+        setError(`招待を取り消せませんでした: ${householdErrorMessage(err)}`);
+        return false;
+      }
+    },
+    [loadInvites],
+  );
 
   const isFull = memberLimit != null && members.length >= memberLimit;
 
-  return { members, memberLimit, isFull, myDisplayName, loading, error, reload: load, saveDisplayName, createInviteLink };
+  return {
+    members,
+    memberLimit,
+    isFull,
+    myDisplayName,
+    invites,
+    loading,
+    error,
+    reload: load,
+    saveDisplayName,
+    createInviteLink,
+    revokeInvite,
+  };
 }

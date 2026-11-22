@@ -34,7 +34,14 @@ import {
 } from "@/lib/gyokan/task-completed-at";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
 import { useHousehold } from "@/lib/gyokan/use-household";
-import { DISPLAY_NAME_MAX, memberLabel, readPendingInvite } from "@/lib/gyokan/household";
+import {
+  DISPLAY_NAME_MAX,
+  INVITE_STATUS_LABELS,
+  memberLabel,
+  readPendingInvite,
+  type HouseholdInvite,
+  type HouseholdInviteStatus,
+} from "@/lib/gyokan/household";
 import {
   DEFAULT_MODE_PREFERENCES,
   isModeShown,
@@ -5783,17 +5790,23 @@ function HouseholdInviteSheet({
   open,
   onClose,
   link,
+  hasExpiry,
 }: {
   open: boolean;
   onClose: () => void;
   link: string | null;
+  /** The database has invite expiry (migration 20261122_invite_expiry.sql). */
+  hasExpiry: boolean;
 }) {
   // Reset per link: the caller keys this sheet by the link it shows.
   const [copied, setCopied] = useState(false);
   return (
     <DetailOverlay open={open} onClose={onClose} title="家族を招待">
       <p className="mb-3 text-[13px] text-gray-500">
-        このリンクを家族に送ってください。家族がリンクを開いてログイン(または新規登録)し、参加を確認すると、プライベートモードの予定の共有が始まります。リンクは1回だけ使えます。
+        このリンクを家族に送ってください。家族がリンクを開いてログイン(または新規登録)し、参加を確認すると、プライベートモードの予定の共有が始まります。
+        {hasExpiry
+          ? "リンクは1回だけ、作ってから7日間使えます。前に作った、使われていないリンクは、使えなくなります。"
+          : "リンクは1回だけ使えます。"}
       </p>
       <input
         type="text"
@@ -5830,6 +5843,94 @@ function HouseholdInviteSheet({
   );
 }
 
+/** "11月22日" or, with the time, "11月29日 14:05" (local time). */
+function formatInviteDate(iso: string, withTime: boolean) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const date = `${d.getMonth() + 1}月${d.getDate()}日`;
+  return withTime ? `${date} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}` : date;
+}
+
+const INVITE_STATUS_STYLES: Record<HouseholdInviteStatus, string> = {
+  active: "bg-emerald-50 text-emerald-700",
+  used: "bg-gray-100 text-gray-500",
+  expired: "bg-amber-50 text-amber-700",
+  revoked: "bg-gray-100 text-gray-500",
+};
+
+/** One invite in the settings list: when it was made, until when, its state — never the link. */
+function HouseholdInviteRow({
+  invite,
+  onRevoke,
+}: {
+  invite: HouseholdInvite;
+  onRevoke: (invite: HouseholdInvite) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+      <div className="min-w-0">
+        <p className="truncate text-[13px] text-[var(--gyokan-text)]">
+          {formatInviteDate(invite.createdAt, false)}に作成
+        </p>
+        <p className="gyokan-muted truncate text-[11px]">期限: {formatInviteDate(invite.expiresAt, true)}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${INVITE_STATUS_STYLES[invite.status]}`}>
+          {INVITE_STATUS_LABELS[invite.status]}
+        </span>
+        {invite.status === "active" && (
+          <button
+            type="button"
+            onClick={() => onRevoke(invite)}
+            className="rounded-lg border border-red-200 px-2.5 py-1 text-[12px] font-medium text-red-500 hover:bg-red-50"
+          >
+            取り消し
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RevokeInviteConfirmSheet({
+  invite,
+  onClose,
+  onConfirm,
+}: {
+  invite: HouseholdInvite | null;
+  onClose: () => void;
+  onConfirm: (invite: HouseholdInvite) => void;
+}) {
+  return (
+    <DetailOverlay open={!!invite} onClose={onClose} title="招待リンクの取り消し">
+      <p className="mb-4 text-[13px] text-gray-500">
+        {invite ? `${formatInviteDate(invite.createdAt, false)}に作った招待リンクを取り消しますか？` : ""}
+        取り消したリンクは、もう使えなくなります。家族を招待するときは、新しいリンクを作ってください。
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50"
+        >
+          キャンセル
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!invite) return;
+            onClose();
+            onConfirm(invite);
+          }}
+          className="flex-1 rounded-xl bg-red-500 py-2.5 text-[13px] font-semibold text-white hover:bg-red-600"
+        >
+          取り消す
+        </button>
+      </div>
+    </DetailOverlay>
+  );
+}
+
 function AppSettingsPanel({
   userId,
   userEmail,
@@ -5860,6 +5961,7 @@ function AppSettingsPanel({
   const household = useHousehold(userId);
   const [inviteSheetOpen, setInviteSheetOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<HouseholdInvite | null>(null);
   const openInvite = async () => {
     setInviteLink(null);
     const link = await household.createInviteLink();
@@ -6078,6 +6180,30 @@ function AppSettingsPanel({
       <p className="-mt-2 px-1 text-[12px] text-gray-400">
         プライベートモードの予定を、家族と一緒に見て、追加・編集できます。タスクは共有されません。
       </p>
+      {/* Invite links (left out while the database has no invite list —
+          migration 20261122_invite_expiry.sql not run yet). */}
+      {household.invites && (
+        <>
+          <div>
+            <SettingsSectionHeading>招待リンク</SettingsSectionHeading>
+            <SettingsCard>
+              {household.invites.length === 0 ? (
+                <SettingsRow label="まだ招待リンクはありません" />
+              ) : (
+                household.invites.map((invite, index) => (
+                  <Fragment key={invite.id}>
+                    {index > 0 && <SettingsDivider />}
+                    <HouseholdInviteRow invite={invite} onRevoke={setRevokeTarget} />
+                  </Fragment>
+                ))
+              )}
+            </SettingsCard>
+          </div>
+          <p className="-mt-2 px-1 text-[12px] text-gray-400">
+            招待リンクの有効期限は7日間です。使われていないリンクは、ここから取り消せます。
+          </p>
+        </>
+      )}
       {household.error && (
         <p role="alert" className="-mt-2 rounded-xl bg-red-50 px-4 py-3 text-[13px] text-red-600">
           {household.error}
@@ -6113,6 +6239,12 @@ function AppSettingsPanel({
         open={inviteSheetOpen}
         onClose={() => setInviteSheetOpen(false)}
         link={inviteLink}
+        hasExpiry={household.invites !== null}
+      />
+      <RevokeInviteConfirmSheet
+        invite={revokeTarget}
+        onClose={() => setRevokeTarget(null)}
+        onConfirm={(invite) => void household.revokeInvite(invite.id)}
       />
       <ColumnsPickerSheet
         open={columnsPickerOpen}
