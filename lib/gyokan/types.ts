@@ -90,7 +90,8 @@ export type DbDailyDiary = {
 
 export type DbEvent = {
   id: string;
-  user_id: string;
+  /** null: the creator stopped sharing; the event stays with the household (20261123_household_leave_v2.sql). */
+  user_id: string | null;
   title: string;
   start_time: string;
   end_time: string | null;
@@ -178,8 +179,12 @@ export type AppEvent = {
   sortOrder: number;
   scope?: Scope;
   color?: string | null;
-  /** Creator (events.user_id) — a family member's id for their shared events. */
-  userId?: string;
+  /**
+   * Creator (events.user_id) — a family member's id for their shared events.
+   * null: the creator has left the household (shown as 「以前のメンバー」);
+   * such an event is never mine. undefined: not known yet (a new event).
+   */
+  userId?: string | null;
   visibility?: EventVisibility;
 };
 

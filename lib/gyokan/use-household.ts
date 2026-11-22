@@ -10,6 +10,7 @@ import {
   fetchHouseholdMembers,
   householdErrorMessage,
   inviteUrl,
+  leaveHousehold,
   revokeHouseholdInvite,
   saveMyDisplayName,
   type HouseholdInvite,
@@ -26,6 +27,9 @@ import {
 export function useHousehold(userId: string | null | undefined) {
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [memberLimit, setMemberLimit] = useState<number | null>(null);
+  // True once the member list has been loaded successfully: only then can
+  // "not a member" mean "left the household" (以前のメンバー).
+  const [membersLoaded, setMembersLoaded] = useState(false);
   // null = this database has no invite list yet (migration not run): the
   // screen leaves the list out instead of showing an error.
   const [invites, setInvites] = useState<HouseholdInvite[] | null>(null);
@@ -52,6 +56,7 @@ export function useHousehold(userId: string | null | undefined) {
       ]);
       setMembers(list);
       setMemberLimit(limit);
+      setMembersLoaded(true);
       setError(null);
     } catch (err) {
       setError(householdErrorMessage(err));
@@ -117,6 +122,19 @@ export function useHousehold(userId: string | null | undefined) {
     [loadInvites],
   );
 
+  /** 「共有をやめる」. True when I left; false (with `error` set) otherwise. */
+  const leave = useCallback(async (): Promise<boolean> => {
+    try {
+      await leaveHousehold(createClient());
+      setError(null);
+      await load();
+      return true;
+    } catch (err) {
+      setError(`共有をやめられませんでした: ${householdErrorMessage(err)}`);
+      return false;
+    }
+  }, [load]);
+
   const isFull = memberLimit != null && members.length >= memberLimit;
   /** How many more people can join (null until the limit is known). */
   const remainingSeats = memberLimit == null ? null : Math.max(0, memberLimit - members.length);
@@ -125,6 +143,7 @@ export function useHousehold(userId: string | null | undefined) {
 
   return {
     members,
+    membersLoaded,
     memberLimit,
     isFull,
     remainingSeats,
@@ -137,5 +156,6 @@ export function useHousehold(userId: string | null | undefined) {
     saveDisplayName,
     createInviteLink,
     revokeInvite,
+    leave,
   };
 }

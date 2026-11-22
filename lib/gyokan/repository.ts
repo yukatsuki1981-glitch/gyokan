@@ -782,8 +782,13 @@ export async function fetchGyokanEvents(supabase: SupabaseClient): Promise<AppEv
   return rows.map(mapDbEvent);
 }
 
-/** An event written by someone else in my household (not by me). */
+/**
+ * An event written by someone else in my household (not by me) — including
+ * one whose creator has left (userId null): it belongs to the household, so it
+ * is updated like a family member's event and never re-saved as mine.
+ */
 export function isFamilyEvent(event: Pick<AppEvent, "userId">, myUserId: string) {
+  if (event.userId === null) return true;
   return !!event.userId && event.userId !== myUserId;
 }
 

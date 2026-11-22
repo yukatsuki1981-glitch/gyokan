@@ -640,14 +640,24 @@ export function DayEventPopup({
 
   const editingEvent = editingId ? dayEvents.find((e) => e.id === editingId) ?? null : null;
   const editingFamilyEvent =
-    !!editingEvent?.userId && !!sharing.myUserId && editingEvent.userId !== sharing.myUserId;
+    !!editingEvent &&
+    // null: the creator has left — the event belongs to the household, not to me.
+    (editingEvent.userId === null ||
+      (!!editingEvent.userId && !!sharing.myUserId && editingEvent.userId !== sharing.myUserId));
   // Offered only when someone shares my calendar, and only on my own events
   // (only the creator may change it; the DB keeps it on anyone else's save).
   const showVisibilitySwitch =
     sharing.hasFamily && (view === "add" || (view === "edit" && !!editingEvent && !editingFamilyEvent));
   const addedBy = editingEvent ? addedByLabel(sharing, editingEvent.userId) : null;
+  // Also after everyone else has left: the history may still name a former
+  // member (以前のメンバー), and that is worth showing.
+  const historyHasOthers =
+    !!history && history.entries.some((entry) => !!entry.changedBy && entry.changedBy !== sharing.myUserId);
   const historyEntries =
-    view === "edit" && editingId && history?.eventId === editingId && (sharing.hasFamily || editingFamilyEvent)
+    view === "edit" &&
+    editingId &&
+    history?.eventId === editingId &&
+    (sharing.hasFamily || editingFamilyEvent || historyHasOthers)
       ? history.entries
       : [];
   const lastEdit = historyEntries[0] ?? null;
