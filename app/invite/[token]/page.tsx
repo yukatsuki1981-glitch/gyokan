@@ -30,7 +30,7 @@ const STATUS_MESSAGES: Partial<Record<InviteCheckStatus, string>> = {
   invalid: INVITE_INVALID_MESSAGE,
   expired: INVITE_EXPIRED_MESSAGE,
   already_member: "すでにこの家族の予定の共有に参加しています。",
-  full: "この家族の予定の共有は、すでに上限の人数に達しています。",
+  full: "この家族の予定の共有は、すでに上限の人数に達しています。招待した人に伝えてください。",
   in_other_shared_household: "すでに別の家族と予定を共有しているため、この招待には参加できません。",
 };
 
@@ -131,7 +131,9 @@ export default function InvitePage() {
       clearPendingInvite();
       window.location.href = "/?mode=private";
     } catch (err) {
-      setError(householdErrorMessage(err));
+      // Someone else took the last seat between the check and this join.
+      const full = String((err as { message?: unknown } | null)?.message ?? err).includes("household_full");
+      setError(full ? (STATUS_MESSAGES.full ?? householdErrorMessage(err)) : householdErrorMessage(err));
       setJoining(false);
     }
   };

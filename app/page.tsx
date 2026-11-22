@@ -5805,7 +5805,7 @@ function HouseholdInviteSheet({
       <p className="mb-3 text-[13px] text-gray-500">
         このリンクを家族に送ってください。家族がリンクを開いてログイン(または新規登録)し、参加を確認すると、プライベートモードの予定の共有が始まります。
         {hasExpiry
-          ? "リンクは1回だけ、作ってから7日間使えます。前に作った、使われていないリンクは、使えなくなります。"
+          ? "リンクは1回だけ、作ってから7日間使えます。あなたが前に作った、使われていないリンクは、使えなくなります。ほかの家族が作ったリンクは、そのまま使えます。"
           : "リンクは1回だけ使えます。"}
       </p>
       <input
@@ -6173,7 +6173,13 @@ function AppSettingsPanel({
         <SettingsDivider />
         <SettingsRow
           label="家族を招待"
-          value={household.isFull ? `上限(${household.memberLimit}人)に達しています` : undefined}
+          value={
+            household.isFull
+              ? `上限(${household.memberLimit}人)に達しています`
+              : household.remainingSeats != null
+                ? `あと${household.remainingSeats}人招待できます`
+                : undefined
+          }
           onClick={household.isFull || household.loading ? undefined : () => void openInvite()}
         />
       </SettingsCard>
@@ -6202,6 +6208,15 @@ function AppSettingsPanel({
           <p className="-mt-2 px-1 text-[12px] text-gray-400">
             招待リンクの有効期限は7日間です。使われていないリンクは、ここから取り消せます。
           </p>
+          {/* More open invites than free seats (possible once the limit is
+              above 2): whoever joins first gets in. */}
+          {!household.isFull &&
+            household.remainingSeats != null &&
+            household.activeInviteCount > household.remainingSeats && (
+              <p role="status" className="-mt-2 rounded-xl bg-amber-50 px-4 py-3 text-[12px] text-amber-700">
+                使われていない招待が{household.activeInviteCount}件あります。先に参加した人から順に入れます。
+              </p>
+            )}
         </>
       )}
       {household.error && (
