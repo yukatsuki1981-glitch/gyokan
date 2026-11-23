@@ -1937,6 +1937,7 @@ function TaskDetailEditor({
               onChange={(e) => setProject(e.target.value)}
               className={fieldInputClass}
             >
+              {projectOptions.length === 0 && <option value="">なし</option>}
               {projectOptions.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -2899,20 +2900,39 @@ function MobileProjectList({
   cases,
   sensors,
   onSelect,
+  onAdd,
   onDragEnd,
 }: {
   projects: readonly SidebarProject[];
   cases: CaseItem[];
   sensors: ReturnType<typeof useSensors>;
   onSelect: (name: string) => void;
+  onAdd: () => void;
   onDragEnd: (event: DragEndEvent) => void;
 }) {
   const { colors } = useProjectColors();
   const { projectLabel } = useDisplaySettings();
   return (
     <section className="mb-4 lg:hidden">
-      <h3 className="mb-2 text-[17px] font-semibold tracking-tight text-gray-900">{projectLabel}</h3>
-      <Card className="overflow-hidden p-0">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-[17px] font-semibold tracking-tight text-gray-900">{projectLabel}</h3>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-black/[0.04]"
+          aria-label={`${projectLabel}を追加`}
+        >
+          <Icon name="plus" className="h-4 w-4" />
+        </button>
+      </div>
+      {projects.length === 0 && (
+        <Card className="px-4 py-5">
+          <p className="text-center text-[13px] leading-relaxed text-gray-400">
+            {projectLabel}はまだありません。+ から作れます。
+          </p>
+        </Card>
+      )}
+      <Card className={`overflow-hidden p-0 ${projects.length === 0 ? "hidden" : ""}`}>
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
           <SortableContext items={projects.map((p) => p.id)} strategy={verticalListSortingStrategy}>
             {projects.map((project) => {
@@ -4872,6 +4892,11 @@ function DesktopProjectSidebar({
             <span className="truncate">すべて</span>
           </button>
 
+          {projects.length === 0 && (
+            <p className="px-2 py-1.5 text-[11px] leading-relaxed text-gray-400">
+              {projectLabel}はまだありません。+ から作れます。
+            </p>
+          )}
           <SortableContext items={projects.map((p) => p.id)} strategy={verticalListSortingStrategy}>
             {projects.map((project) => (
               <SortableSidebarProjectItem
@@ -4912,8 +4937,10 @@ function AddCaseModalForm({
   }, [defaultProject]);
 
   const ime = useImeEnterGuard();
+  // A case always belongs to a project (cases.project_id is required).
+  const noProjects = projectOptions.length === 0;
   const submit = () => {
-    if (!title.trim()) return;
+    if (!title.trim() || noProjects) return;
     onSubmit({ title: title.trim(), project });
     onClose();
   };
@@ -4965,11 +4992,16 @@ function AddCaseModalForm({
         </label>
         )}
         {!showProjects && <div className="mb-6" />}
+        {noProjects && (
+          <p role="note" className="-mt-2 mb-5 rounded-lg bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-800">
+            {caseLabel}は{projectLabel}の中に作ります。先に{projectLabel}を作ってください。
+          </p>
+        )}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-lg px-5 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50">
             キャンセル
           </button>
-          <button type="button" onClick={submit} className="rounded-lg bg-[var(--gyokan-accent2)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--gyokan-accent)]">
+          <button type="button" onClick={submit} disabled={noProjects} className="rounded-lg bg-[var(--gyokan-accent2)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--gyokan-accent)] disabled:opacity-40">
             追加する
           </button>
         </div>
@@ -5098,8 +5130,8 @@ function AddTaskModalForm({
     }
 
     if (showProjects) {
+      // No projects yet: the task is saved without one (shown in every view).
       const effectiveProject = project || projectOptions[0] || "";
-      if (!effectiveProject) return;
       onSubmit({
         ...payload,
         project: effectiveProject,
@@ -5186,6 +5218,7 @@ function AddTaskModalForm({
               onChange={(e) => setProject(e.target.value)}
               className="w-full rounded-2xl border border-gray-100 bg-gray-50/60 px-3 py-2.5 text-sm outline-none focus:border-blue-200 focus:ring-2 focus:ring-blue-50"
             >
+              {projectOptions.length === 0 && <option value="">なし</option>}
               {projectOptions.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -7550,6 +7583,7 @@ export default function Home() {
                   cases={cases}
                   sensors={sensors}
                   onSelect={setActiveProject}
+                  onAdd={() => setProjectModalOpen(true)}
                   onDragEnd={handleProjectDragEnd}
               />
             ) : (

@@ -263,24 +263,6 @@ async function seedDefaultProjectsOnce(
   return seeded.map(mapDbProject);
 }
 
-async function ensurePrivateProject(
-  supabase: SupabaseClient,
-  userId: string,
-  projects: AppProject[],
-): Promise<AppProject[]> {
-  if (projects.some((project) => project.name === PRIVATE_PROJECT_NAME)) {
-    return projects;
-  }
-  const project: AppProject = {
-    id: newUuid(),
-    name: PRIVATE_PROJECT_NAME,
-    accentColor: PRIVATE_PROJECT_ACCENT,
-    sortOrder: projects.length,
-  };
-  await upsertProject(supabase, project, userId);
-  return [...projects, project];
-}
-
 export async function fetchGyokanData(
   supabase: SupabaseClient,
   userId: string,
@@ -303,19 +285,20 @@ export async function fetchGyokanData(
     fetchUserPreferences(supabase, userId),
   ]);
 
-  let projects = projectRows.map(mapDbProject);
+  const projects = projectRows.map(mapDbProject);
 
+  // A new account starts with no projects at all. The default projects are
+  // only made when old browser-only data (from before accounts existed) is
+  // imported, because that data refers to them by name.
   if (projects.length === 0) {
-    const legacyColors = readLegacyColors();
-    projects = await seedDefaultProjects(supabase, userId, legacyColors);
     const imported = readLegacyData();
     if (imported.hasData) {
-      await importLegacyData(supabase, userId, projects, imported);
+      const legacyColors = readLegacyColors();
+      const seeded = await seedDefaultProjects(supabase, userId, legacyColors);
+      await importLegacyData(supabase, userId, seeded, imported);
       return fetchGyokanData(supabase, userId);
     }
   }
-
-  projects = await ensurePrivateProject(supabase, userId, projects);
 
   const { idToName } = buildProjectMaps(projects);
   const cases = caseRows.map((r) => mapDbCase(r, idToName));
