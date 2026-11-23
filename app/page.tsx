@@ -34,6 +34,17 @@ import {
 } from "@/lib/gyokan/task-completed-at";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
 import { useHousehold } from "@/lib/gyokan/use-household";
+import { createClient } from "@/lib/supabase/client";
+import { PASSWORD_MIN_LENGTH, changePassword, loginMethodLabel, loginMethodsOf } from "@/lib/gyokan/account";
+import {
+  buildExport,
+  saveExportFile,
+  type ExportAccount,
+  type ExportDeviceSettings,
+  type ExportResult,
+} from "@/lib/gyokan/export-data";
+import { APP_VERSION, BUILD_COMMIT_SHORT, formatBuildTime } from "@/lib/gyokan/build-info";
+import { CONTACT_EMAIL, PRIVACY_PATH, TERMS_PATH } from "@/lib/gyokan/site-info";
 import {
   DISPLAY_NAME_MAX,
   INVITE_STATUS_LABELS,
@@ -5776,6 +5787,283 @@ function LogoutConfirmSheet({
   );
 }
 
+// A group of settings (アカウント, 表示, 家族共有, …): a little stronger than
+// SettingsSectionHeading, which names the sub-parts inside a group.
+function SettingsGroupTitle({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="px-1 pt-3 text-[13px] font-semibold tracking-wide text-[var(--gyokan-text)] opacity-60">
+      {children}
+    </h2>
+  );
+}
+
+// A row that opens another page (規約など) in a new tab.
+function SettingsLinkRow({ label, href }: { label: string; href: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left transition-colors hover:bg-black/[0.02] active:bg-black/[0.04]"
+    >
+      <span className="truncate text-[13px] text-[var(--gyokan-text)]">{label}</span>
+      <Icon name="chevronRight" className="h-3.5 w-3.5 shrink-0 text-gray-300" />
+    </a>
+  );
+}
+
+const settingsInputClass =
+  "w-full rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[15px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]";
+
+function PasswordChangeSheet({
+  open,
+  email,
+  onClose,
+}: {
+  open: boolean;
+  email: string;
+  onClose: () => void;
+}) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const close = () => {
+    if (saving) return;
+    setCurrent("");
+    setNext("");
+    setConfirm("");
+    setError(null);
+    setDone(false);
+    onClose();
+  };
+
+  const problem =
+    next.length > 0 && next.length < PASSWORD_MIN_LENGTH
+      ? `新しいパスワードは、${PASSWORD_MIN_LENGTH}文字以上にしてください。`
+      : confirm.length > 0 && next !== confirm
+        ? "確認のパスワードが、新しいパスワードと同じではありません。"
+        : null;
+  const canSave = !saving && current !== "" && next.length >= PASSWORD_MIN_LENGTH && next === confirm;
+
+  const save = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    setError(null);
+    const result = await changePassword({ email, currentPassword: current, newPassword: next });
+    setSaving(false);
+    if (result.ok) {
+      setDone(true);
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+    } else {
+      setError(result.message);
+    }
+  };
+
+  return (
+    <DetailOverlay open={open} onClose={close} title="パスワードを変更">
+      {done ? (
+        <>
+          <p role="status" className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-[13px] leading-relaxed text-emerald-800">
+            パスワードを変えました。次にログインするときから、新しいパスワードを使ってください。
+          </p>
+          <button
+            type="button"
+            onClick={close}
+            className="w-full rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[13px] font-semibold text-white"
+          >
+            閉じる
+          </button>
+        </>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+          className="space-y-3"
+        >
+          {/* For password managers: which account this is. */}
+          <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-gray-500">今のパスワード</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              className={settingsInputClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-gray-500">
+              新しいパスワード({PASSWORD_MIN_LENGTH}文字以上)
+            </span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              className={settingsInputClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-gray-500">新しいパスワード(確認のため、もう一度)</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className={settingsInputClass}
+            />
+          </label>
+          {problem && <p className="text-[12px] text-amber-700">{problem}</p>}
+          {error && (
+            <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-[13px] leading-relaxed text-red-600">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={close}
+              className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50"
+            >
+              キャンセル
+            </button>
+            <button
+              type="submit"
+              disabled={!canSave}
+              className="flex-1 rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
+            >
+              {saving ? "変えています…" : "変更する"}
+            </button>
+          </div>
+        </form>
+      )}
+    </DetailOverlay>
+  );
+}
+
+const EXPORT_COUNT_LABELS: Record<string, string> = {
+  projects: "プロジェクト",
+  cases: "案件",
+  tasks: "タスク",
+  projectMemos: "プロジェクトのメモ",
+  dailyMemos: "日ごとのメモ",
+  diaries: "日記",
+  events: "予定",
+  eventHistory: "予定の編集履歴",
+};
+
+function ExportDataSheet({
+  open,
+  onClose,
+  userId,
+  account,
+  deviceSettings,
+}: {
+  open: boolean;
+  onClose: () => void;
+  userId: string;
+  account: ExportAccount;
+  deviceSettings: ExportDeviceSettings;
+}) {
+  const [state, setState] = useState<"idle" | "reading" | "ready" | "saved">("idle");
+  const [result, setResult] = useState<ExportResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const close = () => {
+    if (state === "reading") return;
+    setState("idle");
+    setResult(null);
+    setError(null);
+    onClose();
+  };
+
+  const prepare = async () => {
+    setState("reading");
+    setError(null);
+    try {
+      const built = await buildExport(createClient(), userId, account, deviceSettings);
+      setResult(built);
+      setState("ready");
+    } catch (err) {
+      setError(
+        `データを読み込めませんでした。時間をおいて、もう一度ためしてください。${
+          err instanceof Error && err.message ? `(${err.message})` : ""
+        }`,
+      );
+      setState("idle");
+    }
+  };
+
+  // Runs straight from the tap, so iPhone's share sheet is allowed to open.
+  const save = async () => {
+    if (!result) return;
+    try {
+      const outcome = await saveExportFile(result);
+      if (outcome !== "cancelled") setState("saved");
+    } catch {
+      setError("ファイルを保存できませんでした。もう一度ためしてください。");
+    }
+  };
+
+  return (
+    <DetailOverlay open={open} onClose={close} title="データの書き出し">
+      <p className="mb-3 text-[13px] leading-relaxed text-gray-500">
+        あなたが見られるデータ(プロジェクト、案件、タスク、メモ、日記、予定、設定)を、1つのファイル(JSON)にして保存します。家族と共有している予定には「共有」の印が付きます。家族のメールアドレスなどは入りません。
+      </p>
+      {result && (
+        <ul className="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl bg-gray-50 px-4 py-3 text-[12px] text-gray-600">
+          {Object.entries(EXPORT_COUNT_LABELS).map(([key, label]) => (
+            <li key={key} className="flex justify-between gap-2">
+              <span className="truncate">{label}</span>
+              <span className="tabular-nums">{result.counts[key] ?? 0}件</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {state === "saved" && (
+        <p role="status" className="mb-3 rounded-xl bg-emerald-50 px-4 py-3 text-[13px] leading-relaxed text-emerald-800">
+          保存しました。iPhone では「ファイル」アプリの中に入ります。
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-[13px] leading-relaxed text-red-600">
+          {error}
+        </p>
+      )}
+      {state === "idle" || state === "reading" ? (
+        <button
+          type="button"
+          disabled={state === "reading"}
+          onClick={() => void prepare()}
+          className="w-full rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
+        >
+          {state === "reading" ? "データを集めています…" : "書き出しを始める"}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void save()}
+          className="w-full rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[13px] font-semibold text-white"
+        >
+          {result?.fileName ?? "ファイル"}を保存
+        </button>
+      )}
+      <button type="button" onClick={close} className="mt-2 w-full py-2 text-center text-[12px] text-gray-400">
+        閉じる
+      </button>
+    </DetailOverlay>
+  );
+}
+
 type SettingsEditField = {
   key: "appTitle" | "projectLabel" | "caseLabel" | "displayName";
   title: string;
@@ -6026,7 +6314,10 @@ function AppSettingsPanel({
   onOpenTheme,
   onShowCompletedTasks,
   onSignOut,
+  loginMethods,
 }: {
+  /** How this account signs in ("email", "google"); see loginMethodsOf. */
+  loginMethods: string[];
   userEmail?: string | null;
   loadError?: string | null;
   caseSaveError?: string | null;
@@ -6079,6 +6370,27 @@ function AppSettingsPanel({
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [startupModePickerOpen, setStartupModePickerOpen] = useState(false);
   const [modeNotice, setModeNotice] = useState<string | null>(null);
+  const [passwordSheetOpen, setPasswordSheetOpen] = useState(false);
+  const [exportSheetOpen, setExportSheetOpen] = useState(false);
+
+  const usesEmailLogin = loginMethods.includes("email");
+  const usesGoogleLogin = loginMethods.includes("google");
+  const loginMethodText = loginMethods.length > 0 ? loginMethods.map(loginMethodLabel).join("・") : "不明";
+  const buildTimeText = formatBuildTime();
+  // Settings kept on this device (not in the database), for the export.
+  const exportDeviceSettings: ExportDeviceSettings = {
+    app_title: appTitle,
+    theme: theme.name,
+    show_projects: showProjects,
+    show_cases: showCases,
+    project_label: projectLabel,
+    case_label: caseLabel,
+    home_case_columns: homeCaseColumns,
+    default_event_color: defaultEventColor,
+    show_work_mode: modePreferences.showWorkMode,
+    show_private_mode: modePreferences.showPrivateMode,
+    default_mode: modePreferences.defaultMode,
+  };
 
   const setModeShown = (mode: AppModeKey, shown: boolean) => {
     const next: ModePreferences = {
@@ -6117,6 +6429,27 @@ function AppSettingsPanel({
         </p>
       )}
 
+      <SettingsGroupTitle>アカウント</SettingsGroupTitle>
+      <SettingsCard>
+        <SettingsRow label="ログイン方法" value={loginMethodText} />
+        <SettingsDivider />
+        <SettingsRow label="メールアドレス" value={userEmail ?? "—"} />
+        {usesEmailLogin && userEmail && (
+          <>
+            <SettingsDivider />
+            <SettingsRow label="パスワードを変更" onClick={() => setPasswordSheetOpen(true)} />
+          </>
+        )}
+        <SettingsDivider />
+        <SettingsRow label="ログアウト" destructive onClick={() => setLogoutConfirmOpen(true)} />
+      </SettingsCard>
+      {usesGoogleLogin && !usesEmailLogin && (
+        <p className="-mt-2 px-1 text-[12px] text-gray-400">
+          Google でログインしています。パスワードは Google で管理されます。
+        </p>
+      )}
+
+      <SettingsGroupTitle>表示</SettingsGroupTitle>
       <SettingsCard>
         <SettingsRow
           label="アプリ名"
@@ -6236,6 +6569,7 @@ function AppSettingsPanel({
       )}
 
       {/* Sharing private-mode events with family (households). */}
+      <SettingsGroupTitle>家族共有</SettingsGroupTitle>
       <SettingsCard>
         <SettingsRow
           label="表示名"
@@ -6337,19 +6671,57 @@ function AppSettingsPanel({
         </p>
       )}
 
+      <SettingsGroupTitle>通知</SettingsGroupTitle>
       <SettingsCard>
         <SettingsRow label="通知" value="オン" />
-        <SettingsDivider />
-        <SettingsRow label="データ保存" value="Supabase" />
-        <SettingsDivider />
-        <SettingsRow label="アカウント" value={userEmail ?? "ログイン中"} />
       </SettingsCard>
 
+      <SettingsGroupTitle>データ</SettingsGroupTitle>
       <SettingsCard>
         <SettingsRow label="完了済みタスクを見る" onClick={onShowCompletedTasks} />
         <SettingsDivider />
-        <SettingsRow label="ログアウト" destructive onClick={() => setLogoutConfirmOpen(true)} />
+        <SettingsRow label="データの書き出し" onClick={() => setExportSheetOpen(true)} />
+        <SettingsDivider />
+        <SettingsRow label="データ保存" value="Supabase" />
       </SettingsCard>
+
+      <SettingsGroupTitle>規約とお問い合わせ</SettingsGroupTitle>
+      <SettingsCard>
+        <SettingsLinkRow label="利用規約" href={TERMS_PATH} />
+        <SettingsDivider />
+        <SettingsLinkRow label="プライバシーポリシー" href={PRIVACY_PATH} />
+        <SettingsDivider />
+        {CONTACT_EMAIL ? (
+          <SettingsLinkRow label="お問い合わせ" href={`mailto:${CONTACT_EMAIL}`} />
+        ) : (
+          <SettingsRow label="お問い合わせ" value="準備中" />
+        )}
+      </SettingsCard>
+      {!CONTACT_EMAIL && (
+        <p className="-mt-2 px-1 text-[12px] text-gray-400">お問い合わせ窓口は準備中です。</p>
+      )}
+
+      <SettingsGroupTitle>アプリについて</SettingsGroupTitle>
+      <p className="px-1 pb-2 text-[11px] leading-relaxed text-gray-400">
+        行間 バージョン {APP_VERSION || "—"}
+        {BUILD_COMMIT_SHORT ? `(${BUILD_COMMIT_SHORT})` : ""}
+        {buildTimeText ? <><br />ビルド日時 {buildTimeText}</> : null}
+      </p>
+
+      {userEmail && usesEmailLogin && (
+        <PasswordChangeSheet
+          open={passwordSheetOpen}
+          email={userEmail}
+          onClose={() => setPasswordSheetOpen(false)}
+        />
+      )}
+      <ExportDataSheet
+        open={exportSheetOpen}
+        onClose={() => setExportSheetOpen(false)}
+        userId={userId}
+        account={{ email: userEmail ?? null, loginMethods }}
+        deviceSettings={exportDeviceSettings}
+      />
 
       <SettingsEditSheet
         open={!!editField}
@@ -7180,6 +7552,7 @@ export default function Home() {
     <AppSettingsPanel
       userId={user.id}
       userEmail={user.email}
+      loginMethods={loginMethodsOf(user)}
       loadError={loadError}
       caseSaveError={caseSaveError}
       modePreferences={modePrefs}
@@ -7756,6 +8129,7 @@ export default function Home() {
         <AppSettingsPanel
           userId={user.id}
           userEmail={user.email}
+      loginMethods={loginMethodsOf(user)}
           loadError={loadError}
           caseSaveError={caseSaveError}
           modePreferences={modePrefs}
