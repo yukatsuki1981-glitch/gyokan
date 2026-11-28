@@ -31,7 +31,7 @@ function personLabel(sharing: EventSharing, userId: string): string {
 }
 
 /**
- * "〇〇さんが追加" for someone else's event (「家族」/「以前のメンバー」 as above);
+ * "〇〇さんが追加" for someone else's event (「メンバー」/「以前のメンバー」 as above);
  * 「以前のメンバーが追加」 when the creator has left (creatorId null); null for mine.
  */
 export function addedByLabel(sharing: EventSharing, creatorId: string | null | undefined): string | null {

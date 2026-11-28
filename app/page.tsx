@@ -5794,7 +5794,7 @@ function LogoutConfirmSheet({
   );
 }
 
-// A group of settings (アカウント, 表示, 家族共有, …): a little stronger than
+// A group of settings (アカウント, 表示, 予定の共有, …): a little stronger than
 // SettingsSectionHeading, which names the sub-parts inside a group.
 function SettingsGroupTitle({ children }: { children: ReactNode }) {
   return (

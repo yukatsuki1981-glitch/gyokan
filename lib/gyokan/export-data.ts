@@ -11,7 +11,7 @@ import { APP_VERSION, BUILD_COMMIT_SHORT } from "./build-info";
  * - A table the database doesn't have yet (migration not run) is skipped
  *   with a note instead of failing the whole export (schema-compat policy).
  * - Other people's details are left out: family members' events are marked
- *   「家族」 without their account id; no e-mail address but my own.
+ *   「メンバー」 without their account id; no e-mail address but my own.
  */
 
 const PAGE_SIZE = 500;
