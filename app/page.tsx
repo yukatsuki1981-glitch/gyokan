@@ -6064,6 +6064,93 @@ function ExportDataSheet({
   );
 }
 
+// Asked before the first invite link when I have no display name yet:
+// the person invited sees this name.
+function InviteDisplayNameSheet({
+  open,
+  onClose,
+  onSave,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** The same save as the 「表示名」 setting (useHousehold().saveDisplayName). */
+  onSave: (name: string) => Promise<boolean>;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const canSave = name.trim() !== "" && !saving;
+
+  const close = () => {
+    if (saving) return;
+    setName("");
+    setError(null);
+    onClose();
+  };
+
+  const save = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    setError(null);
+    const ok = await onSave(name.trim());
+    setSaving(false);
+    if (!ok) {
+      setError("表示名を保存できませんでした。もう一度お試しください。");
+      return;
+    }
+    setName("");
+    onSaved();
+  };
+
+  return (
+    <DetailOverlay open={open} onClose={close} title="表示名を設定">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <p className="mb-3 text-[13px] leading-relaxed text-gray-500">
+          招待を受けた人に表示される名前です。あとから設定で変えられます。
+        </p>
+        <input
+          type="text"
+          value={name}
+          maxLength={DISPLAY_NAME_MAX}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="例: ゆう"
+          aria-label="表示名"
+          className={`${settingsInputClass} mb-3`}
+        />
+        {error && (
+          <p role="alert" className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-[13px] leading-relaxed text-red-600">
+            {error}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={close}
+            disabled={saving}
+            className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+          >
+            やめる
+          </button>
+          <button
+            type="submit"
+            disabled={!canSave}
+            className="flex-1 rounded-xl bg-[var(--gyokan-accent2)] py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
+          >
+            {saving ? "保存しています…" : "保存して、リンクを作る"}
+          </button>
+        </div>
+      </form>
+    </DetailOverlay>
+  );
+}
+
 type SettingsEditField = {
   key: "appTitle" | "projectLabel" | "caseLabel" | "displayName";
   title: string;
@@ -6341,12 +6428,22 @@ function AppSettingsPanel({
     // the app shows only what is mine now.
     if (await household.leave()) window.location.reload();
   };
-  const openInvite = async () => {
+  const [inviteNameSheetOpen, setInviteNameSheetOpen] = useState(false);
+  const makeInviteLink = async () => {
     setInviteLink(null);
     const link = await household.createInviteLink();
     if (!link) return;
     setInviteLink(link);
     setInviteSheetOpen(true);
+  };
+  // The person invited sees my display name: set it first when I have none.
+  // (Unknown while the member list hasn't loaded: then as before.)
+  const openInvite = async () => {
+    if (household.membersLoaded && household.members.some((m) => m.isMe) && !household.myDisplayName?.trim()) {
+      setInviteNameSheetOpen(true);
+      return;
+    }
+    await makeInviteLink();
   };
   const {
     showProjects,
@@ -6733,6 +6830,15 @@ function AppSettingsPanel({
         onClose={() => setEditField(null)}
       />
 
+      <InviteDisplayNameSheet
+        open={inviteNameSheetOpen}
+        onClose={() => setInviteNameSheetOpen(false)}
+        onSave={household.saveDisplayName}
+        onSaved={() => {
+          setInviteNameSheetOpen(false);
+          void makeInviteLink();
+        }}
+      />
       <HouseholdInviteSheet
         key={inviteLink ?? "none"}
         open={inviteSheetOpen}
