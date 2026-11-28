@@ -258,8 +258,8 @@ function VisibilitySwitch({
   ];
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium text-gray-400">家族との共有</span>
-      <div role="radiogroup" aria-label="家族との共有" className="flex rounded-xl bg-black/[0.05] p-0.5">
+      <span className="text-[11px] font-medium text-gray-400">共有</span>
+      <div role="radiogroup" aria-label="共有" className="flex rounded-xl bg-black/[0.05] p-0.5">
         {options.map((option) => (
           <button
             key={option.value}

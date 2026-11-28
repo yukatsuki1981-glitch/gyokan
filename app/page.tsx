@@ -6024,7 +6024,7 @@ function ExportDataSheet({
   return (
     <DetailOverlay open={open} onClose={close} title="データの書き出し">
       <p className="mb-3 text-[13px] leading-relaxed text-gray-500">
-        あなたが見られるデータ(プロジェクト、案件、タスク、メモ、日記、予定、設定)を、1つのファイル(JSON)にして保存します。家族と共有している予定には「共有」の印が付きます。家族のメールアドレスなどは入りません。
+        あなたが見られるデータ(プロジェクト、案件、タスク、メモ、日記、予定、設定)を、1つのファイル(JSON)にして保存します。共有している予定には「共有」の印が付きます。ほかのメンバーのメールアドレスなどは入りません。
       </p>
       {result && (
         <ul className="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 rounded-xl bg-gray-50 px-4 py-3 text-[12px] text-gray-600">
@@ -6137,23 +6137,23 @@ function AccountDeletionSheet({
         </p>
       </div>
       <div className={`${section} bg-gray-50 text-gray-700`}>
-        <p className="mb-1 font-semibold text-gray-900">家族の予定について</p>
+        <p className="mb-1 font-semibold text-gray-900">共有の予定について</p>
         {othersInFamily === null ? (
           <>
             <p className="mb-1">
-              家族がいるとき:あなたが作った「共有」の予定は、家族のグループに残ります。作った人は「以前のメンバー」と表示されます。
+              ほかのメンバーがいるとき:あなたが作った「共有」の予定は、グループに残ります。作った人は「以前のメンバー」と表示されます。
             </p>
             <p>
-              あなたが最後のメンバーのとき:家族のグループごと、予定・履歴・招待も、すべて消えます。
+              あなたが最後のメンバーのとき:グループごと、予定・履歴・招待も、すべて消えます。
             </p>
           </>
         ) : othersInFamily > 0 ? (
           <p>
-            いま、家族と予定を共有しています。あなたが作った「共有」の予定は、家族のグループに残ります。作った人は「以前のメンバー」と表示されます。
+            いま、ほかのメンバーと予定を共有しています。あなたが作った「共有」の予定は、グループに残ります。作った人は「以前のメンバー」と表示されます。
           </p>
         ) : (
           <p>
-            いまは、あなたひとりです。家族のグループごと、予定・履歴・招待も、すべて消えます。
+            いまは、あなたひとりです。グループごと、予定・履歴・招待も、すべて消えます。
           </p>
         )}
       </div>
@@ -6279,11 +6279,11 @@ function HouseholdInviteSheet({
   // Reset per link: the caller keys this sheet by the link it shows.
   const [copied, setCopied] = useState(false);
   return (
-    <DetailOverlay open={open} onClose={onClose} title="家族を招待">
+    <DetailOverlay open={open} onClose={onClose} title="メンバーを招待">
       <p className="mb-3 text-[13px] text-gray-500">
-        このリンクを家族に送ってください。家族がリンクを開いてログイン(または新規登録)し、参加を確認すると、プライベートモードの予定の共有が始まります。
+        このリンクを、予定を共有したい人に送ってください。その人がリンクを開いてログイン(または新規登録)し、参加を確認すると、プライベートモードの予定の共有が始まります。
         {hasExpiry
-          ? "リンクは1回だけ、作ってから7日間使えます。あなたが前に作った、使われていないリンクは、使えなくなります。ほかの家族が作ったリンクは、そのまま使えます。"
+          ? "リンクは1回だけ、作ってから7日間使えます。あなたが前に作った、使われていないリンクは、使えなくなります。ほかのメンバーが作ったリンクは、そのまま使えます。"
           : "リンクは1回だけ使えます。"}
       </p>
       <input
@@ -6383,7 +6383,7 @@ function RevokeInviteConfirmSheet({
     <DetailOverlay open={!!invite} onClose={onClose} title="招待リンクの取り消し">
       <p className="mb-4 text-[13px] text-gray-500">
         {invite ? `${formatInviteDate(invite.createdAt, false)}に作った招待リンクを取り消しますか？` : ""}
-        取り消したリンクは、もう使えなくなります。家族を招待するときは、新しいリンクを作ってください。
+        取り消したリンクは、もう使えなくなります。メンバーを招待するときは、新しいリンクを作ってください。
       </p>
       <div className="flex gap-2">
         <button
@@ -6421,9 +6421,9 @@ function LeaveHouseholdConfirmSheet({
   const [leaving, setLeaving] = useState(false);
   return (
     <DetailOverlay open={open} onClose={leaving ? () => {} : onClose} title="共有をやめる">
-      <p className="mb-2 text-[13px] font-medium text-[var(--gyokan-text)]">家族との予定の共有をやめますか？</p>
+      <p className="mb-2 text-[13px] font-medium text-[var(--gyokan-text)]">予定の共有をやめますか？</p>
       <ul className="mb-4 list-disc space-y-1 pl-5 text-[13px] leading-relaxed text-gray-500">
-        <li>あなたが作った共有の予定は、コピーがあなたの手元に残ります。元の予定は、家族のところに残ります。</li>
+        <li>あなたが作った共有の予定は、コピーがあなたの手元に残ります。元の予定は、グループに残ります。</li>
         <li>ほかの人が作った予定は、あなたからは見えなくなります。</li>
         <li>あなたが、ほかの人の予定にした編集は、そのまま残ります。履歴では「以前のメンバー」と表示されます。</li>
         <li>予定が消えることはありません。</li>
@@ -6727,7 +6727,7 @@ function AppSettingsPanel({
       )}
 
       {/* Sharing private-mode events with family (households). */}
-      <SettingsGroupTitle>家族共有</SettingsGroupTitle>
+      <SettingsGroupTitle>予定の共有</SettingsGroupTitle>
       <SettingsCard>
         <SettingsRow
           label="表示名"
@@ -6738,14 +6738,14 @@ function AppSettingsPanel({
               title: "表示名",
               value: household.myDisplayName ?? "",
               maxLength: DISPLAY_NAME_MAX,
-              placeholder: "家族に表示される名前",
+              placeholder: "メンバーに表示される名前",
             })
           }
         />
       </SettingsCard>
       <div>
         <SettingsSectionHeading>
-          共有している家族
+          共有しているメンバー
           {household.membersLoaded && household.memberLimit != null
             ? `(${household.members.length}/${household.memberLimit}人)`
             : ""}
@@ -6761,7 +6761,7 @@ function AppSettingsPanel({
             </Fragment>
           ))}
           <SettingsRow
-            label="家族を招待"
+            label="メンバーを招待"
             value={
               household.isFull
                 ? `上限(${household.memberLimit}人)に達しています`
@@ -6781,13 +6781,13 @@ function AppSettingsPanel({
         </SettingsCard>
       </div>
       <p className="-mt-2 px-1 text-[12px] text-gray-400">
-        プライベートモードの予定を、家族と一緒に見て、追加・編集できます。タスクは共有されません。
+        プライベートモードの予定を、メンバーと一緒に見て、追加・編集できます。タスクは共有されません。
       </p>
       {/* Alone in the household: the first person to join makes my events so
           far 自分だけ (migration 20261124_join_inviter_private.sql). */}
       {household.membersLoaded && household.members.length === 1 && !household.isFull && (
         <p role="note" className="-mt-2 rounded-xl bg-amber-50 px-4 py-3 text-[12px] leading-relaxed text-amber-800">
-          このリンクで誰かが参加すると、あなたのこれまでの予定は、すべて「自分だけ」になります。家族には見えません。あとから、予定を1件ずつ「共有」に変えられます。
+          このリンクで誰かが参加すると、あなたのこれまでの予定は、すべて「自分だけ」になります。ほかのメンバーには見えません。あとから、予定を1件ずつ「共有」に変えられます。
         </p>
       )}
       {/* Invite links (left out while the database has no invite list —

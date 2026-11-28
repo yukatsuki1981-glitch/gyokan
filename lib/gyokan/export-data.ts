@@ -83,7 +83,7 @@ function withoutKeys(row: Row, keys: string[]): Row {
 
 function addedByLabel(creator: unknown, userId: string): string {
   if (creator == null) return "以前のメンバー";
-  return creator === userId ? "自分" : "家族";
+  return creator === userId ? "自分" : "メンバー";
 }
 
 /** 共有 / 自分だけ / (task mode) 対象外 — the same words as the app. */
@@ -107,7 +107,7 @@ function sanitizeHistory(row: Row, userId: string): Row {
       ? withoutKeys(row.old_values as Row, ["user_id", "household_id"])
       : row.old_values;
   return {
-    changed_by: row.changed_by == null ? null : row.changed_by === userId ? "自分" : "家族",
+    changed_by: row.changed_by == null ? null : row.changed_by === userId ? "自分" : "メンバー",
     event_added_by: addedByLabel(row.event_user_id, userId),
     ...withoutKeys(row, ["changed_by", "event_user_id", "event_household_id", "old_values"]),
     old_values: oldValues,
@@ -174,8 +174,8 @@ export async function buildExport(
     },
     about: [
       "行間のデータの書き出しです。あなたが見られるデータが入っています。",
-      "予定の sharing は「共有」(家族に見える)/「自分だけ」/「対象外(タスク管理モード)」です。",
-      "予定の added_by は、その予定を作った人です(自分/家族/以前のメンバー)。家族のメールアドレスやアカウントの番号は入っていません。",
+      "予定の sharing は「共有」(ほかのメンバーに見える)/「自分だけ」/「対象外(タスク管理モード)」です。",
+      "予定の added_by は、その予定を作った人です(自分/メンバー/以前のメンバー)。ほかのメンバーのメールアドレスやアカウントの番号は入っていません。",
       "日記の写真は、日記の本文の中に入っています。",
     ],
     notes,
