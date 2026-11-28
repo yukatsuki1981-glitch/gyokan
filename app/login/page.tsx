@@ -7,6 +7,7 @@ import { confirmationCooldownKey, ResendConfirmationButton } from "@/components/
 import { startCooldown } from "@/components/auth/use-cooldown";
 import { describeAuthError, looksLikeEmail, MIN_PASSWORD_LENGTH } from "@/lib/auth-errors";
 import { getAuthCallbackUrl } from "@/lib/auth-redirect";
+import { ACCOUNT_DELETED_PARAM, clearAppDeviceData } from "@/lib/gyokan/account-deletion";
 import { createClient, isSessionOnlyLogin, resetBrowserClient, setSessionOnlyLogin } from "@/lib/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -31,6 +32,9 @@ function LoginForm() {
   const authError = searchParams.get("error") === "auth";
   const authReason = searchParams.get("reason");
   const authDetail = searchParams.get("detail");
+  // Just deleted the account (?deleted=1): say so once. Kept in state, because
+  // the parameter is taken out of the address right away.
+  const [accountDeleted] = useState(() => searchParams.get(ACCOUNT_DELETED_PARAM) === "1");
   const [checking, setChecking] = useState(true);
   const [existingSession, setExistingSession] = useState<Session | null>(null);
   const [mode, setMode] = useState<"login" | "signup" | "forgot" | "confirmation-sent">("login");
@@ -56,6 +60,15 @@ function LoginForm() {
     }
     return "Google でログインできませんでした。もう一度お試しください。";
   })();
+
+  useEffect(() => {
+    if (!accountDeleted) return;
+    // Anything the old screen still wrote while closing (drafts) goes too.
+    void clearAppDeviceData();
+    const url = new URL(window.location.href);
+    url.searchParams.delete(ACCOUNT_DELETED_PARAM);
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, [accountDeleted]);
 
   useEffect(() => {
     if (authError) {
@@ -258,6 +271,9 @@ function LoginForm() {
             ログアウトして別アカウントでログイン
           </button>
         </div>
+      )}
+      {accountDeleted && (
+        <AuthNotice tone="success">退会が完了しました。これまでご利用いただき、ありがとうございました。</AuthNotice>
       )}
       {errorMessage && <AuthNotice tone="error">{errorMessage}</AuthNotice>}
       {formError && <AuthNotice tone="error">{formError}</AuthNotice>}
