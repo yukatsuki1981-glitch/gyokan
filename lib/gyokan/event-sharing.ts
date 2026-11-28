@@ -40,9 +40,13 @@ export function addedByLabel(sharing: EventSharing, creatorId: string | null | u
   return `${personLabel(sharing, creatorId)}が追加`;
 }
 
-/** Who made a change: 「自分」, 「〇〇さん」, 「家族」 or 「以前のメンバー」. Never an e-mail address. */
+/**
+ * Who made a change: 「自分」, 「〇〇さん」, 「家族」 or 「以前のメンバー」. Never an e-mail address.
+ * No one recorded (changed_by empty): the person deleted their account
+ * (delete_my_account empties it), so 「以前のメンバー」 as well.
+ */
 export function editorLabel(sharing: EventSharing, userId: string | null): string {
-  if (!userId) return "不明";
+  if (!userId) return FORMER_MEMBER_LABEL;
   if (userId === sharing.myUserId) return "自分";
   return personLabel(sharing, userId);
 }

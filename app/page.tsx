@@ -34,7 +34,14 @@ import {
 } from "@/lib/gyokan/task-completed-at";
 import { useGyokanData } from "@/lib/gyokan/use-gyokan-data";
 import { useHousehold } from "@/lib/gyokan/use-household";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, resetBrowserClient } from "@/lib/supabase/client";
+import {
+  ACCOUNT_DELETED_PARAM,
+  DELETE_CONFIRM_WORD,
+  clearAppDeviceData,
+  deleteMyAccount,
+  isDeleteConfirmed,
+} from "@/lib/gyokan/account-deletion";
 import { PASSWORD_MIN_LENGTH, changePassword, loginMethodLabel, loginMethodsOf } from "@/lib/gyokan/account";
 import {
   buildExport,
@@ -6064,6 +6071,156 @@ function ExportDataSheet({
   );
 }
 
+function AccountDeletionSheet({
+  open,
+  onClose,
+  onOpenExport,
+  othersInFamily,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Opens 「データの書き出し」 (this sheet closes first). */
+  onOpenExport: () => void;
+  /** How many others share my household; null while unknown. */
+  othersInFamily: number | null;
+}) {
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const deletingRef = useRef(false);
+  const confirmed = isDeleteConfirmed(confirmText);
+
+  const close = () => {
+    if (deletingRef.current) return;
+    setConfirmText("");
+    setError(null);
+    onClose();
+  };
+
+  const runDelete = async () => {
+    if (!confirmed || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    setError(null);
+    const supabase = createClient();
+    const result = await deleteMyAccount(supabase);
+    if (!result.ok) {
+      // Nothing is signed out or cleared: the account is still there.
+      setError(
+        result.reason === "unavailable"
+          ? "いまは退会できません。時間をおいて、もう一度お試しください。"
+          : "退会できませんでした。もう一度お試しください。",
+      );
+      deletingRef.current = false;
+      setDeleting(false);
+      return;
+    }
+    // The account is gone: sign out here, clear this device, go to login.
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (err) {
+      console.error("[account-deletion] sign out after deletion:", err);
+    }
+    resetBrowserClient();
+    await clearAppDeviceData();
+    window.location.replace(`/login?${ACCOUNT_DELETED_PARAM}=1`);
+  };
+
+  const section = "mb-3 rounded-xl px-4 py-3 text-[13px] leading-relaxed";
+
+  return (
+    <DetailOverlay open={open} onClose={close} title="退会する">
+      <div className={`${section} bg-gray-50 text-gray-700`}>
+        <p className="mb-1 font-semibold text-gray-900">消えるもの</p>
+        <p>
+          あなたの予定(自分だけ・タスク管理モード)、タスク、プロジェクト、案件、メモ、日記、設定、変更履歴、ログイン用のアカウント。
+        </p>
+      </div>
+      <div className={`${section} bg-gray-50 text-gray-700`}>
+        <p className="mb-1 font-semibold text-gray-900">家族の予定について</p>
+        {othersInFamily === null ? (
+          <>
+            <p className="mb-1">
+              家族がいるとき:あなたが作った「共有」の予定は、家族のグループに残ります。作った人は「以前のメンバー」と表示されます。
+            </p>
+            <p>
+              あなたが最後のメンバーのとき:家族のグループごと、予定・履歴・招待も、すべて消えます。
+            </p>
+          </>
+        ) : othersInFamily > 0 ? (
+          <p>
+            いま、家族と予定を共有しています。あなたが作った「共有」の予定は、家族のグループに残ります。作った人は「以前のメンバー」と表示されます。
+          </p>
+        ) : (
+          <p>
+            いまは、あなたひとりです。家族のグループごと、予定・履歴・招待も、すべて消えます。
+          </p>
+        )}
+      </div>
+      <p role="note" className={`${section} bg-red-50 font-semibold text-red-700`}>
+        退会すると、元に戻せません。すぐに実行されます。
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          if (deletingRef.current) return;
+          close();
+          onOpenExport();
+        }}
+        disabled={deleting}
+        className="mb-4 w-full rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-[var(--gyokan-accent2)] hover:bg-gray-50 disabled:opacity-40"
+      >
+        先にデータを書き出す
+      </button>
+      <label className="mb-3 block">
+        <span className="mb-1 block text-[12px] font-medium text-gray-500">
+          確認のため、「{DELETE_CONFIRM_WORD}」と入力してください
+        </span>
+        <input
+          type="text"
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          disabled={deleting}
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder={DELETE_CONFIRM_WORD}
+          className={settingsInputClass}
+        />
+      </label>
+      {error && (
+        <p role="alert" className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-[13px] leading-relaxed text-red-600">
+          {error}
+        </p>
+      )}
+      {deleting && (
+        <p role="status" className="mb-3 text-center text-[13px] text-gray-500">
+          退会の手続き中です…
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={close}
+          disabled={deleting}
+          className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+        >
+          やめる
+        </button>
+        <button
+          type="button"
+          onClick={() => void runDelete()}
+          disabled={!confirmed || deleting}
+          className="flex-1 rounded-xl bg-red-500 py-2.5 text-[13px] font-semibold text-white hover:bg-red-600 disabled:opacity-40"
+        >
+          {deleting ? "手続き中…" : "退会する"}
+        </button>
+      </div>
+    </DetailOverlay>
+  );
+}
+
 type SettingsEditField = {
   key: "appTitle" | "projectLabel" | "caseLabel" | "displayName";
   title: string;
@@ -6372,6 +6529,7 @@ function AppSettingsPanel({
   const [modeNotice, setModeNotice] = useState<string | null>(null);
   const [passwordSheetOpen, setPasswordSheetOpen] = useState(false);
   const [exportSheetOpen, setExportSheetOpen] = useState(false);
+  const [deleteSheetOpen, setDeleteSheetOpen] = useState(false);
 
   const usesEmailLogin = loginMethods.includes("email");
   const usesGoogleLogin = loginMethods.includes("google");
@@ -6707,6 +6865,29 @@ function AppSettingsPanel({
         {BUILD_COMMIT_SHORT ? `(${BUILD_COMMIT_SHORT})` : ""}
         {buildTimeText ? <><br />ビルド日時 {buildTimeText}</> : null}
       </p>
+
+      {/* 退会: kept quiet, at the very bottom. */}
+      <div className="px-1 pb-2">
+        <button
+          type="button"
+          onClick={() => setDeleteSheetOpen(true)}
+          className="text-[12px] text-red-500 underline-offset-2 hover:underline"
+        >
+          退会する
+        </button>
+      </div>
+      <AccountDeletionSheet
+        open={deleteSheetOpen}
+        onClose={() => setDeleteSheetOpen(false)}
+        onOpenExport={() => setExportSheetOpen(true)}
+        // Unknown (null) until the member list, including me, has loaded:
+        // then both cases are explained.
+        othersInFamily={
+          household.membersLoaded && household.members.some((m) => m.isMe)
+            ? household.members.filter((m) => !m.isMe).length
+            : null
+        }
+      />
 
       {userEmail && usesEmailLogin && (
         <PasswordChangeSheet
