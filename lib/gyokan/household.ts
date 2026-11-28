@@ -159,6 +159,70 @@ function isMissingFunctionError(err: unknown) {
   return code === "PGRST202" || code === "42883" || message.includes("Could not find the function");
 }
 
+/**
+ * Whether I may remove members of my household now, and who its owner is
+ * (migration 20261130_member_limit_remove.sql). The database decides; the app
+ * only shows it. null when the database doesn't have the function yet — the
+ * screen then shows no 「外す」 at all.
+ */
+export type MemberRemoveInfo = { canRemove: boolean; ownerUserId: string | null };
+
+export async function fetchMemberRemoveInfo(supabase: SupabaseClient): Promise<MemberRemoveInfo | null> {
+  const { data, error } = await supabase.rpc("get_member_remove_info");
+  if (error) {
+    if (isMissingFunctionError(error)) return null;
+    throw error;
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { can_remove?: boolean | null; owner_user_id?: string | null }
+    | null
+    | undefined;
+  return { canRemove: row?.can_remove === true, ownerUserId: row?.owner_user_id ?? null };
+}
+
+/** 「外す」: removes another member of my household (the database checks who may). */
+export async function removeHouseholdMember(supabase: SupabaseClient, memberUserId: string): Promise<void> {
+  const { error } = await supabase.rpc("remove_household_member", { p_user_id: memberUserId });
+  if (error) throw error;
+}
+
+export type RemoveMemberErrorCode =
+  | "not_owner"
+  | "cannot_remove_self"
+  | "not_a_member"
+  | "not_authenticated"
+  | "not_in_shared_household"
+  | "unknown";
+
+const REMOVE_MEMBER_ERROR_CODES: readonly RemoveMemberErrorCode[] = [
+  "not_owner",
+  "cannot_remove_self",
+  "not_a_member",
+  "not_authenticated",
+  "not_in_shared_household",
+];
+
+/** Which of remove_household_member's errors this is ("unknown" for anything else). */
+export function removeMemberErrorCode(err: unknown): RemoveMemberErrorCode {
+  const raw =
+    err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err);
+  const message = raw.trim();
+  return (
+    REMOVE_MEMBER_ERROR_CODES.find((code) => message === code) ??
+    REMOVE_MEMBER_ERROR_CODES.find((code) => message.includes(code)) ??
+    "unknown"
+  );
+}
+
+export const REMOVE_MEMBER_ERROR_MESSAGES: Record<RemoveMemberErrorCode, string> = {
+  not_owner: "メンバーを外せるのは、グループを作った人だけです。",
+  cannot_remove_self: "自分を外すことはできません。抜けるときは、「共有をやめる」を使ってください。",
+  not_a_member: "このメンバーは、すでにグループにいません。",
+  not_authenticated: "ログインし直してください。",
+  not_in_shared_household: "いまは、グループに入っていません。",
+  unknown: "外せませんでした。もう一度お試しください。",
+};
+
 const INVITE_STATUSES: readonly string[] = ["active", "used", "expired", "revoked"];
 
 /**

@@ -55,11 +55,14 @@ import { CONTACT_EMAIL, PRIVACY_PATH, TERMS_PATH } from "@/lib/gyokan/site-info"
 import {
   DISPLAY_NAME_MAX,
   INVITE_STATUS_LABELS,
+  REMOVE_MEMBER_ERROR_MESSAGES,
   memberLabel,
   readPendingInvite,
   type HouseholdInvite,
   type HouseholdInviteStatus,
+  type HouseholdMember,
 } from "@/lib/gyokan/household";
+import type { RemoveMemberResult } from "@/lib/gyokan/use-household";
 import {
   DEFAULT_MODE_PREFERENCES,
   isModeShown,
@@ -6269,12 +6272,18 @@ function HouseholdInviteSheet({
   onClose,
   link,
   hasExpiry,
+  sharesWithJoiner,
 }: {
   open: boolean;
   onClose: () => void;
   link: string | null;
   /** The database has invite expiry (migration 20261122_invite_expiry.sql). */
   hasExpiry: boolean;
+  /**
+   * My household already has 2 or more members: whoever joins sees all the
+   * events shared so far. False when alone, or while the count isn't known.
+   */
+  sharesWithJoiner: boolean;
 }) {
   // Reset per link: the caller keys this sheet by the link it shows.
   const [copied, setCopied] = useState(false);
@@ -6286,6 +6295,9 @@ function HouseholdInviteSheet({
           ? "リンクは1回だけ、作ってから7日間使えます。あなたが前に作った、使われていないリンクは、使えなくなります。ほかのメンバーが作ったリンクは、そのまま使えます。"
           : "リンクは1回だけ使えます。"}
       </p>
+      {sharesWithJoiner && (
+        <p className="mb-3 text-[13px] text-gray-500">このリンクで参加した人には、いま共有している予定が、すべて見えます。</p>
+      )}
       <input
         type="text"
         readOnly
@@ -6458,6 +6470,127 @@ function LeaveHouseholdConfirmSheet({
   );
 }
 
+/**
+ * One member in 「共有しているメンバー」: the name, 「グループを作った人」 under
+ * the owner's name, and a red 「外す」 for the others when I may remove them
+ * (get_member_remove_info decides).
+ */
+function HouseholdMemberRow({
+  member,
+  isOwner,
+  onRemove,
+}: {
+  member: HouseholdMember;
+  isOwner: boolean;
+  /** Set only when this member can be removed by me. */
+  onRemove?: () => void;
+}) {
+  const name = member.isMe ? `${member.displayName?.trim() || "未設定"}(自分)` : memberLabel(member);
+  return (
+    <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+      <div className="min-w-0">
+        <p className="truncate text-[13px] text-[var(--gyokan-text)]">{name}</p>
+        {isOwner && <p className="gyokan-muted truncate text-[11px]">グループを作った人</p>}
+      </div>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`${name}を外す`}
+          className="shrink-0 rounded-lg border border-red-200 px-2.5 py-1 text-[12px] font-medium text-red-500 hover:bg-red-50"
+        >
+          外す
+        </button>
+      )}
+    </div>
+  );
+}
+
+function RemoveMemberConfirmSheet({
+  member,
+  onClose,
+  onConfirm,
+}: {
+  member: HouseholdMember | null;
+  onClose: () => void;
+  /** Removes the member; the sheet stays open (with the message) when it failed. */
+  onConfirm: (member: HouseholdMember) => Promise<RemoveMemberResult>;
+}) {
+  const [removing, setRemoving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const removingRef = useRef(false);
+
+  const name = member?.displayName?.trim() || null;
+  // "〇〇さん", or "このメンバー" without a name (never "メンバーさん").
+  const subject = name ? `${name}さん` : "このメンバー";
+
+  const close = () => {
+    if (removingRef.current) return;
+    setError(null);
+    onClose();
+  };
+
+  const runRemove = async () => {
+    if (!member || removingRef.current) return;
+    removingRef.current = true;
+    setRemoving(true);
+    setError(null);
+    const result = await onConfirm(member);
+    removingRef.current = false;
+    setRemoving(false);
+    if (result.ok) {
+      onClose();
+      return;
+    }
+    setError(REMOVE_MEMBER_ERROR_MESSAGES[result.code]);
+  };
+
+  return (
+    <DetailOverlay open={!!member} onClose={close} title="メンバーを外す">
+      <p className="mb-2 text-[15px] font-semibold leading-snug text-[var(--gyokan-text)]">
+        {subject}を、グループから外しますか？
+      </p>
+      <ul className="mb-4 list-disc space-y-1 pl-5 text-[13px] leading-relaxed text-gray-500">
+        <li>{subject}は、これからは、グループの予定を見られなくなります。</li>
+        <li>{subject}が作った共有の予定は、グループに残ります。作った人は、「以前のメンバー」と表示されます。</li>
+        <li>
+          {subject}の「自分だけ」の予定は、{subject}のものとして残ります。
+        </li>
+        <li>{subject}が作った、まだ使われていない招待リンクは、使えなくなります。</li>
+        <li>元に戻せません。もう一度招待すれば、参加できます。</li>
+      </ul>
+      {error && (
+        <p role="alert" className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-[13px] leading-relaxed text-red-600">
+          {error}
+        </p>
+      )}
+      {removing && (
+        <p role="status" className="mb-3 text-center text-[13px] text-gray-500">
+          手続き中です…
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={close}
+          disabled={removing}
+          className="flex-1 rounded-xl border border-black/[0.08] py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+        >
+          やめる
+        </button>
+        <button
+          type="button"
+          onClick={() => void runRemove()}
+          disabled={removing}
+          className="flex-1 rounded-xl bg-red-500 py-2.5 text-[13px] font-semibold text-white hover:bg-red-600 disabled:opacity-40"
+        >
+          外す
+        </button>
+      </div>
+    </DetailOverlay>
+  );
+}
+
 function AppSettingsPanel({
   userId,
   userEmail,
@@ -6493,6 +6626,24 @@ function AppSettingsPanel({
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<HouseholdInvite | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<HouseholdMember | null>(null);
+  const [removedNotice, setRemovedNotice] = useState<string | null>(null);
+  // The 「外しました」 notice goes away by itself after a few seconds.
+  useEffect(() => {
+    if (!removedNotice) return;
+    const timer = setTimeout(() => setRemovedNotice(null), 4000);
+    return () => clearTimeout(timer);
+  }, [removedNotice]);
+  const removeMember = async (member: HouseholdMember): Promise<RemoveMemberResult> => {
+    const result = await household.removeMember(member.userId);
+    if (result.ok) {
+      const name = member.displayName?.trim();
+      setRemovedNotice(name ? `${name}さんをグループから外しました。` : "メンバーをグループから外しました。");
+    }
+    return result;
+  };
+  const removeInfo = household.removeInfo;
+  const hasOtherMembers = household.members.some((member) => !member.isMe);
   const leaveHousehold = async () => {
     // The events on screen still include the others' — reload everything so
     // the app shows only what is mine now.
@@ -6751,11 +6902,15 @@ function AppSettingsPanel({
             : ""}
         </SettingsSectionHeading>
         <SettingsCard>
-          {/* In join order; my own row is marked (自分). */}
+          {/* In join order; my own row is marked (自分). Who is the owner and
+              whether I may remove anyone come from the database
+              (get_member_remove_info); without it, no 「外す」. */}
           {household.members.map((member) => (
             <Fragment key={member.userId}>
-              <SettingsRow
-                label={member.isMe ? `${member.displayName?.trim() || "未設定"}(自分)` : memberLabel(member)}
+              <HouseholdMemberRow
+                member={member}
+                isOwner={removeInfo?.ownerUserId != null && removeInfo.ownerUserId === member.userId}
+                onRemove={removeInfo?.canRemove && !member.isMe ? () => setRemoveTarget(member) : undefined}
               />
               <SettingsDivider />
             </Fragment>
@@ -6772,7 +6927,7 @@ function AppSettingsPanel({
             onClick={household.isFull || household.loading ? undefined : () => void openInvite()}
           />
           {/* Only while I share with someone. */}
-          {household.members.some((member) => !member.isMe) && (
+          {hasOtherMembers && (
             <>
               <SettingsDivider />
               <SettingsRow label="共有をやめる" destructive onClick={() => setLeaveConfirmOpen(true)} />
@@ -6780,6 +6935,14 @@ function AppSettingsPanel({
           )}
         </SettingsCard>
       </div>
+      {removedNotice && (
+        <p role="status" className="-mt-2 rounded-xl bg-emerald-50 px-4 py-3 text-[13px] leading-relaxed text-emerald-800">
+          {removedNotice}
+        </p>
+      )}
+      {removeInfo && !removeInfo.canRemove && hasOtherMembers && (
+        <p className="-mt-2 px-1 text-[12px] text-gray-400">メンバーを外せるのは、グループを作った人だけです。</p>
+      )}
       <p className="-mt-2 px-1 text-[12px] text-gray-400">
         プライベートモードの予定を、メンバーと一緒に見て、追加・編集できます。タスクは共有されません。
       </p>
@@ -6920,6 +7083,13 @@ function AppSettingsPanel({
         onClose={() => setInviteSheetOpen(false)}
         link={inviteLink}
         hasExpiry={household.invites !== null}
+        sharesWithJoiner={household.membersLoaded && household.members.length >= 2}
+      />
+      <RemoveMemberConfirmSheet
+        key={removeTarget?.userId ?? "none"}
+        member={removeTarget}
+        onClose={() => setRemoveTarget(null)}
+        onConfirm={removeMember}
       />
       <RevokeInviteConfirmSheet
         invite={revokeTarget}

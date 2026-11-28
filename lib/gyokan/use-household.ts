@@ -8,14 +8,21 @@ import {
   fetchHouseholdInvites,
   fetchHouseholdMemberLimit,
   fetchHouseholdMembers,
+  fetchMemberRemoveInfo,
   householdErrorMessage,
   inviteUrl,
   leaveHousehold,
+  removeHouseholdMember,
+  removeMemberErrorCode,
   revokeHouseholdInvite,
   saveMyDisplayName,
   type HouseholdInvite,
   type HouseholdMember,
+  type MemberRemoveInfo,
+  type RemoveMemberErrorCode,
 } from "./household";
+
+export type RemoveMemberResult = { ok: true } | { ok: false; code: RemoveMemberErrorCode };
 
 /**
  * The signed-in user's household for the settings screen: its members (with
@@ -33,6 +40,10 @@ export function useHousehold(userId: string | null | undefined) {
   // null = this database has no invite list yet (migration not run): the
   // screen leaves the list out instead of showing an error.
   const [invites, setInvites] = useState<HouseholdInvite[] | null>(null);
+  // Who may remove members (get_member_remove_info). null = not known: not
+  // loaded yet, failed, or the database has no such function — then nobody
+  // gets a 「外す」 button.
+  const [removeInfo, setRemoveInfo] = useState<MemberRemoveInfo | null>(null);
   // True until the first load finishes (a reload keeps showing the current data).
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,12 +61,18 @@ export function useHousehold(userId: string | null | undefined) {
     const supabase = createClient();
     try {
       await ensureMyHousehold(supabase);
-      const [list, limit] = await Promise.all([
+      const [list, limit, info] = await Promise.all([
         fetchHouseholdMembers(supabase, userId),
         fetchHouseholdMemberLimit(supabase),
+        // A failure here only hides 「外す」; the members are still shown.
+        fetchMemberRemoveInfo(supabase).catch((err: unknown) => {
+          console.error("[household] get_member_remove_info:", err);
+          return null;
+        }),
       ]);
       setMembers(list);
       setMemberLimit(limit);
+      setRemoveInfo(info);
       setMembersLoaded(true);
       setError(null);
     } catch (err) {
@@ -135,6 +152,27 @@ export function useHousehold(userId: string | null | undefined) {
     }
   }, [load]);
 
+  /**
+   * 「外す」: removes another member. On success, and when the member list or
+   * my permission was out of date (not_owner / not_a_member), the household is
+   * reloaded. The error is also written to the console.
+   */
+  const removeMember = useCallback(
+    async (memberUserId: string): Promise<RemoveMemberResult> => {
+      try {
+        await removeHouseholdMember(createClient(), memberUserId);
+        await load();
+        return { ok: true };
+      } catch (err) {
+        console.error("[household] remove_household_member:", err);
+        const code = removeMemberErrorCode(err);
+        if (code === "not_owner" || code === "not_a_member") void load();
+        return { ok: false, code };
+      }
+    },
+    [load],
+  );
+
   const isFull = memberLimit != null && members.length >= memberLimit;
   /** How many more people can join (null until the limit is known). */
   const remainingSeats = memberLimit == null ? null : Math.max(0, memberLimit - members.length);
@@ -157,5 +195,7 @@ export function useHousehold(userId: string | null | undefined) {
     createInviteLink,
     revokeInvite,
     leave,
+    removeInfo,
+    removeMember,
   };
 }
