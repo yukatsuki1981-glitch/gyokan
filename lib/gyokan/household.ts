@@ -53,10 +53,13 @@ export const INVITE_STATUS_LABELS: Record<HouseholdInviteStatus, string> = {
 /** Someone who was in my household but has left it (共有をやめた人). */
 export const FORMER_MEMBER_LABEL = "以前のメンバー";
 
+/** What to call a member who has not set a display name. */
+export const UNNAMED_MEMBER_LABEL = "メンバー";
+
 /** What to call a member on screen; never their e-mail address. */
 export function memberLabel(member: Pick<HouseholdMember, "displayName" | "isMe">) {
   if (member.isMe) return "自分";
-  return member.displayName?.trim() || "家族";
+  return member.displayName?.trim() || UNNAMED_MEMBER_LABEL;
 }
 
 /** Turns a database error from the household functions into a message for the screen. */

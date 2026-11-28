@@ -1,5 +1,5 @@
 import type { EventHistoryEntry } from "./repository";
-import { FORMER_MEMBER_LABEL, type HouseholdMember } from "./household";
+import { FORMER_MEMBER_LABEL, UNNAMED_MEMBER_LABEL, type HouseholdMember } from "./household";
 
 /**
  * What the private-mode event screens need to know about family sharing
@@ -13,21 +13,21 @@ export type EventSharing = {
   members: HouseholdMember[];
   /**
    * The member list has been loaded. Until then nobody can be told apart
-   * from a former member, so unknown people are shown as 「家族」.
+   * from a former member, so unknown people are shown as 「メンバー」.
    */
   membersLoaded: boolean;
   loadHistory: (eventId: string) => Promise<EventHistoryEntry[]>;
 };
 
 /**
- * How to call another person: 「〇〇さん」, 「家族」 (a member without a
+ * How to call another person: 「〇〇さん」, 「メンバー」 (a member without a
  * display name), or 「以前のメンバー」 (not in my household any more).
  */
 function personLabel(sharing: EventSharing, userId: string): string {
   const member = sharing.members.find((m) => m.userId === userId);
-  if (!member) return sharing.membersLoaded ? FORMER_MEMBER_LABEL : "家族";
+  if (!member) return sharing.membersLoaded ? FORMER_MEMBER_LABEL : UNNAMED_MEMBER_LABEL;
   const name = member.displayName?.trim();
-  return name ? `${name}さん` : "家族";
+  return name ? `${name}さん` : UNNAMED_MEMBER_LABEL;
 }
 
 /**
@@ -41,7 +41,7 @@ export function addedByLabel(sharing: EventSharing, creatorId: string | null | u
 }
 
 /**
- * Who made a change: 「自分」, 「〇〇さん」, 「家族」 or 「以前のメンバー」. Never an e-mail address.
+ * Who made a change: 「自分」, 「〇〇さん」, 「メンバー」 or 「以前のメンバー」. Never an e-mail address.
  * No one recorded (changed_by empty): the person deleted their account
  * (delete_my_account empties it), so 「以前のメンバー」 as well.
  */
