@@ -68,9 +68,9 @@ export function householdErrorMessage(err: unknown): string {
     err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : String(err);
   if (raw.includes("invalid_invite")) return INVITE_INVALID_MESSAGE;
   if (raw.includes("invite_expired")) return INVITE_EXPIRED_MESSAGE;
-  if (raw.includes("already_member")) return "すでにこの家族の共有に参加しています。";
-  if (raw.includes("household_full")) return "この家族の共有は、すでに上限の人数に達しています。";
-  if (raw.includes("in_other_shared_household")) return "すでに別の家族と予定を共有しているため、参加できません。";
+  if (raw.includes("already_member")) return "すでにこのグループに参加しています。";
+  if (raw.includes("household_full")) return "このグループは、すでに上限の人数に達しています。";
+  if (raw.includes("in_other_shared_household")) return "すでに別のグループで予定を共有しているため、参加できません。";
   // The app joins without sharing (p_share_existing_events = false); only a
   // database without migration 20261123_join_no_share.sql refuses that.
   if (raw.includes("confirmation_required")) return "この参加には、データベースの更新が必要です。";

@@ -29,9 +29,9 @@ const INITIAL_NULL_GRACE_MS = 2500;
 const STATUS_MESSAGES: Partial<Record<InviteCheckStatus, string>> = {
   invalid: INVITE_INVALID_MESSAGE,
   expired: INVITE_EXPIRED_MESSAGE,
-  already_member: "すでにこの家族の予定の共有に参加しています。",
-  full: "この家族の予定の共有は、すでに上限の人数に達しています。招待した人に伝えてください。",
-  in_other_shared_household: "すでに別の家族と予定を共有しているため、この招待には参加できません。",
+  already_member: "すでにこのグループに参加しています。",
+  full: "このグループは、すでに上限の人数に達しています。招待した人に伝えてください。",
+  in_other_shared_household: "すでに別のグループで予定を共有しているため、この招待には参加できません。",
 };
 
 const STATUS_TITLES: Partial<Record<InviteCheckStatus, string>> = {
@@ -157,9 +157,9 @@ export default function InvitePage() {
   if (authState === "signedOut") {
     return (
       <Card>
-        <h1 className="mb-2 text-[17px] font-semibold text-gray-900">家族の予定の共有に招待されています</h1>
+        <h1 className="mb-2 text-[17px] font-semibold text-gray-900">予定の共有に招待されています</h1>
         <p className="mb-5 text-[13px] leading-relaxed text-gray-500">
-          参加すると、行間のプライベートモードの予定を、家族と一緒に見て、追加・編集できるようになります。まずログイン(または新規登録)してください。
+          参加すると、行間のプライベートモードの予定を、メンバーと一緒に見て、追加・編集できるようになります。まずログイン(または新規登録)してください。
         </p>
         <button
           type="button"
@@ -188,14 +188,14 @@ export default function InvitePage() {
 
   return (
     <Card>
-      <h1 className="mb-2 text-[17px] font-semibold text-gray-900">家族の予定の共有に参加</h1>
+      <h1 className="mb-2 text-[17px] font-semibold text-gray-900">予定の共有に参加</h1>
       <p className="mb-4 text-[13px] leading-relaxed text-gray-500">
-        参加したあとに作る予定は、家族と一緒に見て、追加・編集できます。タスクは共有されません。参加する前の予定は、あなたも、招待した人も、お互いに見えません。
+        参加したあとに作る予定は、メンバーと一緒に見て、追加・編集できます。タスクは共有されません。参加する前の予定は、あなたも、招待した人も、お互いに見えません。
       </p>
       {/* Joining doesn't share my existing events: they all become 自分だけ. */}
       {myEventCount > 0 && (
         <div className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-[13px] leading-relaxed text-amber-800">
-          参加する前のあなたの予定({myEventCount}件)は、すべて「自分だけ」になります。家族には見えません。あとから、予定を1件ずつ「共有」に変えられます。
+          参加する前のあなたの予定({myEventCount}件)は、すべて「自分だけ」になります。ほかのメンバーには見えません。あとから、予定を1件ずつ「共有」に変えられます。
         </div>
       )}
       {needsName && (
@@ -210,7 +210,7 @@ export default function InvitePage() {
             className="rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-[14px] text-gray-900 outline-none focus:border-[var(--gyokan-accent2)]"
           />
           <span className="text-[11px] text-gray-400">
-            家族に表示される名前です。入力すると、参加できます。あとから設定画面で変更できます。
+            メンバーに表示される名前です。入力すると、参加できます。あとから設定画面で変更できます。
           </span>
         </label>
       )}

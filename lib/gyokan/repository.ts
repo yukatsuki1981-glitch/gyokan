@@ -777,7 +777,7 @@ export function isFamilyEvent(event: Pick<AppEvent, "userId">, myUserId: string)
 
 /** Shown when a family member's event can't be saved because it is gone. */
 export const EVENT_GONE_MESSAGE =
-  "この予定は、作成した家族が削除したか「自分だけ」に変更したため、保存できませんでした。";
+  "この予定は、作成したメンバーが削除したか「自分だけ」に変更したため、保存できませんでした。";
 
 const VISIBILITY_MIGRATION_MESSAGE =
   "「自分だけ」を保存するには、データベースの更新(マイグレーション 20261018_event_visibility_and_history.sql)が必要です。";
