@@ -652,7 +652,8 @@ export function DayEventPopup({
   // Also after everyone else has left: the history may still name a former
   // member (以前のメンバー), and that is worth showing.
   const historyHasOthers =
-    !!history && history.entries.some((entry) => !!entry.changedBy && entry.changedBy !== sharing.myUserId);
+    // (changedBy null: someone who deleted their account — also a former member.)
+    !!history && history.entries.some((entry) => entry.changedBy !== sharing.myUserId);
   const historyEntries =
     view === "edit" &&
     editingId &&
